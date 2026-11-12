@@ -77,6 +77,7 @@ internal val mobileSettings =
         MobileSetting(PrefStore.App, LIVE_MAIL_PUSH_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, BACKGROUND_SYNC_ENABLED_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, POLL_INTERVAL_MINUTES_PREF, PrefType.Int),
+        MobileSetting(PrefStore.App, NOTIFICATION_ACTIONS_PREF, PrefType.StrSet),
         // Kanban boards, in their own store.
         MobileSetting(PrefStore.Kanban, KANBAN_BOARDS_PREF, PrefType.Str),
         MobileSetting(PrefStore.Kanban, ACTIVE_KANBAN_BOARD_PREF, PrefType.Str),

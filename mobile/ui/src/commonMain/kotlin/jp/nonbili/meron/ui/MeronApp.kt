@@ -1390,6 +1390,12 @@ private fun MeronMobileScreenContent(
                                 mobileHost.syncLiveMailPush(next)
                                 status = trs(if (next) "mobile.status.liveMailPushEnabled" else "mobile.ios.liveMailPushDisabled")
                             },
+                            notificationActions = notificationActions,
+                            onToggleNotificationAction = { action ->
+                                val next = if (action in notificationActions) notificationActions - action else notificationActions + action
+                                notificationActions = next
+                                prefs.putStringSet(NOTIFICATION_ACTIONS_PREF, next)
+                            },
                             backgroundSyncEnabled = backgroundSyncEnabled,
                             onToggleBackgroundSync = {
                                 val next = !backgroundSyncEnabled

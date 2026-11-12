@@ -110,6 +110,14 @@ class AndroidNewMailNotificationTest {
         // already cleared the row and offered an undo.
         assertEquals(false, newMailSupportsArchive("rss-8f2a"))
         assertEquals(true, newMailSupportsArchive("me@example.com"))
+        assertEquals(allNotificationActions, newMailActions("me@example.com", allNotificationActions))
+        assertEquals(setOf(NOTIFICATION_ACTION_MARK_READ), newMailActions("rss-8f2a", allNotificationActions))
+        // A button turned off in settings stays off whatever the account allows.
+        assertEquals(
+            setOf(NOTIFICATION_ACTION_DELETE),
+            newMailActions("me@example.com", setOf(NOTIFICATION_ACTION_DELETE)),
+        )
+        assertEquals(emptySet<String>(), newMailActions("rss-8f2a", setOf(NOTIFICATION_ACTION_DELETE)))
     }
 
     @Test

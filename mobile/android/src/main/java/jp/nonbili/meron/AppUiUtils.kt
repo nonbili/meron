@@ -26,6 +26,24 @@ private const val APP_LANGUAGE_PREF = "app_language_v1"
 internal const val INBOX_FOLDER = "inbox"
 internal const val LIVE_MAIL_PUSH_PREF = "live_mail_push_v1"
 internal const val BACKGROUND_SYNC_ENABLED_PREF = "background_sync_enabled_v1"
+
+// Which buttons a new-mail notification carries, as the settings screen stores
+// it: same key and ids as the shared UI's NOTIFICATION_ACTIONS_PREF (mobile/ui
+// AppModels.kt). Unset means all of them.
+internal const val NOTIFICATION_ACTIONS_PREF = "notification_actions_v1"
+internal const val NOTIFICATION_ACTION_ARCHIVE = "archive"
+internal const val NOTIFICATION_ACTION_MARK_READ = "mark_read"
+internal const val NOTIFICATION_ACTION_DELETE = "delete"
+internal val allNotificationActions =
+    setOf(NOTIFICATION_ACTION_ARCHIVE, NOTIFICATION_ACTION_MARK_READ, NOTIFICATION_ACTION_DELETE)
+
+internal fun loadNotificationActions(context: Context): Set<String> =
+    context
+        .getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+        .getStringSet(NOTIFICATION_ACTIONS_PREF, null)
+        ?.toSet()
+        ?: allNotificationActions
+
 private val supportedAppLanguageTags =
     setOf("ar", "de", "el", "en", "es", "et", "fr", "it", "ja", "ko", "lv", "pl", "pt", "pt-BR", "ru", "sv", "tr", "vi", "zh-Hans", "zh-Hant")
 

@@ -331,6 +331,10 @@ internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
                 mobileHost.syncLiveMailPush(liveMailPushEnabled)
             }
 
+            settingKeyFor(NOTIFICATION_ACTIONS_PREF) -> {
+                notificationActions = loadNotificationActions(prefs)
+            }
+
             settingKeyFor(BACKGROUND_SYNC_ENABLED_PREF) -> {
                 backgroundSyncEnabled = loadAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, true)
                 mobileHost.syncBackgroundRefresh(backgroundSyncEnabled)

@@ -28,8 +28,13 @@ private const val TAG = "MeronNotifAction"
 const val MAILBOX_CHANGED_EVENT = "mail.mailboxChanged"
 
 const val ACTION_ARCHIVE = "jp.nonbili.meron.action.ARCHIVE"
+const val ACTION_DELETE = "jp.nonbili.meron.action.DELETE"
 const val ACTION_MARK_READ = "jp.nonbili.meron.action.MARK_READ"
-const val ACTION_UNDO_ARCHIVE = "jp.nonbili.meron.action.UNDO_ARCHIVE"
+
+/** Undoes an archive or a delete alike: both are moves, reversed the same way.
+ *  The intent string predates Delete and stays as it was, so an undo row
+ *  already in the shade across an update still resolves. */
+const val ACTION_UNDO_MOVE = "jp.nonbili.meron.action.UNDO_ARCHIVE"
 
 private const val EXTRA_NOTIFICATION_ID = "jp.nonbili.meron.extra.NOTIFICATION_ID"
 private const val EXTRA_ACCOUNT_NAME = "jp.nonbili.meron.extra.ACCOUNT_NAME"
@@ -43,7 +48,7 @@ private const val KEY_ACCOUNT_NAME = "accountName"
 private const val KEY_TITLE = "title"
 private const val KEY_NOTIFICATION_ID = "notificationId"
 
-/** Handles the Archive / Mark as read / Undo buttons on a new-mail
+/** Handles the Archive / Mark as read / Delete / Undo buttons on a new-mail
  *  notification.
  *
  *  The shade is updated here and now — the row disappears the moment the button
@@ -68,14 +73,14 @@ class AndroidNotificationActionReceiver : BroadcastReceiver() {
 
         val manager = NotificationManagerCompat.from(context)
         when (action) {
-            ACTION_ARCHIVE -> {
+            ACTION_ARCHIVE, ACTION_DELETE -> {
                 // The whole thread is filed, so every row standing for it goes,
                 // not just the one pressed.
                 val cleared = AndroidNotificationService.cancelThreadRows(context, accountId, threadKey)
                 if (cleared.isEmpty()) manager.cancel(notificationId)
                 // The group summary must be recounted without the rows just
                 // cancelled. The undo row comes later, from the worker, once
-                // the archive has reported the copies an undo would move back.
+                // the move has reported the copies an undo would move back.
                 AndroidNotificationService.refreshNewMailSummary(
                     context,
                     accountId,
@@ -97,7 +102,7 @@ class AndroidNotificationActionReceiver : BroadcastReceiver() {
                 )
             }
 
-            ACTION_UNDO_ARCHIVE -> {
+            ACTION_UNDO_MOVE -> {
                 manager.cancel(undoNotificationId(notificationId))
             }
         }
@@ -183,6 +188,11 @@ class NotificationActionWorker(
                     requestJson(2, "mail.archive", JSONObject().put("thread_id", threadId))
                 }
 
+                ACTION_DELETE -> {
+                    // To Trash, like the app's own delete — and so undoable.
+                    requestJson(2, "mail.delete", JSONObject().put("thread_id", threadId))
+                }
+
                 ACTION_MARK_READ -> {
                     requestJson(
                         2,
@@ -191,18 +201,18 @@ class NotificationActionWorker(
                     )
                 }
 
-                ACTION_UNDO_ARCHIVE -> {
-                    // Where the archive put the mail, and exactly the copies it
-                    // made there — recorded by the archive that ran just before
-                    // this (work for one thread is APPENDed, so it has finished),
+                ACTION_UNDO_MOVE -> {
+                    // Where the archive or delete put the mail, and exactly the
+                    // copies it made there — recorded by the action that ran just
+                    // before this (work for one thread is APPENDed, so it has finished),
                     // and the only case the undo row is ever posted for. Without
                     // them there is no safe way back: the thread key would also
                     // take older mail of the conversation.
-                    val archived =
-                        takeArchivedFolder(applicationContext, accountId, threadKey)
+                    val moved =
+                        takeMovedPlacement(applicationContext, accountId, threadKey)
                             ?.takeIf { it.uids.isNotEmpty() }
-                    if (archived == null) {
-                        Log.w(TAG, "$action has no archived copies to move back")
+                    if (moved == null) {
+                        Log.w(TAG, "$action has no moved copies to move back")
                         AndroidNotificationService.notifyActionFailed(
                             applicationContext,
                             accountId = accountId,
@@ -219,9 +229,9 @@ class NotificationActionWorker(
                         2,
                         "mail.move",
                         JSONObject()
-                            .put("thread_id", notificationThreadId(accountId, archived.folder, threadKey))
+                            .put("thread_id", notificationThreadId(accountId, moved.folder, threadKey))
                             .put("target_folder_id", folder)
-                            .put("message_ids", JSONArray(archived.uids.map { it.toString() })),
+                            .put("message_ids", JSONArray(moved.uids.map { it.toString() })),
                     )
                 }
 
@@ -233,12 +243,15 @@ class NotificationActionWorker(
         val response = JSONObject(MeronCoreNative.invokeJson(request))
         val error = response.optJSONObject("error")?.optString("message").orEmpty()
         if (error.isEmpty()) {
-            if (action == ACTION_ARCHIVE) {
-                // Core picks the archive folder itself; remember its answer so a
-                // later undo moves the mail out of the folder it really landed
-                // in rather than one guessed from the folder roles.
+            if (action == ACTION_ARCHIVE || action == ACTION_DELETE) {
+                // Core picks the archive or trash folder itself; remember its
+                // answer so a later undo moves the mail out of the folder it
+                // really landed in rather than one guessed from the folder
+                // roles. A delete that expunged outright reports no folder, and
+                // so gets no undo.
                 val result = response.optJSONObject("result")
-                result?.optString("folder")?.takeIf { it.isNotBlank() }?.let { archived ->
+                val landedKey = if (action == ACTION_DELETE) "trash" else "folder"
+                result?.optString(landedKey)?.takeIf { it.isNotBlank() }?.let { landed ->
                     val targetUids =
                         result
                             .optJSONArray("target_uids")
@@ -246,9 +259,10 @@ class NotificationActionWorker(
                             .orEmpty()
                     // Offer Undo only for copies it can move back exactly.
                     if (targetUids.isNotEmpty()) {
-                        rememberArchivedFolder(applicationContext, accountId, threadKey, archived, targetUids)
-                        AndroidNotificationService.notifyArchivedWithUndo(
+                        rememberMovedPlacement(applicationContext, accountId, threadKey, landed, targetUids)
+                        AndroidNotificationService.notifyMovedWithUndo(
                             applicationContext,
+                            deleted = action == ACTION_DELETE,
                             accountId = accountId,
                             accountName = accountName,
                             folder = folder,
@@ -311,35 +325,35 @@ class NotificationActionWorker(
             .toString()
 }
 
-/** Where a notification-archived thread was moved to, kept only until its undo
- *  offer is taken or expires.
+/** Where a thread archived or deleted from a notification was moved to, kept
+ *  only until its undo offer is taken or expires.
  *
  *  Its own preferences file rather than the app's: these entries are transient
  *  bookkeeping between two background workers, and the app never reads them. */
-private const val ARCHIVED_FOLDER_PREFS = "meron_notification_archived"
+private const val MOVED_PLACEMENT_PREFS = "meron_notification_archived"
 
-private fun archivedFolderKey(
+private fun movedPlacementKey(
     accountId: String,
     threadKey: String,
 ): String = "$accountId#$threadKey"
 
-/** Where the archive put the mail, and the UIDs of the copies it made there.
- *  Recorded only when core could tell those copies apart. */
-internal data class ArchivedPlacement(
+/** Where the archive or delete put the mail, and the UIDs of the copies it made
+ *  there. Recorded only when core could tell those copies apart. */
+internal data class MovedPlacement(
     val folder: String,
     val uids: List<Long>,
 )
 
-internal fun rememberArchivedFolder(
+internal fun rememberMovedPlacement(
     context: Context,
     accountId: String,
     threadKey: String,
     folder: String,
     uids: List<Long>,
 ) {
-    val key = archivedFolderKey(accountId, threadKey)
+    val key = movedPlacementKey(accountId, threadKey)
     context
-        .getSharedPreferences(ARCHIVED_FOLDER_PREFS, Context.MODE_PRIVATE)
+        .getSharedPreferences(MOVED_PLACEMENT_PREFS, Context.MODE_PRIVATE)
         .edit()
         .putString(key, folder)
         .putString("$key#uids", uids.joinToString(","))
@@ -347,14 +361,14 @@ internal fun rememberArchivedFolder(
 }
 
 /** Reads the recorded folder and clears it: an undo is offered once, and a
- *  stale entry would let a later undo move mail that was archived by hand. */
-internal fun takeArchivedFolder(
+ *  stale entry would let a later undo move mail that was archived or deleted by hand. */
+internal fun takeMovedPlacement(
     context: Context,
     accountId: String,
     threadKey: String,
-): ArchivedPlacement? {
-    val prefs = context.getSharedPreferences(ARCHIVED_FOLDER_PREFS, Context.MODE_PRIVATE)
-    val key = archivedFolderKey(accountId, threadKey)
+): MovedPlacement? {
+    val prefs = context.getSharedPreferences(MOVED_PLACEMENT_PREFS, Context.MODE_PRIVATE)
+    val key = movedPlacementKey(accountId, threadKey)
     val folder = prefs.getString(key, null)?.takeIf { it.isNotBlank() }
     val uids =
         prefs
@@ -367,7 +381,7 @@ internal fun takeArchivedFolder(
         .remove(key)
         .remove("$key#uids")
         .apply()
-    return folder?.let { ArchivedPlacement(it, uids) }
+    return folder?.let { MovedPlacement(it, uids) }
 }
 
 /** How long the undo offer stays in the shade. Long enough to notice a mis-tap,
@@ -455,6 +469,32 @@ internal fun markReadAction(
             notificationActionIntent(
                 context,
                 ACTION_MARK_READ,
+                accountId,
+                folder,
+                threadKey,
+                accountName,
+                title,
+                notificationId,
+            ),
+        ).build()
+
+internal fun deleteAction(
+    context: Context,
+    accountId: String,
+    folder: String,
+    threadKey: String,
+    accountName: String,
+    title: String,
+    notificationId: Int,
+): NotificationCompat.Action =
+    NotificationCompat
+        .Action
+        .Builder(
+            R.drawable.ic_action_delete,
+            context.getString(R.string.notification_action_delete),
+            notificationActionIntent(
+                context,
+                ACTION_DELETE,
                 accountId,
                 folder,
                 threadKey,

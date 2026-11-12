@@ -232,15 +232,16 @@ object AndroidNotificationService {
                     .bigText(newMailChildBigText(item.subject, item.preview, fallback))
                     .setSummaryText(batch.accountName),
             ).setContentIntent(openAppIntent(context, batch.accountId, batch.folder, item.threadKey))
-            // Archive and mark-as-read only; a reply needs a send queue that
-            // survives being offline, which does not exist yet. Both address the
-            // thread by id, so a payload missing any part of it gets no buttons
-            // rather than buttons that quietly do nothing. A feed arrival drops
-            // Archive, see [newMailSupportsArchive].
+            // Archive, mark-as-read and delete — whichever of them the user
+            // kept in settings, see [newMailActions]. No reply: a reply needs a send queue
+            // that survives being offline, which does not exist yet. All address
+            // the thread by id, so a payload missing any part of it gets no
+            // buttons rather than buttons that quietly do nothing.
             .apply {
                 if (batch.accountId.isNotBlank() && batch.folder.isNotBlank() && item.threadKey.isNotBlank()) {
                     val id = newMailNotificationId(batch.accountId, item)
-                    if (newMailSupportsArchive(batch.accountId)) {
+                    val actions = newMailActions(batch.accountId, loadNotificationActions(context))
+                    if (NOTIFICATION_ACTION_ARCHIVE in actions) {
                         addAction(
                             archiveAction(
                                 context,
@@ -253,17 +254,33 @@ object AndroidNotificationService {
                             ),
                         )
                     }
-                    addAction(
-                        markReadAction(
-                            context,
-                            accountId = batch.accountId,
-                            folder = batch.folder,
-                            threadKey = item.threadKey,
-                            accountName = batch.accountName,
-                            title = title,
-                            notificationId = id,
-                        ),
-                    )
+                    if (NOTIFICATION_ACTION_MARK_READ in actions) {
+                        addAction(
+                            markReadAction(
+                                context,
+                                accountId = batch.accountId,
+                                folder = batch.folder,
+                                threadKey = item.threadKey,
+                                accountName = batch.accountName,
+                                title = title,
+                                notificationId = id,
+                            ),
+                        )
+                    }
+                    // Last, where a destructive button is least likely mis-tapped.
+                    if (NOTIFICATION_ACTION_DELETE in actions) {
+                        addAction(
+                            deleteAction(
+                                context,
+                                accountId = batch.accountId,
+                                folder = batch.folder,
+                                threadKey = item.threadKey,
+                                accountName = batch.accountName,
+                                title = title,
+                                notificationId = id,
+                            ),
+                        )
+                    }
                 }
             }.setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -481,11 +498,12 @@ object AndroidNotificationService {
         }
     }
 
-    /** Replaces the archived mail's row with an offer to put it back.
+    /** Replaces the archived (or [deleted]) mail's row with an offer to put it
+     *  back.
      *
      *  Posted into the same group as the mail it replaced, so the account's
      *  shade stays a single stack rather than sprouting a loose row. */
-    fun notifyArchivedWithUndo(
+    fun notifyMovedWithUndo(
         base: Context,
         accountId: String,
         accountName: String,
@@ -493,15 +511,18 @@ object AndroidNotificationService {
         threadKey: String,
         title: String,
         notificationId: Int,
+        deleted: Boolean = false,
     ) {
         val context = localizedAppContext(base)
         if (!canNotify(context)) return
         ensureChannels(context)
+        val heading =
+            if (deleted) R.string.mail_toast_thread_moved_to_trash else R.string.notification_archived_title
         val notification =
             NotificationCompat
                 .Builder(context, MAIL_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_mail)
-                .setContentTitle(context.getString(R.string.notification_archived_title))
+                .setContentTitle(context.getString(heading))
                 .setContentText(title)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setGroup(newMailGroupKey(accountId))
@@ -519,7 +540,7 @@ object AndroidNotificationService {
                             context.getString(R.string.notification_action_undo),
                             notificationActionIntent(
                                 context,
-                                ACTION_UNDO_ARCHIVE,
+                                ACTION_UNDO_MOVE,
                                 accountId,
                                 folder,
                                 threadKey,
@@ -559,6 +580,7 @@ object AndroidNotificationService {
         val message =
             when (action) {
                 ACTION_ARCHIVE -> context.getString(R.string.notification_archive_failed)
+                ACTION_DELETE -> context.getString(R.string.notification_delete_failed)
                 ACTION_MARK_READ -> context.getString(R.string.notification_mark_read_failed)
                 else -> context.getString(R.string.notification_undo_failed)
             }
@@ -810,11 +832,24 @@ fun newMailChildBigText(
     return parts.joinToString("\n").ifBlank { fallback }
 }
 
-/** Whether a new-mail row offers Archive. A feed item has nowhere to be filed —
- *  core keeps no archive folder for an RSS account, and `mail.archive` does not
- *  route feed threads — so feeds get Mark as read alone. Matches the mail list,
- *  where an RSS row cannot be archive-swiped either. */
+/** Whether a new-mail row offers Archive and Delete. A feed item has nowhere
+ *  to be filed — core keeps no archive or trash folder for an RSS account, and
+ *  `mail.archive` and `mail.delete` do not route feed threads — so feeds get
+ *  Mark as read alone. Matches the mail list, where an RSS row can be neither
+ *  archive-swiped nor deleted. */
 fun newMailSupportsArchive(accountId: String): Boolean = !accountIdIsRss(accountId)
+
+/** The buttons a new-mail row carries: those the user [enabled] in settings,
+ *  less the ones this account cannot perform. */
+fun newMailActions(
+    accountId: String,
+    enabled: Set<String>,
+): Set<String> =
+    if (newMailSupportsArchive(accountId)) {
+        enabled
+    } else {
+        enabled - setOf(NOTIFICATION_ACTION_ARCHIVE, NOTIFICATION_ACTION_DELETE)
+    }
 
 /** One summary row: who wrote, and about what. */
 fun newMailInboxLine(

@@ -170,6 +170,25 @@ internal const val QUOTE_REPLIES_PREF = "quote_replies_v1"
 internal const val NOTIFICATION_BANNER_DISMISSED_PREF = "notification_banner_dismissed_v1"
 internal const val LIVE_MAIL_PUSH_PREF = "live_mail_push_v1"
 internal const val BACKGROUND_SYNC_ENABLED_PREF = "background_sync_enabled_v1"
+
+/** Which buttons a new-mail notification carries, as a set of the ids below.
+ *  Read by the Android notification service straight from the platform store
+ *  (same key and ids in AppUiUtils.kt), since it posts while the UI is not
+ *  running. Unset means all of them. */
+internal const val NOTIFICATION_ACTIONS_PREF = "notification_actions_v1"
+internal const val NOTIFICATION_ACTION_ARCHIVE = "archive"
+internal const val NOTIFICATION_ACTION_MARK_READ = "mark_read"
+internal const val NOTIFICATION_ACTION_DELETE = "delete"
+
+/** Every notification button, in the order the notification shows them. */
+internal val notificationActionIds =
+    listOf(NOTIFICATION_ACTION_ARCHIVE, NOTIFICATION_ACTION_MARK_READ, NOTIFICATION_ACTION_DELETE)
+
+internal fun loadNotificationActions(prefs: AppPreferences): Set<String> {
+    val all = notificationActionIds.toSet()
+    return prefs.getStringSet(NOTIFICATION_ACTIONS_PREF, all).intersect(all)
+}
+
 internal const val POLL_INTERVAL_MINUTES_PREF = "poll_interval_minutes_v1"
 internal const val SEND_SHORTCUT_PREF = "send_shortcut_v1"
 internal const val CONVERSATION_LAYOUT_PREF = "conversation_layout_v1"

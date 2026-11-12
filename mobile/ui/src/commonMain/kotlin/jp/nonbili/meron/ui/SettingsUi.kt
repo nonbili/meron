@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -211,6 +212,8 @@ internal fun SettingsScreen(
     supportsBackgroundPush: Boolean,
     liveMailPushEnabled: Boolean,
     onToggleLiveMailPush: () -> Unit,
+    notificationActions: Set<String>,
+    onToggleNotificationAction: (String) -> Unit,
     backgroundSyncEnabled: Boolean,
     onToggleBackgroundSync: () -> Unit,
     onRefreshBackground: () -> Unit,
@@ -392,6 +395,8 @@ internal fun SettingsScreen(
                     supportsBackgroundPush = supportsBackgroundPush,
                     liveMailPushEnabled = liveMailPushEnabled,
                     onToggleLiveMailPush = onToggleLiveMailPush,
+                    notificationActions = notificationActions,
+                    onToggleNotificationAction = onToggleNotificationAction,
                     backgroundSyncEnabled = backgroundSyncEnabled,
                     onToggleBackgroundSync = onToggleBackgroundSync,
                     onRefreshBackground = onRefreshBackground,
@@ -880,6 +885,8 @@ internal fun SettingsGeneralPage(
     supportsBackgroundPush: Boolean,
     liveMailPushEnabled: Boolean,
     onToggleLiveMailPush: () -> Unit,
+    notificationActions: Set<String>,
+    onToggleNotificationAction: (String) -> Unit,
     backgroundSyncEnabled: Boolean,
     onToggleBackgroundSync: () -> Unit,
     onRefreshBackground: () -> Unit,
@@ -1064,6 +1071,13 @@ internal fun SettingsGeneralPage(
                     icon = Icons.Filled.Refresh,
                     title = tr("settings.refreshBackground"),
                     onClick = onRefreshBackground,
+                )
+            }
+            // Android only: iOS notifications carry no buttons.
+            item {
+                NotificationActionsRow(
+                    selected = notificationActions,
+                    onToggle = onToggleNotificationAction,
                 )
             }
         } else {
@@ -1335,6 +1349,42 @@ private fun AlertDefaultRow(
                         menu = false
                         if (option != lead) onChange(option)
                     },
+                )
+            }
+        }
+    }
+}
+
+private fun notificationActionLabelKey(action: String): String =
+    when (action) {
+        NOTIFICATION_ACTION_ARCHIVE -> "notification.actionArchive"
+        NOTIFICATION_ACTION_DELETE -> "notification.actionDelete"
+        else -> "notification.actionMarkRead"
+    }
+
+/** Picks which buttons a new-mail notification carries. The menu stays open
+ *  across taps, since choosing a set usually takes more than one. */
+@Composable
+private fun NotificationActionsRow(
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    val chosen = notificationActionIds.filter { it in selected }.map { tr(notificationActionLabelKey(it)) }
+    Box {
+        SettingsRow(
+            icon = Icons.Filled.Notifications,
+            title = tr("settings.notificationActions"),
+            subtitle = chosen.joinToString(", ").ifEmpty { tr("settings.notificationActionsNone") },
+            hint = tr("settings.notificationActionsHint"),
+            onClick = { menu = true },
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            notificationActionIds.forEach { action ->
+                DropdownMenuItem(
+                    text = { Text(tr(notificationActionLabelKey(action))) },
+                    leadingIcon = { Checkbox(checked = action in selected, onCheckedChange = null) },
+                    onClick = { onToggle(action) },
                 )
             }
         }
