@@ -9,15 +9,18 @@
     <locale android:name="es" />
     <locale android:name="et" />
     <locale android:name="fr" />
+    <locale android:name="id" />
     <locale android:name="it" />
     <locale android:name="ja" />
     <locale android:name="ko" />
     <locale android:name="lv" />
+    <locale android:name="nl" />
     <locale android:name="pl" />
     <locale android:name="pt" />
     <locale android:name="pt-BR" />
     <locale android:name="ru" />
     <locale android:name="sv" />
     <locale android:name="tr" />
+    <locale android:name="uk" />
     <locale android:name="vi" />
 </locale-config>

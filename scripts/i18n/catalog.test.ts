@@ -120,3 +120,38 @@ describe('Russian catalog', () => {
     expect(iosLocale('ru')).toBe('ru')
   })
 })
+
+describe('Ukrainian catalog', () => {
+  test('covers every English key and preserves named and positional placeholders', async () => {
+    const en = (await import('../../locales/en.json')).default
+    const uk = (await import('../../locales/uk.json')).default
+    expect(() => validateCatalogs({ en, uk })).not.toThrow()
+    for (const key of Object.keys(en) as (keyof typeof en)[]) {
+      expect(uk[key].match(/%\d+\$[sd]/g) ?? []).toEqual(en[key].match(/%\d+\$[sd]/g) ?? [])
+      if (en[key].includes(', plural,')) {
+        for (const category of ['one', 'few', 'many', 'other']) {
+          expect(uk[key]).toContain(`${category} {`)
+        }
+      }
+    }
+    expect(androidLocaleDir('uk')).toBe('values-uk')
+    expect(iosLocale('uk')).toBe('uk')
+  })
+})
+
+describe('Dutch and Indonesian catalogs', () => {
+  test('covers every English key and preserves named and positional placeholders', async () => {
+    const en = (await import('../../locales/en.json')).default
+    const nl = (await import('../../locales/nl.json')).default
+    const id = (await import('../../locales/id.json')).default
+    expect(() => validateCatalogs({ en, nl, id })).not.toThrow()
+    for (const key of Object.keys(en) as (keyof typeof en)[]) {
+      expect(nl[key].match(/%\d+\$[sd]/g) ?? []).toEqual(en[key].match(/%\d+\$[sd]/g) ?? [])
+      expect(id[key].match(/%\d+\$[sd]/g) ?? []).toEqual(en[key].match(/%\d+\$[sd]/g) ?? [])
+    }
+    expect(androidLocaleDir('nl')).toBe('values-nl')
+    expect(iosLocale('nl')).toBe('nl')
+    expect(androidLocaleDir('id')).toBe('values-id')
+    expect(iosLocale('id')).toBe('id')
+  })
+})

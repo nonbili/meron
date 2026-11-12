@@ -56,6 +56,10 @@ class AppLanguageResolutionTest {
     fun aRegionalLocaleFallsBackToItsLanguage() {
         assertEquals("ru", resolveDeviceLanguageTag("ru-RU"))
         assertEquals("ru", resolveDeviceLanguageTag("ru_BY"))
+        assertEquals("uk", resolveDeviceLanguageTag("uk-UA"))
+        assertEquals("nl", resolveDeviceLanguageTag("nl-NL"))
+        assertEquals("nl", resolveDeviceLanguageTag("nl-BE"))
+        assertEquals("id", resolveDeviceLanguageTag("id-ID"))
         assertEquals("fr", resolveDeviceLanguageTag("fr-FR"))
         assertEquals("de", resolveDeviceLanguageTag("de-AT"))
         assertEquals("ja", resolveDeviceLanguageTag("ja-JP"))
@@ -83,8 +87,14 @@ class AppLanguageResolutionTest {
     }
 
     @Test
+    fun newlyTranslatedLocalesResolveToTheirLanguage() {
+        assertEquals("nl", resolveDeviceLanguageTag("nl-NL"))
+        assertEquals("uk", resolveDeviceLanguageTag("uk-UA"))
+        assertEquals("id", resolveDeviceLanguageTag("id-ID"))
+    }
+
+    @Test
     fun anUntranslatedOrMissingLocaleFallsBackToEnglish() {
-        assertEquals("en", resolveDeviceLanguageTag("nl-NL"))
         assertEquals("en", resolveDeviceLanguageTag("is"))
         assertEquals("en", resolveDeviceLanguageTag(""))
     }

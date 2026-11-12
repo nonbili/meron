@@ -45,7 +45,7 @@ internal fun loadNotificationActions(context: Context): Set<String> =
         ?: allNotificationActions
 
 private val supportedAppLanguageTags =
-    setOf("ar", "de", "el", "en", "es", "et", "fr", "it", "ja", "ko", "lv", "pl", "pt", "pt-BR", "ru", "sv", "tr", "vi", "zh-Hans", "zh-Hant")
+    setOf("ar", "de", "el", "en", "es", "et", "fr", "id", "it", "ja", "ko", "lv", "nl", "pl", "pt", "pt-BR", "ru", "sv", "tr", "uk", "vi", "zh-Hans", "zh-Hant")
 
 internal fun loadAppLanguageTag(context: Context): String =
     context

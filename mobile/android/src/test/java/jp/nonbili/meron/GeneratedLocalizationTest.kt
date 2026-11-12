@@ -40,6 +40,12 @@ class GeneratedLocalizationTest {
     fun russianDeviceLocalesResolveToTheRussianCatalog() {
         assertEquals("ru", catalogLanguageTag(Locale.forLanguageTag("ru")))
         assertEquals("ru", catalogLanguageTag(Locale.forLanguageTag("ru-RU")))
+        assertEquals("uk", catalogLanguageTag(Locale.forLanguageTag("uk")))
+        assertEquals("uk", catalogLanguageTag(Locale.forLanguageTag("uk-UA")))
+        assertEquals("nl", catalogLanguageTag(Locale.forLanguageTag("nl")))
+        assertEquals("nl", catalogLanguageTag(Locale.forLanguageTag("nl-NL")))
+        assertEquals("id", catalogLanguageTag(Locale.forLanguageTag("id")))
+        assertEquals("id", catalogLanguageTag(Locale.forLanguageTag("id-ID")))
     }
 
     @Test

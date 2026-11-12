@@ -111,7 +111,8 @@ func formatNativePlural(template string, count int, locale string) string {
 			}
 		}
 		category := "other"
-		if strings.EqualFold(strings.Split(strings.ReplaceAll(locale, "_", "-"), "-")[0], "ru") {
+		lang := strings.ToLower(strings.Split(strings.ReplaceAll(locale, "_", "-"), "-")[0])
+		if lang == "ru" || lang == "uk" {
 			lastTwo := count % 100
 			if lastTwo < 0 {
 				lastTwo = -lastTwo

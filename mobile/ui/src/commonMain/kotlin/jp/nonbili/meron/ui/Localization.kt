@@ -100,9 +100,10 @@ private fun formatIcu(
                 (args[plural.argument] as? Number)?.toLong()
                     ?: args[plural.argument]?.toString()?.toLongOrNull()
                     ?: 0L
+            val lang = locale.substringBefore('-').substringBefore('_').lowercase()
             val category =
-                if (locale.substringBefore('-').substringBefore('_').lowercase() == "ru") {
-                    russianPluralCategory(count)
+                if (lang == "ru" || lang == "uk") {
+                    slavicPluralCategory(count)
                 } else {
                     if (count == 1L) "one" else "other"
                 }
@@ -113,7 +114,7 @@ private fun formatIcu(
     return replacePlaceholders(selected, args)
 }
 
-private fun russianPluralCategory(count: Long): String {
+private fun slavicPluralCategory(count: Long): String {
     val lastTwo = kotlin.math.abs(count % 100)
     val last = lastTwo % 10
     return when {

@@ -78,6 +78,9 @@ final class LocalizationContractTests: XCTestCase {
         XCTAssertEqual(iosNormalizedAppLanguageTag("pt_BR"), "")
         XCTAssertEqual(iosAppLocale("ja").identifier, "ja")
         XCTAssertEqual(iosAppLanguageDisplayName("pt-BR"), "Português (Brasil)")
+        XCTAssertEqual(iosAppLanguageDisplayName("nl"), "Nederlands")
+        XCTAssertEqual(iosAppLanguageDisplayName("uk"), "Українська")
+        XCTAssertEqual(iosAppLanguageDisplayName("id"), "Bahasa Indonesia")
     }
 }
 

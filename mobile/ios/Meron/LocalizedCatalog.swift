@@ -34,7 +34,7 @@ private func formatLocalizedCatalogTemplate(
     if let plural = parseLocalizedCatalogPlural(template) {
         let count = localizedCatalogInt(args[plural.argument]) ?? 0
         let language = localeIdentifier.replacingOccurrences(of: "_", with: "-").components(separatedBy: "-")[0].lowercased()
-        let category = language == "ru" ? russianPluralCategory(count) : (count == 1 ? "one" : "other")
+        let category = (language == "ru" || language == "uk") ? slavicPluralCategory(count) : (count == 1 ? "one" : "other")
         let selected = plural.variants[category]
             ?? plural.variants["other"]
             ?? template
@@ -43,7 +43,7 @@ private func formatLocalizedCatalogTemplate(
     return replaceLocalizedCatalogPlaceholders(template, args: args)
 }
 
-private func russianPluralCategory(_ count: Int) -> String {
+private func slavicPluralCategory(_ count: Int) -> String {
     let lastTwo = abs(count % 100)
     let last = lastTwo % 10
     if last == 1, lastTwo != 11 { return "one" }

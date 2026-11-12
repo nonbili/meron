@@ -37,15 +37,18 @@ const supportedLocales = [
   'es',
   'et',
   'fr',
+  'id',
   'it',
   'ko',
   'lv',
+  'nl',
   'pl',
   'pt',
   'pt_BR',
   'ru',
   'sv',
   'tr',
+  'uk',
   'vi',
   'zh_Hans',
   'zh_Hant',
@@ -61,15 +64,18 @@ const languageNativeNames: Record<SupportedLocale, string> = {
   es: 'Español',
   et: 'Eesti',
   fr: 'Français',
+  id: 'Bahasa Indonesia',
   it: 'Italiano',
   ko: '한국어',
   lv: 'Latviešu',
+  nl: 'Nederlands',
   pl: 'Polski',
   pt: 'Português',
   pt_BR: 'Português (Brasil)',
   ru: 'Русский',
   sv: 'Svenska',
   tr: 'Türkçe',
+  uk: 'Українська',
   vi: 'Tiếng Việt',
   zh_Hans: '简体中文',
   zh_Hant: '繁體中文',
@@ -225,8 +231,9 @@ private fun formatGeneratedIcu(
         val count = (args[plural.argument] as? Number)?.toLong()
             ?: args[plural.argument]?.toString()?.toLongOrNull()
             ?: 0L
-        val category = if (locale.substringBefore('-').substringBefore('_').lowercase() == "ru") {
-            russianPluralCategory(count)
+        val lang = locale.substringBefore('-').substringBefore('_').lowercase()
+        val category = if (lang == "ru" || lang == "uk") {
+            slavicPluralCategory(count)
         } else {
             if (count == 1L) "one" else "other"
         }
@@ -237,7 +244,7 @@ private fun formatGeneratedIcu(
     return replaceGeneratedPlaceholders(selected, args)
 }
 
-private fun russianPluralCategory(count: Long): String {
+private fun slavicPluralCategory(count: Long): String {
     val lastTwo = kotlin.math.abs(count % 100)
     val last = lastTwo % 10
     return when {
