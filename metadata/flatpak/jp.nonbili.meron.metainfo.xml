@@ -63,6 +63,20 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.5.1" date="2026-11-12">
+      <description>
+        <ul>
+          <li>Show inbox unread count on the macOS Dock icon</li>
+          <li>Support importing OpenKeychain backups and signing unencrypted mail with OpenPGP signing subkeys</li>
+          <li>Toggle signatures in quick reply and full composer, excluding them from quick replies by default</li>
+          <li>Linkify bare URLs in sent quick replies, composer, and reader</li>
+          <li>Give dark themes depth and shadows instead of hairlines</li>
+          <li>Keep the message being read open when new mail arrives in the thread</li>
+          <li>Inset macOS window controls and align app icon to the Dock grid</li>
+          <li>Add Dutch, Ukrainian, and Indonesian localizations</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.5.0" date="2026-11-09">
       <description>
         <ul>

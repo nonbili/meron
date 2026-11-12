@@ -1,0 +1,8 @@
+- Show inbox unread count on the macOS Dock icon
+- Support importing OpenKeychain backups and signing unencrypted mail with OpenPGP signing subkeys
+- Toggle signatures in quick reply and full composer, excluding them from quick replies by default
+- Linkify bare URLs in sent quick replies, composer, and reader
+- Give dark themes depth and shadows instead of hairlines
+- Keep the message being read open when new mail arrives in the thread
+- Inset macOS window controls and align app icon to the Dock grid
+- Add Dutch, Ukrainian, and Indonesian localizations
