@@ -16,6 +16,7 @@ export function CryptoStrip({
   messageId,
   accountId,
   accountAddress,
+  recipientAddress,
   senderName,
   senderAddress,
 }: {
@@ -23,6 +24,7 @@ export function CryptoStrip({
   messageId: string
   accountId: string
   accountAddress: string
+  recipientAddress?: string
   senderName: string
   senderAddress: string
 }) {
@@ -59,7 +61,7 @@ export function CryptoStrip({
     }
   } else {
     icon = <Lock size={14} className="mt-px shrink-0" />
-    text = t('crypto.offer', { sender, account: accountAddress })
+    text = t('crypto.offer', { sender, account: recipientAddress || accountAddress })
     actions.push({ label: t('crypto.turnOn'), onClick: turnOn, primary: true })
     actions.push({ label: t('crypto.notNow'), onClick: () => void dismissEncryptionOffer(accountId, senderAddress) })
     actions.push({ label: t('crypto.dontAskAgain'), onClick: () => void dismissEncryptionOffer(accountId, '*') })

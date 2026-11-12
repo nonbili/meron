@@ -5,7 +5,7 @@ import { useTranslation } from '../../lib/i18n'
 import { printMail } from '../../lib/printMail'
 import { accounts$ } from '../../states/accounts'
 import { closeMessageTab, forwardMessage, patchTabMessage, replyToMessage, setTabViewMode } from '../../states/compose'
-import { messageCanReplyAll } from '../../states/composeReply'
+import { detectAliasFrom, messageCanReplyAll } from '../../states/composeReply'
 import { deleteMessage } from '../../states/mailMoves'
 import { mail$ } from '../../states/mailState'
 import { normalizeSenderAddr, settings$ } from '../../states/settings'
@@ -149,6 +149,7 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
                 crypto={tab.message?.crypto}
                 accountId={tab.accountId ?? ''}
                 accountAddress={account?.email ?? ''}
+                recipientAddress={account && tab.message ? detectAliasFrom(tab.message, account) : ''}
                 senderName={tab.message?.from_name ?? ''}
                 senderAddress={sender}
               />

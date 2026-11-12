@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Copy, Download, KeyRound, RefreshCw, ShieldCheck, Trash2, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { formatFingerprint } from '../../lib/crypto'
+import { encryptionAddresses, formatFingerprint, missingKeyAddresses } from '../../lib/crypto'
 import type { AccountEncryptionState } from '../../lib/crypto'
 import {
   accountEncryption,
@@ -60,6 +60,7 @@ export function AccountEncryptionCard({ account }: { account: Account }) {
   }
 
   const key = state?.key
+  const missingAddresses = key ? missingKeyAddresses(key, encryptionAddresses(account)) : []
   return (
     <SettingsGroup title={t('crypto.account.title')}>
       <ToggleRow
@@ -99,6 +100,11 @@ export function AccountEncryptionCard({ account }: { account: Account }) {
               </div>
             }
           />
+          {missingAddresses.length > 0 && (
+            <p role="status" className="px-3.5 py-2 text-[0.6875rem] text-amber-700 dark:text-amber-300">
+              {t('crypto.account.missingAddresses', { addresses: missingAddresses.join(', ') })}
+            </p>
+          )}
           {key.unusable && (
             <p className="px-3.5 py-2 text-[0.6875rem] text-amber-700 dark:text-amber-300">
               {t(`crypto.account.unusable.${key.unusable}`)}

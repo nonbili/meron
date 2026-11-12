@@ -12,6 +12,9 @@ import { KeyLookupDialog } from './KeyLookupDialog'
 import { KeyChangeNote } from './KeyChangeNote'
 import { EnableEncryptionDialog } from './EnableEncryptionDialog'
 import { SignToggle } from './SignToggle'
+import { accounts$ } from '../../states/accounts'
+import type { Account } from '../../types'
+import { AccountEncryptionCard } from './AccountEncryptionCard'
 
 const FPR = '8E9BCE8647564E257A411B71969BC97D064D88D5'
 const base: MessageCrypto = {
@@ -31,6 +34,7 @@ const base: MessageCrypto = {
 let calls: { command: string; payload: any }[]
 beforeEach(() => {
   calls = []
+  accounts$.set([])
   // Another file can leave a confirm open; tests here read ui$.confirm.
   settleConfirm(false)
   crypto$.verify.set(null)
@@ -45,7 +49,7 @@ beforeEach(() => {
         Invoke: async (command: string, payload: any) => {
           calls.push({ command, payload })
           if (command === 'pgp.account.state')
-            return { enabled: true, key: { fingerprint: 'AAAA'.repeat(10) }, previous: [] }
+            return { enabled: true, key: { fingerprint: 'AAAA'.repeat(10), emails: ['me@example.org'] }, previous: [] }
           return { ok: true }
         },
       },
@@ -248,8 +252,9 @@ describe('CryptoStrip', () => {
   })
 
   test('the offer is a quiet status with turn on, not now and never', async () => {
-    const { getByRole, getByText } = strip({ ...base, offer: true })
-    expect(getByRole('status').textContent).toContain('Carol uses end-to-end encryption')
+    const { getByRole, getByText } = strip({ ...base, signed: true, offer: true })
+    expect(getByRole('status').textContent).toContain('Carol shared an OpenPGP key')
+    expect(getByRole('status').textContent).toContain('to send encrypted mail')
     await act(async () => fireEvent.click(getByText('Not now')))
     expect(calls).toContainEqual({
       command: 'pgp.offer.dismiss',
@@ -257,6 +262,23 @@ describe('CryptoStrip', () => {
     })
     await act(async () => fireEvent.click(getByText("Don't ask again")))
     expect(calls).toContainEqual({ command: 'pgp.offer.dismiss', payload: { account: 'acc', addr: '*' } })
+  })
+
+  test('the offer names the recipient alias while enabling its owning account', () => {
+    const { getByRole } = render(
+      <CryptoStrip
+        messageId="alias-message"
+        crypto={{ ...base, signed: true, offer: true }}
+        accountId="acc"
+        accountAddress="me@example.org"
+        recipientAddress="alias@example.org"
+        senderName="Carol"
+        senderAddress="carol@example.com"
+      />,
+    )
+    expect(getByRole('status').textContent).toContain('this account (alias@example.org)')
+    fireEvent.click(getByRole('button', { name: 'Turn on…' }))
+    expect(crypto$.enableFor.get()).toEqual({ accountId: 'acc', address: 'me@example.org' })
   })
 
   test('a new key for a verified contact is an alert', () => {
@@ -688,7 +710,64 @@ describe('KeyLookupDialog', () => {
   })
 })
 
+describe('AccountEncryptionCard', () => {
+  test('warns when an alias added later is missing from the current key', async () => {
+    const account = { id: 'acc', email: 'me@example.org', aliases: [] } as unknown as Account
+    const view = render(<AccountEncryptionCard account={account} />)
+    await waitFor(() => expect(view.getByText('Your key')).toBeTruthy())
+    expect(view.queryByRole('status')).toBeNull()
+    view.rerender(
+      <AccountEncryptionCard account={{ ...account, aliases: [{ email: 'later@example.org', name: '' }] }} />,
+    )
+    expect(view.getByRole('status').textContent).toContain("This key doesn't list: later@example.org")
+  })
+})
+
 describe('EnableEncryptionDialog', () => {
+  test('an imported key matching the primary still reports a missing alias', async () => {
+    accounts$.set([
+      {
+        id: 'acc',
+        email: 'me@example.org',
+        aliases: [{ email: 'alias@example.org', name: '' }],
+      } as Account,
+    ])
+    ;(window as any).go.main.App.Invoke = async (command: string) => {
+      if (command === 'system.pickFiles') return { files: [{ name: 'key.asc', data: 'key' }] }
+      if (command === 'pgp.account.importKey')
+        return {
+          result: {
+            status: 'imported',
+            address_matches: true,
+            key: { fingerprint: FPR, emails: ['me@example.org'], user_ids: ['<me@example.org>'] },
+          },
+        }
+      return {}
+    }
+    crypto$.enableFor.set({ accountId: 'acc', address: 'me@example.org' })
+    const { getByText } = render(<EnableEncryptionDialog />)
+    await act(async () => fireEvent.click(getByText('Use my existing key…')))
+    expect(crypto$.enableFor.get()).toBeNull()
+    expect(ui$.toast.get()).toBe(
+      "This key isn't made out to alias@example.org. Others may not find it for this address.",
+    )
+  })
+
+  test('explains that configured aliases share a key and are visible to recipients', () => {
+    accounts$.set([
+      {
+        id: 'acc',
+        email: 'me@example.org',
+        aliases: [{ email: 'alias@example.org', name: '' }],
+      } as Account,
+    ])
+    crypto$.enableFor.set({ accountId: 'acc', address: 'me@example.org' })
+    const { getByText } = render(<EnableEncryptionDialog />)
+    const text = getByText(/A new key will include these addresses/).textContent
+    expect(text).toContain('me@example.org, alias@example.org')
+    expect(text).toContain('people who receive it can see all of them')
+  })
+
   test('a backup file asks for its code, then imports with it', async () => {
     ;(window as any).go.main.App.Invoke = async (command: string, payload: any) => {
       calls.push({ command, payload })

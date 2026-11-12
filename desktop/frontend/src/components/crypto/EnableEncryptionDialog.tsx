@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { FileKey, KeyRound, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { formatFingerprint } from '../../lib/crypto'
+import { encryptionAddresses, formatFingerprint, missingKeyAddresses } from '../../lib/crypto'
 import type { KeyInfo } from '../../lib/crypto'
 import { createKey, crypto$, importOwnKey, pickKeyFile } from '../../states/crypto'
 import type { KeyFile } from '../../states/crypto'
+import { accounts$ } from '../../states/accounts'
 import { showToast } from '../../states/ui'
 import { Dialog } from '../dialog/Dialog'
 import { Button } from '../button/Button'
@@ -25,6 +26,7 @@ type Step =
 export function EnableEncryptionDialog() {
   const { t } = useTranslation()
   const target = useValue(crypto$.enableFor)
+  const account = useValue(() => accounts$.get().find((a) => a.id === target?.accountId))
   const [step, setStep] = useState<Step>({ kind: 'choose' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -40,12 +42,14 @@ export function EnableEncryptionDialog() {
   }, [target?.accountId])
 
   if (!target) return null
+  const addresses = account ? encryptionAddresses(account) : [target.address]
   const close = () => crypto$.enableFor.set(null)
 
   const done = (key: KeyInfo, addressMatches = true) => {
     showToast(t('crypto.enable.done'), 'success')
-    if (!addressMatches) showToast(t('crypto.enable.addressMismatch', { address: target.address }), 'error')
-    void key
+    const missing = missingKeyAddresses(key, addresses)
+    if (missing.length) showToast(t('crypto.enable.addressMismatch', { address: missing.join(', ') }), 'error')
+    else if (!addressMatches) showToast(t('crypto.enable.addressMismatch', { address: target.address }), 'error')
     close()
   }
 
@@ -118,7 +122,7 @@ export function EnableEncryptionDialog() {
           </div>
           <div className="min-w-0">
             <h2 className="text-[0.9375rem] font-bold tracking-tight leading-tight">{t('crypto.enable.title')}</h2>
-            <p className="mt-1 truncate text-[0.65625rem] font-medium text-secondary">{target.address}</p>
+            <p className="mt-1 truncate text-[0.65625rem] font-medium text-secondary">{addresses.join(', ')}</p>
           </div>
         </div>
         <IconButton icon={X} iconSize={15} label={t('buttons.close')} size="sm" onClick={close} />
@@ -127,6 +131,11 @@ export function EnableEncryptionDialog() {
       {step.kind === 'choose' && (
         <div className="flex flex-col gap-4">
           <p className="text-[0.8125rem] font-semibold">{t('crypto.enable.question', { address: target.address })}</p>
+          {addresses.length > 1 && (
+            <p className="text-[0.75rem] leading-relaxed text-secondary">
+              {t('crypto.enable.aliases', { addresses: addresses.join(', ') })}
+            </p>
+          )}
           <p className="rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-[0.6875rem] leading-relaxed text-amber-800 dark:text-amber-200">
             {t('crypto.enable.otherDevices')}
           </p>

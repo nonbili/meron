@@ -70,6 +70,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import jp.nonbili.meron.shared.AccountSummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -105,6 +106,26 @@ private fun fingerprintsMatch(
 private fun JsonObject.objects(key: String) = (get(key) as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
 
 private fun JsonObject.strings(key: String) = (get(key) as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+
+/** OpenPGP address matching in the core folds ASCII letters only. */
+private fun keyAddress(address: String): String = address.trim().map { if (it in 'A'..'Z') it.lowercaseChar() else it }.joinToString("")
+
+/** Match the addresses used by the core when it creates an account's key. */
+internal fun encryptionAddresses(account: AccountSummary): List<String> =
+    (listOf(account.email) + account.aliases.map { it.email })
+        .map(::keyAddress)
+        // Match the core's email_of_user_id, including while an alias is being edited.
+        .filter { '@' in it && it.none { char -> char.isWhitespace() || char == '<' || char == '>' } }
+        .distinct()
+
+/** Every missing identity matters, even when the key includes the primary address. */
+internal fun missingKeyAddresses(
+    key: JsonObject,
+    addresses: List<String>,
+): List<String> {
+    val emails = key.strings("emails").map(::keyAddress).toSet()
+    return addresses.filter { keyAddress(it) !in emails }
+}
 
 /** Why a key can't be used (`expired`, `revoked`, …), blank when it can. */
 private fun JsonObject.unusable() = (get("unusable") as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull.orEmpty()
@@ -172,6 +193,9 @@ internal class AccountEncryption(
     val signPlain get() = info?.flag("sign_plain") == true
     val key get() = info?.get("key") as? JsonObject
     val previous get() = info?.objects("previous").orEmpty()
+    val addresses
+        get() = state.coreAccounts.firstOrNull { it.id == account }?.let(::encryptionAddresses) ?: listOf(address)
+    val missingAddresses get() = key?.let { missingKeyAddresses(it, addresses) }.orEmpty()
 
     private suspend fun refresh() {
         info = state.pgp("pgp.account.state", params)
@@ -294,7 +318,13 @@ internal class AccountEncryption(
         when (result.text("status")) {
             "imported" -> {
                 close()
-                if (!result.flag("address_matches")) error = state.trs("crypto.enable.addressMismatch", mapOf("address" to address))
+                val imported = result["key"] as? JsonObject
+                val missing = imported?.let { missingKeyAddresses(it, addresses) }.orEmpty()
+                if (missing.isNotEmpty()) {
+                    error = state.trs("crypto.enable.addressMismatch", mapOf("address" to missing.joinToString()))
+                } else if (!result.flag("address_matches")) {
+                    error = state.trs("crypto.enable.addressMismatch", mapOf("address" to address))
+                }
             }
 
             "needs_passphrase" -> {
@@ -427,6 +457,12 @@ internal class AccountEncryption(
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
+                            if (addresses.size > 1) {
+                                Text(
+                                    tr("crypto.enable.aliases", mapOf("addresses" to addresses.joinToString())),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
                             NoteBox(tr("crypto.enable.otherDevices"))
                             Button(onClick = { create() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                                 Text(tr("crypto.enable.create"))
@@ -670,6 +706,10 @@ private fun SettingsListScope.CurrentKeyRows(
         )
     }
     val unusable = key.unusable()
+    val missingAddresses = encryption.missingAddresses
+    if (missingAddresses.isNotEmpty()) {
+        item { WarningRow(tr("crypto.account.missingAddresses", mapOf("addresses" to missingAddresses.joinToString()))) }
+    }
     if (unusable.isNotBlank()) {
         item { WarningRow(tr("crypto.account.unusable.$unusable") + ". " + tr("crypto.toggle.ownKeyUnusable")) }
     }

@@ -11,6 +11,7 @@ import { VideoAttachment } from './VideoAttachment'
 import type { MessageView } from './useMessageView'
 import type { FrameSurface } from './frameTheme'
 import { useValue } from '@legendapp/state/react'
+import { detectAliasFrom } from '../../states/composeReply'
 import { accounts$ } from '../../states/accounts'
 import { CryptoStrip } from '../crypto/CryptoStrip'
 
@@ -40,7 +41,7 @@ export function MessageContent({
   const { t } = useTranslation()
   const { attachmentImages, bubbleAttachmentImages, videos, files } = view
   const onOpenImage = (idx: number) => thread$.galleryIndex.set(idx)
-  const accountAddress = useValue(() => accounts$.get().find((a) => a.id === message.account_id)?.email ?? '')
+  const account = useValue(() => accounts$.get().find((a) => a.id === message.account_id))
 
   return (
     <>
@@ -48,7 +49,8 @@ export function MessageContent({
         messageId={message.id}
         crypto={message.crypto}
         accountId={message.account_id}
-        accountAddress={accountAddress}
+        accountAddress={account?.email ?? ''}
+        recipientAddress={account ? detectAliasFrom(message, account) : ''}
         senderName={message.from_name}
         senderAddress={message.from_addr}
       />

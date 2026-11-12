@@ -1,15 +1,49 @@
 import { describe, expect, test } from 'bun:test'
 import {
   decryptFailed,
+  encryptionAddresses,
   fingerprintsMatch,
   formatFingerprint,
   indicatorFor,
   mayQuoteInto,
   mayQuoteOriginal,
+  missingKeyAddresses,
   shortFingerprint,
   stripFor,
   type MessageCrypto,
 } from './crypto'
+
+describe('account key addresses', () => {
+  test('ignores unfinished aliases that cannot appear in the key email list', () => {
+    expect(
+      encryptionAddresses({
+        email: 'me@example.org',
+        aliases: [
+          { email: 'ali' },
+          { email: 'bad alias@example.org' },
+          { email: '<alias@example.org>' },
+          { email: 'alias@example.org' },
+        ],
+      }),
+    ).toEqual(['me@example.org', 'alias@example.org'])
+  })
+
+  test('normalizes and deduplicates primary and alias addresses like the core', () => {
+    expect(
+      encryptionAddresses({
+        email: ' Me@Example.org ',
+        aliases: [{ email: 'me@example.org' }, { email: ' Alias@Example.org ' }, { email: '' }],
+      }),
+    ).toEqual(['me@example.org', 'alias@example.org'])
+  })
+
+  test('preserves non-ASCII case when checking the addresses on a generated key', () => {
+    const addresses = encryptionAddresses({ email: 'Ünal@Example.org', aliases: [{ email: 'alias@example.org' }] })
+    expect(addresses).toEqual(['Ünal@example.org', 'alias@example.org'])
+    expect(missingKeyAddresses({ emails: ['Ünal@example.org'] }, addresses)).toEqual(['alias@example.org'])
+    expect(missingKeyAddresses({ emails: addresses }, addresses)).toEqual([])
+  })
+})
 
 const base: MessageCrypto = {
   encrypted: false,

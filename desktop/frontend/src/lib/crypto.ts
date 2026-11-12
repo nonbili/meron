@@ -2,6 +2,29 @@
 // fact (meron-core `openpgp::mime::view_json`); this file only maps them to
 // what is drawn: which icon, which colour, which strip.
 
+import type { Account } from '../types'
+
+/** Match the core's address normalization, preserving non-ASCII characters. */
+function keyAddress(address: string): string {
+  return address.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase())
+}
+
+export function encryptionAddresses(account: Pick<Account, 'email' | 'aliases'>): string[] {
+  return [
+    ...new Set(
+      [account.email, ...(account.aliases ?? []).map((alias) => alias.email)]
+        .map(keyAddress)
+        // The core only includes these user IDs in a key's email addresses.
+        .filter((address) => address.includes('@') && !/[\s<>]/u.test(address)),
+    ),
+  ]
+}
+
+export function missingKeyAddresses(key: Pick<KeyInfo, 'emails'>, addresses: string[]): string[] {
+  const emails = new Set(key.emails.map(keyAddress))
+  return addresses.filter((address) => !emails.has(keyAddress(address)))
+}
+
 export type Trust = 'verified' | 'known' | 'unconfirmed'
 
 export type CryptoProblem =
