@@ -1,0 +1,5 @@
+- Add a Delete button to new-mail notifications and a setting to choose notification actions on Android
+- Keep the message being read open when new mail arrives in the thread
+- Show correspondent or account profile avatars in contacts
+- Keep mail list rows white in light themes and distinguish unread mail with bold text
+- Add Dutch, Ukrainian, and Indonesian localizations

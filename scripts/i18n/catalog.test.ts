@@ -79,10 +79,26 @@ describe('catalog validation helpers', () => {
     ).toThrow(/placeholder mismatch/)
   })
 
-  test('extracts named placeholders but ignores plural count', () => {
+  test('extracts named placeholders including plural count', () => {
     expect(
       placeholders('{count, plural, one {{count} file from {sender}} other {{count} files from {sender}}}'),
-    ).toEqual(['sender'])
+    ).toEqual(['count', 'sender'])
+  })
+
+  test('rejects missing or unexpected count placeholders', () => {
+    expect(() =>
+      validateCatalogs({
+        en: { 'rules.runLeft': 'Messages left: {count}.' },
+        uk: { 'rules.runLeft': 'Залишилося опрацювати' },
+      }),
+    ).toThrow(/placeholder mismatch/)
+
+    expect(() =>
+      validateCatalogs({
+        en: { 'settings.interval': 'Sync interval (minutes)' },
+        uk: { 'settings.interval': '{count} хв' },
+      }),
+    ).toThrow(/placeholder mismatch/)
   })
 })
 

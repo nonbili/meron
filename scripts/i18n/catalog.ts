@@ -400,7 +400,7 @@ function placeholderMap(catalog: Catalog): Record<string, string[]> {
 function placeholders(value: string): string[] {
   const names = new Set<string>()
   for (const match of value.matchAll(/\{([A-Za-z][A-Za-z0-9_]*)\s*(?=[,}])/g)) {
-    if (match[1] !== 'count') names.add(match[1])
+    names.add(match[1])
   }
   return [...names].sort()
 }
