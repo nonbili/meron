@@ -64,6 +64,9 @@ actual fun MailWebView(
     // once the navigation transition has settled.
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow
         .collectAsState()
+    // The conversation overlay is no navigation destination, so its fade never
+    // shows in the lifecycle above.
+    val drawable = LocalMailWebViewDrawable.current
     // Read in the composable, not the update block, so a system font size change
     // recomposes this view and re-applies the zoom below.
     //
@@ -226,12 +229,13 @@ actual fun MailWebView(
         },
         update = { webView ->
             // WebView draws through a GL functor that hwui cannot render into
-            // the offscreen layers used by navigation transitions — doing so
-            // crashes natively (SkSurface::getCanvas in GLFunctorDrawable) on
-            // GL-pipeline devices. Skip drawing until the transition settles;
-            // the page keeps loading and measuring while INVISIBLE.
+            // the offscreen layers used by navigation transitions and fades —
+            // doing so crashes natively (SkSurface::getCanvas in
+            // GLFunctorDrawable) on GL-pipeline devices. Skip drawing until the
+            // transition settles; the page keeps loading and measuring while
+            // INVISIBLE.
             webView.visibility =
-                if (lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) View.VISIBLE else View.INVISIBLE
+                if (drawable && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) View.VISIBLE else View.INVISIBLE
             // Set here rather than in the factory: the view is retained across
             // recompositions, so a factory-only assignment would leave a mode
             // change applying to the reloaded html below but not to the settings

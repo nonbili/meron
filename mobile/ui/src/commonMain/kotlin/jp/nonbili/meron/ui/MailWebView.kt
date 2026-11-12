@@ -1,6 +1,7 @@
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -50,6 +51,14 @@ expect fun MailWebView(
     /** Retry failed images when the core restores attachment files. */
     mediaMissing: Int = 0,
 )
+
+/**
+ * Whether a [MailWebView] below may draw. False while something above it is
+ * compositing through an offscreen layer (a fade), which Android's WebView
+ * cannot be drawn into: hwui crashes natively in its GL functor. Such a view
+ * stays laid out, loading and measuring, and shows once this turns true.
+ */
+internal val LocalMailWebViewDrawable = compositionLocalOf { true }
 
 /**
  * Whether the platform's web view already sizes CSS text by the system font

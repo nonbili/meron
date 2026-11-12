@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -132,6 +133,10 @@ internal fun Modifier.pullToDismissLayer(state: PullToDismissState): Modifier =
             translationY = state.distancePx
             val progress = if (state.heightPx > 0f) (state.distancePx / state.heightPx).coerceIn(0f, 1f) else 0f
             alpha = 1f - progress * 0.4f
+            // Fades each thing drawn rather than an offscreen copy of the view:
+            // Android's WebView cannot be drawn into one (hwui crashes natively
+            // in its GL functor), and the mail bodies under a pull are those.
+            compositingStrategy = CompositingStrategy.ModulateAlpha
             scaleX = 1f - progress * 0.05f
             scaleY = 1f - progress * 0.05f
         }
