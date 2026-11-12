@@ -68,8 +68,9 @@ export function TitleBar({ tools = true }: { tools?: boolean }) {
       }}
     >
       <div className="flex h-full items-center">
-        {/* Clear of the traffic lights, which float over the left end. */}
-        {isMac && <div className="w-18 shrink-0" />}
+        {/* Clear of the traffic lights, which float over the left end, inset
+          as far from the window's left edge as from its top (window_titlebar_darwin.m). */}
+        {isMac && <div className="w-19 shrink-0" />}
         <WindowControls side="start" />
         {/* Weight for the left end, across from the buttons on the right, when no
           window controls sit there. macOS has its traffic lights. Centred over

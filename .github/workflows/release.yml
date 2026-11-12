@@ -43,6 +43,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The runner's default Xcode (16.4) links the macOS 15 SDK, and macOS 26+
+      # shows apps linked against an older SDK in the previous design (flat
+      # traffic lights, smaller window corners). Xcode 26 is installed on the
+      # macos-15 images but not selected by default.
+      - name: select Xcode 26
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          [ -n "$XCODE" ] || { echo "no Xcode 26 on this runner"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          xcrun --show-sdk-version
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: desktop/go.mod
