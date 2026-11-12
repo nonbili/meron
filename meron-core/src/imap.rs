@@ -2432,19 +2432,52 @@ pub fn looks_like_sent(name: &str) -> bool {
 }
 
 pub fn looks_like_trash(name: &str) -> bool {
-    let n = name.to_ascii_lowercase();
+    // Servers without SPECIAL-USE leave only the name to go by, and many name
+    // the mailbox in the account's language ("Papierkorb", "Corbeille"), sent
+    // as modified UTF-7 when it is not ASCII ("Gel&APY-scht").
+    let decoded = crate::utf7::decode(name).to_lowercase();
+    let leaf = ["inbox.", "inbox/", "[gmail]/", "[google mail]/"]
+        .iter()
+        .find_map(|prefix| decoded.strip_prefix(prefix))
+        .unwrap_or(&decoded);
     matches!(
-        n.as_str(),
+        leaf,
         "trash"
             | "deleted"
             | "deleted items"
             | "deleted messages"
             | "bin"
-            | "inbox.trash"
-            | "inbox.deleted"
-            | "inbox.deleted items"
-            | "[gmail]/trash"
-            | "[gmail]/bin"
+            // German
+            | "papierkorb"
+            | "gelöscht"
+            | "gelöschte elemente"
+            | "gelöschte objekte"
+            | "gelöschte nachrichten"
+            // French
+            | "corbeille"
+            | "éléments supprimés"
+            | "messages supprimés"
+            // Spanish
+            | "papelera"
+            | "elementos eliminados"
+            // Italian
+            | "cestino"
+            | "posta eliminata"
+            // Dutch
+            | "prullenbak"
+            | "verwijderde items"
+            // Portuguese
+            | "lixeira"
+            | "lixo"
+            | "itens excluídos"
+            | "itens eliminados"
+            // Polish
+            | "kosz"
+            // Russian, Ukrainian
+            | "корзина"
+            | "удаленные"
+            | "удалённые"
+            | "кошик"
     )
 }
 
@@ -2959,6 +2992,33 @@ fn first_message_id(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::tcp_looks_open;
+
+    #[test]
+    fn a_trash_folder_is_recognised_by_its_localized_name() {
+        for name in [
+            "Trash",
+            "INBOX.Trash",
+            "INBOX/Trash",
+            "[Gmail]/Bin",
+            "Deleted Items",
+            "Papierkorb",
+            "INBOX.Papierkorb",
+            "Gel&APY-scht",
+            "Gel&APY-schte Elemente",
+            "Corbeille",
+        ] {
+            assert!(super::looks_like_trash(name), "{name}");
+        }
+        for name in [
+            "INBOX",
+            "Projects/Trash",
+            "Trash/2024",
+            "Entw&APw-rfe",
+            "Gesendet",
+        ] {
+            assert!(!super::looks_like_trash(name), "{name}");
+        }
+    }
 
     #[test]
     fn a_rotated_refresh_token_is_kept_and_an_absent_one_is_not_invented() {
