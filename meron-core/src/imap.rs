@@ -2282,13 +2282,7 @@ pub async fn replace_draft(
 /// newest (highest UID) and UID EXPUNGE them. Assumes `folder` holds at most one
 /// live copy plus stale duplicates from earlier autosaves.
 async fn prune_old_drafts(session: &mut Session, folder: &str, message_id: &str) -> Result<()> {
-    session.select(folder).await.context("SELECT Drafts")?;
-    let criteria = format!("HEADER MESSAGE-ID {}", imap_quote(message_id));
-    let set: HashSet<u32> = session
-        .uid_search(criteria)
-        .await
-        .context("UID SEARCH draft id")?;
-    let mut uids: Vec<u32> = set.into_iter().collect();
+    let mut uids = draft_uids(session, folder, message_id).await?;
     if uids.len() <= 1 {
         return Ok(());
     }
@@ -2298,19 +2292,76 @@ async fn prune_old_drafts(session: &mut Session, folder: &str, message_id: &str)
     expunge_uids(session, folder, &uids).await
 }
 
+/// How many of the newest messages in Drafts `draft_uids` reads when the
+/// server's own search comes back empty.
+const DRAFT_SCAN_LIMIT: u32 = 500;
+
+/// The UIDs of every copy of the draft `message_id` in `folder`, which is left
+/// selected. Asks the server first (`SEARCH HEADER`), but an empty or failed
+/// answer isn't trusted: some servers don't index Message-ID, match it only as
+/// whole words, or lag behind an APPEND, and believing them leaves each sent
+/// message's draft in Drafts for good. So that case reads the Message-ID of
+/// the folder's newest messages and matches here instead.
+async fn draft_uids(session: &mut Session, folder: &str, message_id: &str) -> Result<Vec<u32>> {
+    let mailbox = session.select(folder).await.context("SELECT Drafts")?;
+    let criteria = format!("HEADER MESSAGE-ID {}", imap_quote(message_id));
+    match session.uid_search(criteria).await {
+        Ok(set) if !set.is_empty() => return Ok(set.into_iter().collect()),
+        Ok(_) => {}
+        Err(err) => eprintln!("meron-core: UID SEARCH draft id failed, scanning {folder}: {err:#}"),
+    }
+    if mailbox.exists == 0 {
+        return Ok(Vec::new());
+    }
+    let first = mailbox.exists.saturating_sub(DRAFT_SCAN_LIMIT - 1).max(1);
+    let mut stream = session
+        .fetch(
+            format!("{first}:*"),
+            "(UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])",
+        )
+        .await
+        .context("FETCH draft ids")?;
+    let mut uids = Vec::new();
+    while let Some(item) = stream.next().await {
+        let fetch = item.context("FETCH draft id item")?;
+        let Some(uid) = fetch.uid else {
+            continue;
+        };
+        if fetch
+            .header()
+            .is_some_and(|header| header_is_message(header, message_id))
+        {
+            uids.push(uid);
+        }
+    }
+    Ok(uids)
+}
+
+/// Whether the header block `header` carries `message_id` (bare, no angle
+/// brackets) as its Message-ID.
+fn header_is_message(header: &[u8], message_id: &str) -> bool {
+    let wanted = message_id.trim().trim_matches(['<', '>']);
+    if wanted.is_empty() {
+        return false;
+    }
+    mailparse::parse_headers(header)
+        .ok()
+        .and_then(|(headers, _)| headers.get_first_value("Message-ID"))
+        .is_some_and(|value| {
+            value
+                .trim()
+                .trim_matches(['<', '>'])
+                .eq_ignore_ascii_case(wanted)
+        })
+}
+
 /// Permanently remove every draft in `folder` carrying `message_id`. Used after
 /// the message is sent, because the saved Drafts copy is no longer useful.
 pub async fn discard_draft(session: &mut Session, folder: &str, message_id: &str) -> Result<usize> {
     if message_id.trim().is_empty() {
         return Ok(0);
     }
-    session.select(folder).await.context("SELECT Drafts")?;
-    let criteria = format!("HEADER MESSAGE-ID {}", imap_quote(message_id));
-    let set: HashSet<u32> = session
-        .uid_search(criteria)
-        .await
-        .context("UID SEARCH draft id")?;
-    let uids: Vec<u32> = set.into_iter().collect();
+    let uids = draft_uids(session, folder, message_id).await?;
     if uids.is_empty() {
         return Ok(0);
     }
@@ -2991,7 +3042,7 @@ fn first_message_id(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::tcp_looks_open;
+    use super::{header_is_message, tcp_looks_open};
 
     #[test]
     fn a_trash_folder_is_recognised_by_its_localized_name() {
@@ -3299,6 +3350,19 @@ mod tests {
             interleave_address_families(vec![v4a, v4b, v6a, v6b]),
             vec![v4a, v6a, v4b, v6b]
         );
+    }
+
+    #[test]
+    fn a_draft_is_recognised_by_its_message_id_header_without_the_servers_search() {
+        let header = b"Message-ID: <Meron-Draft-1@example.org>\r\n\r\n";
+        assert!(header_is_message(header, "meron-draft-1@example.org"));
+        assert!(header_is_message(header, " <meron-draft-1@example.org> "));
+        assert!(!header_is_message(header, "meron-draft-1@example"));
+        assert!(!header_is_message(header, ""));
+        assert!(!header_is_message(
+            b"Subject: hi\r\n\r\n",
+            "meron-draft-1@example.org"
+        ));
     }
 
     #[test]
