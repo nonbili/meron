@@ -66,6 +66,31 @@ class ComposeUiTest {
     }
 
     @Test
+    fun removingTheLastChipLeavesTheEarlierOnesAndAnEmptyInput() {
+        val (completed, active) = parseRecipients("a@example.com, \"Doe, Jane\" <jane@example.com>, ")
+        val value = withoutLastRecipient(completed, active)
+        assertEquals(Pair(listOf("a@example.com"), ""), parseRecipients(value))
+    }
+
+    @Test
+    fun onlyDeletingTheSentinelCountsAsBackspaceIntoChips() {
+        val s = CHIP_BACKSPACE_SENTINEL
+        assertTrue(isBackspaceIntoChips(s, ""))
+        assertTrue(isBackspaceIntoChips(s + "bob", "bob"))
+        // Typing, deleting a typed letter, and clearing a selection are edits.
+        assertFalse(isBackspaceIntoChips(s, s + "b"))
+        assertFalse(isBackspaceIntoChips(s + "bo", s + "b"))
+        assertFalse(isBackspaceIntoChips(s + "bob", ""))
+        assertFalse(isBackspaceIntoChips("", ""))
+    }
+
+    @Test
+    fun removingTheOnlyChipEmptiesTheField() {
+        val (completed, active) = parseRecipients("a@example.com, ")
+        assertEquals("", withoutLastRecipient(completed, active))
+    }
+
+    @Test
     fun testParseEmailRecipientRawEmail() {
         val (name, email) = parseEmailRecipient("alice@example.com")
         assertEquals("", name)

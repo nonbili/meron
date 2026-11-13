@@ -58,6 +58,7 @@ import jp.nonbili.meron.shared.toSaveDraftParams
 import jp.nonbili.meron.shared.toSendMailParams
 import jp.nonbili.meron.shared.untrustedCertificateProtocol
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -125,8 +126,10 @@ internal fun MeronMobileState.changeComposeIdentity(
         composeDraftSaved = false
         composeDraftAccountId = ""
     }
+    val suggestionsAccountId = selectedComposeIdentity()?.accountId
     composeFromAccountId = accountId
     composeFromEmail = email
+    refreshRecipientSuggestionsAfterIdentityChange(suggestionsAccountId)
     val sessionGeneration = composeSessionGeneration
     val identityGeneration = ++composeIdentityGeneration
     if (!appSignatureLoaded) {
@@ -261,35 +264,66 @@ internal fun MeronMobileState.loadRecipientSuggestions(
     field: String,
     value: String,
 ) {
-    val accountId = defaultSendAccountId()
+    // The From account's correspondents, not the mailbox the list is showing.
+    val accountId = selectedComposeIdentity()?.accountId ?: defaultSendAccountId()
     if (accountId.isBlank() || !coreLoaded) {
         recipientSuggestions = emptyList()
         recipientSuggestionField = field
         return
     }
     recipientSuggestionField = field
-    scope.launch {
-        runCatching {
-            withContext(ioDispatcher) {
-                val client = MobileMailCommandClient(core)
-                client.suggestContacts(
-                    ContactSuggestParams(
-                        accountId = accountId,
-                        query = recipientTail(value),
-                        limit = 6,
-                    ),
-                )
-            }
-        }.onSuccess {
-            if (recipientSuggestionField == field) {
-                recipientSuggestions = parseContactSuggestResponse(it)
-            }
-        }.onFailure {
-            if (recipientSuggestionField == field) {
-                recipientSuggestions = emptyList()
-            }
-        }
+    // Each call supersedes the one before: a lookup still waiting never runs,
+    // and one already with the core is dropped when it answers, so a slow
+    // answer for "c" cannot replace the list for "ch".
+    val generation = ++recipientSuggestionGeneration
+    recipientSuggestionJob?.cancel()
+    val query = recipientTail(value)
+    if (query.isBlank()) {
+        // Nothing is listed for an empty token, so there is nothing to ask.
+        recipientSuggestions = emptyList()
+        return
     }
+    recipientSuggestionJob =
+        scope.launch {
+            delay(RECIPIENT_SUGGESTION_DEBOUNCE_MS)
+            val result =
+                runCatching {
+                    withContext(ioDispatcher) {
+                        MobileMailCommandClient(core).suggestContacts(
+                            ContactSuggestParams(accountId = accountId, query = query, limit = 6),
+                        )
+                    }
+                }
+            if (generation != recipientSuggestionGeneration || !recipientSuggestionsCurrent(field, accountId)) return@launch
+            recipientSuggestions = result.map { parseContactSuggestResponse(it) }.getOrDefault(emptyList())
+        }
+}
+
+/** Long enough to skip the lookups a burst of typing would start, as on desktop. */
+internal const val RECIPIENT_SUGGESTION_DEBOUNCE_MS = 120L
+
+/** Whether a lookup for [field] under [accountId] still answers what is on screen. */
+private fun MeronMobileState.recipientSuggestionsCurrent(
+    field: String,
+    accountId: String,
+): Boolean = recipientSuggestionField == field && (selectedComposeIdentity()?.accountId ?: defaultSendAccountId()) == accountId
+
+/**
+ * Suggestions are one account's correspondents, so a From that moved to another
+ * account makes the listed ones wrong: drop them and look the token up again.
+ * An alias of the same account changes nothing.
+ */
+private fun MeronMobileState.refreshRecipientSuggestionsAfterIdentityChange(previousAccountId: String?) {
+    if (selectedComposeIdentity()?.accountId == previousAccountId) return
+    val value =
+        when (recipientSuggestionField) {
+            "to" -> to
+            "cc" -> cc
+            "bcc" -> bcc
+            else -> return
+        }
+    recipientSuggestions = emptyList()
+    loadRecipientSuggestions(recipientSuggestionField, value)
 }
 
 internal fun MeronMobileState.acceptRecipientSuggestion(

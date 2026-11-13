@@ -449,6 +449,8 @@ internal class MeronMobileState(
     var bcc by mutableStateOf("")
     var recipientSuggestionField by mutableStateOf("")
     var recipientSuggestions by mutableStateOf(emptyList<ContactSuggestion>())
+    var recipientSuggestionJob: Job? = null
+    var recipientSuggestionGeneration = 0
 
     // Restore the last top-level screen on cold start; persist whenever the user
     // navigates to a top-level screen so a restart returns to the same place.

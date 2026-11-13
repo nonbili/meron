@@ -3,6 +3,7 @@ package jp.nonbili.meron.ui
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.CloseableHandle
 import jp.nonbili.meron.shared.ComposeDraft
+import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.CoreEvent
 import jp.nonbili.meron.shared.CoreEventStream
 import jp.nonbili.meron.shared.MeronCore
@@ -10,7 +11,10 @@ import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.SignatureSpec
 import jp.nonbili.meron.shared.ThreadSummary
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
@@ -52,6 +56,55 @@ class ComposeSignatureTest {
         assertEquals("Hello\n\nFrom B", state.body)
         assertEquals("b", state.composeFromAccountId)
     }
+
+    @Test
+    fun changingFromLooksTheRecipientUpAgainUnderTheNewAccount() =
+        runBlocking {
+            val lookups = Channel<String>(Channel.UNLIMITED)
+            val state = composeState(this, FakeCore { command, payload -> if (command == "mail.suggestContacts") lookups.trySend(payload) })
+            state.openCompose()
+            state.to = "c"
+            state.loadRecipientSuggestions("to", state.to)
+            assertTrue("\"account\":\"a\"" in withTimeout(5_000) { lookups.receive() })
+            state.recipientSuggestions = listOf(ContactSuggestion("", "carol@example.com"))
+
+            state.changeComposeIdentity("b", "b@example.com")
+
+            assertTrue(state.recipientSuggestions.isEmpty())
+            val lookup = withTimeout(5_000) { lookups.receive() }
+            assertTrue("\"account\":\"b\"" in lookup)
+            assertTrue("\"query\":\"c\"" in lookup)
+        }
+
+    @Test
+    fun aBurstOfTypingLooksUpOnlyTheLastToken() =
+        runBlocking {
+            val lookups = Channel<String>(Channel.UNLIMITED)
+            val state = composeState(this, FakeCore { command, payload -> if (command == "mail.suggestContacts") lookups.trySend(payload) })
+            state.openCompose()
+
+            state.loadRecipientSuggestions("to", "c")
+            state.loadRecipientSuggestions("to", "ch")
+
+            assertTrue("\"query\":\"ch\"" in withTimeout(5_000) { lookups.receive() })
+            delay(RECIPIENT_SUGGESTION_DEBOUNCE_MS * 3)
+            assertTrue(lookups.tryReceive().isFailure)
+        }
+
+    @Test
+    fun anEmptyTokenClearsTheListWithoutALookup() =
+        runBlocking {
+            val lookups = Channel<String>(Channel.UNLIMITED)
+            val state = composeState(this, FakeCore { command, payload -> if (command == "mail.suggestContacts") lookups.trySend(payload) })
+            state.openCompose()
+            state.recipientSuggestions = listOf(ContactSuggestion("", "carol@example.com"))
+
+            state.loadRecipientSuggestions("to", "a@example.com, ")
+
+            assertTrue(state.recipientSuggestions.isEmpty())
+            delay(RECIPIENT_SUGGESTION_DEBOUNCE_MS * 3)
+            assertTrue(lookups.tryReceive().isFailure)
+        }
 
     @Test
     fun changingToAnAccountWithoutOneDropsTheSignature() {
@@ -493,8 +546,11 @@ class ComposeSignatureTest {
         return state
     }
 
-    private fun composeState(scope: CoroutineScope = CoroutineScope(EmptyCoroutineContext)): MeronMobileState {
-        val state = testState(scope)
+    private fun composeState(
+        scope: CoroutineScope = CoroutineScope(EmptyCoroutineContext),
+        core: MeronCore = FakeCore(),
+    ): MeronMobileState {
+        val state = testState(scope, core)
         state.coreAccounts =
             listOf(
                 account("a", SignatureSpec("custom", "<p>From A</p>")),
@@ -511,10 +567,13 @@ class ComposeSignatureTest {
         signature: SignatureSpec,
     ) = AccountSummary(id = id, email = "$id@example.com", signature = signature)
 
-    private fun testState(scope: CoroutineScope): MeronMobileState =
+    private fun testState(
+        scope: CoroutineScope,
+        core: MeronCore = FakeCore(),
+    ): MeronMobileState =
         MeronMobileState(
             scope = scope,
-            core = FakeCore(),
+            core = core,
             coreLoaded = true,
             prefs = FakePreferences(),
             kanbanPrefs = FakePreferences(),
@@ -637,11 +696,16 @@ class ComposeSignatureTest {
         override fun displayName(tag: String): String = tag
     }
 
-    private class FakeCore : MeronCore {
+    private class FakeCore(
+        private val onInvoke: (command: String, payloadJson: String) -> Unit = { _, _ -> },
+    ) : MeronCore {
         override suspend fun invoke(
             command: String,
             payloadJson: String,
-        ): String = "{}"
+        ): String {
+            onInvoke(command, payloadJson)
+            return "{}"
+        }
 
         override fun events(): CoreEventStream =
             object : CoreEventStream {

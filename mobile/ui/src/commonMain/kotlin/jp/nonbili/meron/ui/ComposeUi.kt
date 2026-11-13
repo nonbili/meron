@@ -718,10 +718,34 @@ internal fun parseEmailRecipient(recipient: String): Pair<String, String> {
     return Pair("", trimmed)
 }
 
+/** The field's value once its last chip is gone; the token being typed stays. */
+internal fun withoutLastRecipient(
+    completed: List<String>,
+    activeInput: String,
+): String {
+    val remaining = completed.dropLast(1)
+    return if (remaining.isEmpty()) activeInput else joinRecipientEntries(remaining + activeInput)
+}
+
+/**
+ * An invisible character kept ahead of the typed token while the field has
+ * chips. A soft keyboard deleting at the start of an empty editor tells the app
+ * nothing (only some send a key event), so there has to be something for it to
+ * delete: losing this character is the backspace that reaches the chips.
+ */
+internal const val CHIP_BACKSPACE_SENTINEL = "\u200B"
+
+/** Whether an edit from [old] to [new] deleted the sentinel and nothing else. */
+internal fun isBackspaceIntoChips(
+    old: String,
+    new: String,
+): Boolean = old.startsWith(CHIP_BACKSPACE_SENTINEL) && new == old.removePrefix(CHIP_BACKSPACE_SENTINEL)
+
 @Composable
 internal fun RecipientChip(
     recipient: String,
     onDelete: () -> Unit,
+    selected: Boolean = false,
 ) {
     val (name, email) = remember(recipient) { parseEmailRecipient(recipient) }
     val displayName = if (name.isNotEmpty()) name else email
@@ -732,8 +756,12 @@ internal fun RecipientChip(
     Box {
         Surface(
             shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+            border =
+                androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                ),
             modifier =
                 Modifier
                     .height(28.dp)
@@ -762,7 +790,7 @@ internal fun RecipientChip(
                 Text(
                     text = displayName,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -908,13 +936,27 @@ internal fun RecipientChipsInput(
     // Maintain local TextFieldValue state for correct cursor positioning
     var activeInputState by remember { mutableStateOf(TextFieldValue("")) }
 
+    // Backspace in an empty input first marks the last chip, and only a second
+    // one removes it, so a stray press cannot drop a recipient.
+    var lastChipMarked by remember { mutableStateOf(false) }
+    val lastChipSelected = lastChipMarked && isFocused && activeInput.isEmpty()
+    val sentinel = if (completed.isEmpty()) "" else CHIP_BACKSPACE_SENTINEL
+    val backspaceIntoChips = {
+        if (lastChipSelected) {
+            lastChipMarked = false
+            onChange(withoutLastRecipient(completed, activeInput))
+        } else {
+            lastChipMarked = true
+        }
+    }
+
     // Keep activeInputState in sync with parent activeInput changes (e.g. initial reply, suggestion click, or backspace deletion)
-    LaunchedEffect(activeInput) {
-        if (activeInput != activeInputState.text) {
+    LaunchedEffect(activeInput, sentinel) {
+        if (sentinel + activeInput != activeInputState.text) {
             activeInputState =
                 TextFieldValue(
-                    text = activeInput,
-                    selection = TextRange(activeInput.length),
+                    text = sentinel + activeInput,
+                    selection = TextRange(sentinel.length + activeInput.length),
                 )
         }
     }
@@ -941,10 +983,12 @@ internal fun RecipientChipsInput(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
     ) {
-        completed.forEach { recipient ->
+        completed.forEachIndexed { index, recipient ->
             RecipientChip(
                 recipient = recipient,
+                selected = lastChipSelected && index == completed.lastIndex,
                 onDelete = {
+                    lastChipMarked = false
                     val newCompleted = completed.filter { it != recipient }
                     val newValue =
                         if (newCompleted.isEmpty()) {
@@ -960,10 +1004,37 @@ internal fun RecipientChipsInput(
         BasicTextField(
             value = activeInputState,
             onValueChange = { newActiveState ->
-                // Update local state immediately to preserve cursor position
-                activeInputState = newActiveState
+                val previous = activeInputState
+                if (sentinel.isNotEmpty() && isBackspaceIntoChips(previous.text, newActiveState.text)) {
+                    // Not an edit: the sentinel stays, with the cursor after it.
+                    activeInputState = TextFieldValue(previous.text, TextRange(sentinel.length))
+                    if (previous.text == sentinel) backspaceIntoChips()
+                    return@BasicTextField
+                }
+                val typed = newActiveState.text.replace(CHIP_BACKSPACE_SENTINEL, "")
+                if (typed != previous.text.removePrefix(sentinel)) lastChipMarked = false
+                // Update local state immediately to preserve cursor position,
+                // which never goes ahead of the sentinel.
+                val current =
+                    if (newActiveState.text == sentinel + typed) {
+                        val selection = newActiveState.selection
+                        if (selection.min >= sentinel.length) {
+                            newActiveState
+                        } else {
+                            newActiveState.copy(
+                                selection =
+                                    TextRange(
+                                        selection.start.coerceAtLeast(sentinel.length),
+                                        selection.end.coerceAtLeast(sentinel.length),
+                                    ),
+                            )
+                        }
+                    } else {
+                        TextFieldValue(sentinel + typed, TextRange(sentinel.length + typed.length))
+                    }
+                activeInputState = current
 
-                val newActiveText = normalizeRecipientInput(newActiveState.text)
+                val newActiveText = normalizeRecipientInput(typed)
                 val committedValue =
                     if (completed.isEmpty()) {
                         newActiveText
@@ -972,9 +1043,10 @@ internal fun RecipientChipsInput(
                     }
                 // Update synchronously even when the parsed tail remains empty:
                 // LaunchedEffect(activeInput) would not rerun in that case.
-                val nextActive = parseRecipients(committedValue).second
-                if (nextActive != newActiveState.text) {
-                    activeInputState = TextFieldValue(nextActive, TextRange(nextActive.length))
+                val (nextCompleted, nextActive) = parseRecipients(committedValue)
+                val nextText = (if (nextCompleted.isEmpty()) "" else CHIP_BACKSPACE_SENTINEL) + nextActive
+                if (nextText != current.text) {
+                    activeInputState = TextFieldValue(nextText, TextRange(nextText.length))
                 }
                 onChange(committedValue)
             },
@@ -988,7 +1060,15 @@ internal fun RecipientChipsInput(
                     .then(if (isFocused || completed.isEmpty()) Modifier.widthIn(min = 64.dp) else Modifier.width(2.dp))
                     .align(Alignment.CenterVertically)
                     .focusRequester(focusRequester)
-                    .onFocusChanged { focusState ->
+                    .onPreviewKeyEvent { event ->
+                        // A hardware keyboard, and the soft ones that send keys.
+                        if (event.key != Key.Backspace || activeInputState.text != sentinel || completed.isEmpty()) {
+                            return@onPreviewKeyEvent false
+                        }
+                        if (event.type == KeyEventType.KeyDown) backspaceIntoChips()
+                        true
+                    }.onFocusChanged { focusState ->
+                        if (!focusState.isFocused) lastChipMarked = false
                         if (!focusState.isFocused && activeInput.trim().isNotEmpty()) {
                             onChange(joinRecipientEntries(completed + activeInput.trim() + ""))
                         }

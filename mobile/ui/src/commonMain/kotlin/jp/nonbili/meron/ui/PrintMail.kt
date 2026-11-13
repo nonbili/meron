@@ -46,7 +46,7 @@ private fun mailPrintSection(
     val header = mailPrintText(message.copy(body = " ", bodyHtml = "", attachments = emptyList()), fromLabel, toLabel, ccLabel, bccLabel, replyToLabel, attachmentsLabel, noSubject).trimEnd()
     val body =
         applyRemoteContentPolicy(message.bodyHtml, allowRemote)
-            .replace(Regex("<(script|iframe|object|embed)\\b[^>]*>.*?</\\1\\s*>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
+            .replace(Regex("<(script|iframe|object|embed)\\b[^>]*>[\\s\\S]*?</\\1\\s*>", RegexOption.IGNORE_CASE), "")
             .replace(Regex("<!doctype[^>]*>|</?(html|head|body)\\b[^>]*>|<meta\\b[^>]*>", RegexOption.IGNORE_CASE), "")
     val attachments = standaloneAttachments(message)
     val footer = if (attachments.isEmpty()) "" else "<pre>" + escapePrintText("$attachmentsLabel:\n" + attachments.joinToString("\n") { it.filename }) + "</pre>"
@@ -90,8 +90,8 @@ internal fun printMessagePlainText(message: MessageBody): String =
         message.copy(
             bodyHtml =
                 message.bodyHtml
-                    .replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
-                    .replace(Regex("<(script|style)\\b[^>]*>.*?</\\1\\s*>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), ""),
+                    .replace(Regex("<!--[\\s\\S]*?-->"), "")
+                    .replace(Regex("<(script|style)\\b[^>]*>[\\s\\S]*?</\\1\\s*>", RegexOption.IGNORE_CASE), ""),
         ),
     )
 
