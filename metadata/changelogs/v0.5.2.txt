@@ -1,0 +1,8 @@
+- Support mail rules for messages you send
+- Add `--background` startup and command-line help flags
+- Select unambiguous same-domain reply identities when replying
+- Clarify OpenPGP encryption offers and account alias coverage
+- Recognize localized Trash folder names when the server sends no special-use flag
+- Clean up sent drafts reliably when the server's Message-ID search finds nothing
+- Prevent minting a new store key over an existing encrypted store
+- Skip idle delayed-rule passes and preserve arrivals in skipped folders

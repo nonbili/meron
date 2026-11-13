@@ -63,6 +63,20 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.5.2" date="2026-11-13">
+      <description>
+        <ul>
+          <li>Support mail rules for messages you send</li>
+          <li>Add --background startup and command-line help flags</li>
+          <li>Select unambiguous same-domain reply identities when replying</li>
+          <li>Clarify OpenPGP encryption offers and account alias coverage</li>
+          <li>Recognize localized Trash folder names when the server sends no special-use flag</li>
+          <li>Clean up sent drafts reliably when the server's Message-ID search finds nothing</li>
+          <li>Prevent minting a new store key over an existing encrypted store</li>
+          <li>Skip idle delayed-rule passes and preserve arrivals in skipped folders</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.5.1" date="2026-11-12">
       <description>
         <ul>
