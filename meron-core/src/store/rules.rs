@@ -351,6 +351,8 @@ pub fn apply_rules(
     }
     let role = super::folder_role(&tx, account, folder)?;
     if matches!(role.as_str(), "sent" | "drafts" | "trash" | "junk") {
+        // Keep the arrival clocks recorded above.
+        tx.commit()?;
         return Ok(());
     }
     run_immediate_rules(&tx, account, folder, uidvalidity, uids, rules, false)?;
@@ -470,6 +472,18 @@ pub fn apply_due_rules(
     uidvalidity: u32,
     now: i64,
 ) -> Result<()> {
+    let applies = |rule: &Rule| {
+        !(rule.disabled
+            || rule.sent
+            || (rule.trigger == RuleTrigger::Arrival && rule.delay_seconds == 0)
+            || (!rule.accounts.is_empty() && !rule.accounts.iter().any(|id| id == account))
+            || (rule.trigger == RuleTrigger::Age && folder != EXISTING_RULE_FOLDER))
+    };
+    // Runs after every folder sync: don't take the write lock without a
+    // delayed rule. The rules are read again under the lock below.
+    if !rules(conn)?.iter().any(applies) {
+        return Ok(());
+    }
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let role = super::folder_role(&tx, account, folder)?;
     if matches!(role.as_str(), "sent" | "drafts" | "trash" | "junk") {
@@ -477,12 +491,7 @@ pub fn apply_due_rules(
     }
     let mut actions = BTreeMap::new();
     for rule in rules(&tx)? {
-        if rule.disabled
-            || rule.sent
-            || (rule.trigger == RuleTrigger::Arrival && rule.delay_seconds == 0)
-            || (!rule.accounts.is_empty() && !rule.accounts.iter().any(|id| id == account))
-            || (rule.trigger == RuleTrigger::Age && folder != EXISTING_RULE_FOLDER)
-        {
+        if !applies(&rule) {
             continue;
         }
         let (clock, event_sequence, eligible) = match rule.trigger {
@@ -1100,6 +1109,37 @@ mod timing_tests {
         assert!(set_rules(&conn, vec![rule(RuleTrigger::Read, -1)]).is_err());
         assert!(set_rules(&conn, vec![rule(RuleTrigger::Age, i64::MAX)]).is_err());
         assert!(serde_json::from_str::<Rule>(r#"{"trigger":"unknown"}"#).is_err());
+    }
+
+    #[test]
+    fn arrivals_in_folders_rules_skip_are_still_recorded() {
+        let conn = db();
+        set_rules(&conn, vec![rule(RuleTrigger::Arrival, 0)]).unwrap();
+        crate::store::upsert_messages(
+            &conn,
+            "a",
+            "Trash",
+            &[MessageHeader {
+                uid: 1,
+                message_id: "<1@example.com>".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            crate::store::folder_role(&conn, "a", "Trash").unwrap(),
+            "trash"
+        );
+        apply_rules(&conn, "a", "Trash", 7, &[1]).unwrap();
+        let arrived: Option<i64> = conn
+            .query_row("SELECT arrived_at FROM rule_events", [], |r| r.get(0))
+            .unwrap();
+        assert!(arrived.is_some());
+        assert!(
+            pending_rule_actions(&conn, "a", "Trash")
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
