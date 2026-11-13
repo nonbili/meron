@@ -40,6 +40,7 @@ import {
   PanelBottom,
   SquarePen,
   Contrast,
+  AppWindow,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -49,6 +50,7 @@ import { showToast, ui$, type SetupMode } from '../../states/ui'
 import { accounts$, addLocalAccount, deleteAccount, isLocalAccountId, LOCAL_ACCOUNT_ID } from '../../states/accounts'
 import {
   settings$,
+  appIconStyleSupported$,
   clampKanbanColumnWidth,
   KANBAN_COLUMN_MAX_WIDTH,
   KANBAN_COLUMN_MIN_WIDTH,
@@ -87,6 +89,7 @@ import { pickImageFile } from '../../lib/nativeFilePicker'
 import { invoke } from '../../lib/bridge'
 import { isMac } from '../../lib/shortcuts'
 import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
+import { parseAppIconStyle } from '../../lib/appIconStyle'
 import { ALERT_MINUTES, ALL_DAY_ALERT_DAYS, NO_ALERT, alertLabel } from '../../lib/eventAlerts'
 import { McpSettingsPanel } from './McpSettingsPanel'
 import { AccountEncryptionCard } from '../crypto/AccountEncryptionCard'
@@ -459,6 +462,7 @@ function GeneralSection() {
           checked={showRealAvatars}
           onChange={() => settings$.showRealAvatars.set(!showRealAvatars)}
         />
+        <AppIconRow />
         <TrayIconRow />
       </SettingsGroup>
 
@@ -831,6 +835,33 @@ function BackupRow() {
           document.body,
         )}
     </>
+  )
+}
+
+// Offered where the backend can replace the app's icon: the running app's on
+// macOS, the desktop entry's on Linux.
+function AppIconRow() {
+  const { t } = useTranslation()
+  const supported = useValue(appIconStyleSupported$)
+  const appIconStyle = useValue(settings$.appIconStyle)
+
+  if (!supported) return null
+
+  return (
+    <SelectRow
+      icon={<AppWindow size={15} />}
+      title={t('settings.appearance.appIcon')}
+      hint={t(isMac ? 'settings.appearance.appIconHint' : 'settings.appearance.appIconHintLinux')}
+      value={appIconStyle}
+      options={[
+        { value: 'default', label: t('settings.appearance.appIconDefault') },
+        { value: 'blue', label: t('settings.appearance.appIconBlue') },
+        { value: 'light', label: t('settings.appearance.appIconLight') },
+        { value: 'dark', label: t('settings.appearance.appIconDark') },
+        { value: 'auto', label: t('settings.appearance.appIconAuto') },
+      ]}
+      onChange={(value) => settings$.appIconStyle.set(parseAppIconStyle(value))}
+    />
   )
 }
 
