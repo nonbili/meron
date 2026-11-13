@@ -7,6 +7,7 @@ void goWindowTitlebarUnavailable(void) { fallbackReported = TRUE; }
 int main(int argc, char **argv) {
 	gboolean integrated = argc > 1;
 	gboolean missedHook = integrated && g_strcmp0(argv[1], "missed-hook") == 0;
+	gboolean background = integrated && g_strcmp0(argv[1], "background") == 0;
 	gulong styleHook = installWindowChrome(integrated);
 	if (missedHook) {
 		g_signal_remove_emission_hook(g_signal_lookup("style-updated", GTK_TYPE_WIDGET), styleHook);
@@ -14,8 +15,29 @@ int main(int argc, char **argv) {
 	if (!gtk_init_check(&argc, &argv)) return 77;
 	GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_container_add(GTK_CONTAINER(window), gtk_label_new("Titlebar startup test"));
+	if (background) {
+		prepareBackgroundWindow(window);
+		g_assert(mainWindow == GTK_WINDOW(window));
+		g_assert(!gtk_widget_get_mapped(window));
+		g_assert(!startupRevealed);
+		maximiseOnNextConfigure();
+		onBackgroundConfigure(window, NULL, NULL);
+		g_assert(maximiseAfterConfigure);
+		revealStartupWindow(TRUE);
+		while (gtk_events_pending()) gtk_main_iteration();
+		g_assert(startupRevealed);
+		g_assert(!gtk_widget_get_mapped(window));
+	}
 	gtk_widget_show_all(window);
 	while (gtk_events_pending()) gtk_main_iteration();
+	if (background) {
+		gint64 deadline = g_get_monotonic_time() + G_TIME_SPAN_SECOND;
+		while (maximiseAfterConfigure && g_get_monotonic_time() < deadline) {
+			while (gtk_events_pending()) gtk_main_iteration();
+			g_usleep(1000);
+		}
+		g_assert(!maximiseAfterConfigure);
+	}
 
 	g_assert(mainWindow == GTK_WINDOW(window));
 	g_assert(gtk_widget_get_realized(window));

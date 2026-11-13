@@ -27,7 +27,7 @@ class MailViewModelTest {
             formatRecipientSummary("\"nonbili/meron\" <reply+abc@reply.github.com>", "\"Comment\" <comment@noreply.github.com>"),
         )
         // The forward: an empty display name falls back to the address local part.
-        assertEquals("ping.eminel", formatRecipientSummary("\"\" <ping.eminel@gmail.com>", ""))
+        assertEquals("alex.smith", formatRecipientSummary("\"\" <alex.smith@example.com>", ""))
         assertEquals("ada", formatRecipientSummary("ada@example.com, \"Ada\" <ada@example.com>"))
         assertEquals("", formatRecipientSummary("", ""))
     }

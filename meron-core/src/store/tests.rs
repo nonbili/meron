@@ -5566,24 +5566,25 @@ fn contacts_follow_every_message_write() {
             notification(10, "Flathub Bot"),
             notification(11, "Flathub Bot"),
             notification(12, "Flathub Bot"),
-            notification(13, "ISAN98"),
-            message(14, vec![to("isan98@proton.me")]),
-            message(15, vec![to("isan98@proton.me")]),
-            message(16, vec![to("louisa@example.com")]),
-            message(17, vec![to("louisa@example.com")]),
-            message(18, vec![to("louisa@example.com")]),
+            notification(13, "ROBIN42"),
+            message(14, vec![to("robin42@example.com")]),
+            message(15, vec![to("robin42@example.com")]),
+            message(16, vec![to("derobin@example.com")]),
+            message(17, vec![to("derobin@example.com")]),
+            message(18, vec![to("derobin@example.com")]),
         ],
     )
     .unwrap();
-    let isa = suggest_contacts(&conn, "acct", "isa", 10).unwrap();
+    let matches = suggest_contacts(&conn, "acct", "robin", 10).unwrap();
     assert_eq!(
-        isa.iter()
+        matches
+            .iter()
             .map(|c| format!("{} {}", c.name, c.addr))
             .collect::<Vec<_>>(),
         [
-            " isan98@proton.me",
-            "ISAN98 notifications@github.com",
-            " louisa@example.com"
+            " robin42@example.com",
+            "ROBIN42 notifications@github.com",
+            " derobin@example.com"
         ]
     );
     conn.execute("DELETE FROM messages WHERE uid >= 10", [])

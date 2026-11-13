@@ -81,7 +81,7 @@ func TestNativeTitlebarStartup(t *testing.T) {
 	}
 
 	for _, backend := range backends {
-		for _, mode := range []string{"system", "integrated", "missed-hook"} {
+		for _, mode := range []string{"system", "integrated", "missed-hook", "background"} {
 			name := backend + "/" + mode
 			var args []string
 			if mode != "system" {

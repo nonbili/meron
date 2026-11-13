@@ -82,6 +82,84 @@ func TestExplicitShowForcesStartupReveal(t *testing.T) {
 	}
 }
 
+func TestBackgroundRequested(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "normal"},
+		{name: "background", args: []string{"--background"}, want: true},
+		{name: "with mailto", args: []string{"--background", "mailto:hello@example.com"}},
+		{name: "filename", args: []string{"/tmp/--background.eml"}},
+		{name: "after separator", args: []string{"--", "--background"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := backgroundRequested(test.args); got != test.want {
+				t.Fatalf("backgroundRequested(%q) = %v, want %v", test.args, got, test.want)
+			}
+		})
+	}
+}
+
+func TestBackgroundStartupStaysHiddenUntilNormalLaunch(t *testing.T) {
+	calls := stubStartupReveal(t)
+	defer stubWindowCalls(t)()
+	a := &App{ctx: context.Background(), startInBackground: true}
+	a.windowHidden.Store(true)
+
+	// Frontend readiness and the safety timeout must leave background sync
+	// running without opening the main window.
+	if _, err := a.invoke("window.ready", nil); err != nil {
+		t.Fatal(err)
+	}
+	timer := a.armStartupWindowFallback(time.Millisecond)
+	defer timer.Stop()
+	select {
+	case call := <-calls:
+		t.Fatalf("background startup received %q", call)
+	case <-time.After(20 * time.Millisecond):
+	}
+	a.HandleSecondInstanceLaunch([]string{"--background"})
+	if len(calls) != 0 || len(windowCalls) != 0 || !a.windowHidden.Load() {
+		t.Fatal("second background launch opened the main window")
+	}
+
+	a.HandleSecondInstanceLaunch(nil)
+	expectStartupReveal(t, calls, "reveal")
+	expectStartupReveal(t, calls, "force")
+	if len(windowCalls) == 0 || a.windowHidden.Load() {
+		t.Fatal("normal launch did not show the background window")
+	}
+	if _, err := a.invoke("window.ready", nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 0 {
+		t.Fatal("late readiness repeated the startup reveal")
+	}
+}
+
+func TestBackgroundShowArmsMaximiseBeforeMapping(t *testing.T) {
+	stubStartupReveal(t)
+	defer stubWindowCalls(t)()
+	a := &App{ctx: context.Background(), startInBackground: true}
+	a.window.Maximised = true
+	a.windowHidden.Store(true)
+	original := startupWindowMaximiseOnShow
+	t.Cleanup(func() { startupWindowMaximiseOnShow = original })
+	armed := false
+	startupWindowMaximiseOnShow = func(_ context.Context, maximised bool) {
+		if !maximised || !a.windowHidden.Load() || len(windowCalls) != 0 {
+			t.Fatal("maximisation must be armed while the saved window is still hidden")
+		}
+		armed = true
+	}
+	a.showMainWindow()
+	if !armed || len(windowCalls) == 0 {
+		t.Fatal("background window was not armed and shown")
+	}
+}
+
 func TestStartupFallbackSkipsClosedOrHiddenWindow(t *testing.T) {
 	for _, state := range []string{"cancelled", "quitting", "hidden"} {
 		t.Run(state, func(t *testing.T) {

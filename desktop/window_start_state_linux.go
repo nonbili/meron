@@ -37,6 +37,13 @@ func startWindowState(maximised bool) options.WindowStartState {
 
 var maximiseOnce sync.Once
 
+func maximiseOnNextShow(ctx context.Context, maximised bool) {
+	if !maximised {
+		return
+	}
+	maximiseOnce.Do(nativeMaximiseOnNextConfigure)
+}
+
 // maximiseOnDomReady maximises the window once the page is up, which is the
 // earliest point where the window is guaranteed to be mapped, when the last
 // session ended maximised.

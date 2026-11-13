@@ -13,15 +13,15 @@ import kotlin.test.assertNull
 class MobileConnectivityTest {
     private val accounts =
         listOf(
-            AccountSummary(id = "one", displayName = "Ping Chen", email = "ping.one@example.com"),
-            AccountSummary(id = "two", displayName = "Ping Chen", email = "ping.two@example.com"),
+            AccountSummary(id = "one", displayName = "Alex Doe", email = "ping.one@example.com"),
+            AccountSummary(id = "two", displayName = "Alex Doe", email = "ping.two@example.com"),
             AccountSummary(id = "three", displayName = "Ada", email = "ada@example.com"),
         )
 
     @Test
     fun duplicateAccountNamesIncludeEmailAddress() {
-        assertEquals("Ping Chen (ping.one@example.com)", mobileConnectivityAccountLabel("one", accounts))
-        assertEquals("Ping Chen (ping.two@example.com)", mobileConnectivityAccountLabel("two", accounts))
+        assertEquals("Alex Doe (ping.one@example.com)", mobileConnectivityAccountLabel("one", accounts))
+        assertEquals("Alex Doe (ping.two@example.com)", mobileConnectivityAccountLabel("two", accounts))
         assertEquals("Ada", mobileConnectivityAccountLabel("three", accounts))
     }
 

@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 
@@ -36,9 +38,16 @@ var trayIconUnreadICO []byte
 var globalApp *App
 
 func main() {
+	if cliOptionRequested(os.Args[1:], "-h", "--help") {
+		attachHelpConsole()
+		fmt.Print(commandLineHelp)
+		return
+	}
 	setupNativeSpellChecking()
 
 	app := NewApp()
+	app.startInBackground = backgroundRequested(os.Args[1:])
+	app.windowHidden.Store(app.startInBackground)
 	globalApp = app
 	startMaximised := app.window.Maximised
 	integrated := integratedTitlebarSupported && app.window.Titlebar != titlebarSystem
@@ -75,7 +84,7 @@ func main() {
 	})
 	options := application.WebviewWindowOptions{
 		Title: appTitle(), Width: app.window.Width, Height: app.window.Height,
-		StartState: startWindowState(startMaximised), Hidden: startWindowHidden,
+		StartState: startWindowState(startMaximised), Hidden: startWindowHidden || app.startInBackground,
 		Frameless: framelessTitlebar && integrated, EnableFileDrop: nativeFileDrop || runtime.GOOS == "windows",
 		Mac: application.MacWindow{TitleBar: application.MacTitleBarHidden},
 	}
@@ -83,9 +92,20 @@ func main() {
 		options.BackgroundType = application.BackgroundTypeTransparent
 	}
 	desktopruntime.Window = native.Window.NewWithOptions(options)
+	if runtime.GOOS == "darwin" {
+		desktopruntime.Window.OnWindowEvent(events.Mac.WindowShow, func(_ *application.WindowEvent) {
+			// Wails shows the window directly when reopening from the Dock.
+			app.windowHidden.Store(false)
+		})
+	}
 	desktopruntime.Window.OnWindowEvent(events.Common.WindowRuntimeReady, func(_ *application.WindowEvent) {
+		if app.startInBackground {
+			prepareBackgroundWindow()
+		}
 		alignNativeTitlebar()
-		maximiseOnDomReady(app.ctx, startMaximised)
+		if !app.startInBackground {
+			maximiseOnDomReady(app.ctx, startMaximised)
+		}
 		app.emlStartOnce.Do(app.startEmlReaders)
 	})
 	desktopruntime.Window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {

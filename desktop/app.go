@@ -37,11 +37,12 @@ type App struct {
 	trayStopOnce  sync.Once
 	// closeToTray is pushed by the frontend. Tray style is restored from
 	// native storage before publication.
-	closeToTray     atomic.Bool
-	quitting        atomic.Bool
-	closing         atomic.Bool
-	windowHidden    atomic.Bool
-	windowReadyOnce sync.Once
+	closeToTray       atomic.Bool
+	quitting          atomic.Bool
+	closing           atomic.Bool
+	windowHidden      atomic.Bool
+	windowReadyOnce   sync.Once
+	startInBackground bool
 
 	windowMu        sync.Mutex
 	window          windowState
@@ -184,7 +185,7 @@ func (a *App) onSystemResumed() {
 func (a *App) HandleSecondInstanceLaunch(args []string) {
 	eml := a.openEmlArguments(args)
 	urls := mailtoURLs(args)
-	if len(urls) == 0 && !eml {
+	if len(urls) == 0 && !eml && !backgroundRequested(args) {
 		a.showMainWindow()
 		return
 	}

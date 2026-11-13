@@ -6,8 +6,9 @@ const startupWindowRevealDelay = 2 * time.Second
 
 // Indirection lets the startup failure paths be tested without a native window.
 var (
-	startupWindowReveal      = revealStartupWindow
-	startupWindowForceReveal = forceRevealStartupWindow
+	startupWindowReveal         = revealStartupWindow
+	startupWindowForceReveal    = forceRevealStartupWindow
+	startupWindowMaximiseOnShow = maximiseOnNextShow
 )
 
 func (a *App) armStartupWindowFallback(delay time.Duration) *time.Timer {
@@ -20,6 +21,9 @@ func (a *App) armStartupWindowFallback(delay time.Duration) *time.Timer {
 }
 
 func (a *App) revealWindow(force bool) {
+	if a.windowHidden.Load() {
+		return
+	}
 	a.windowReadyOnce.Do(func() { startupWindowReveal(a.ctx) })
 	if force {
 		// Linux can still be waiting for the window manager's maximise reply

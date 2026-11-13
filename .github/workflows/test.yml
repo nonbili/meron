@@ -13,15 +13,34 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
       # Wails (package main) links against GTK/WebKitGTK via cgo.
       - name: Install GTK/WebKitGTK headers
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev xvfb xauth
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev xvfb xauth openbox x11-utils
       - name: Create desktop/frontend/dist placeholder
         run: mkdir -p desktop/frontend/dist && touch desktop/frontend/dist/placeholder
       - run: go test -tags gtk3 ./...
         working-directory: desktop
       - name: Test native titlebar startup under Xvfb
-        run: xvfb-run -a go test -tags gtk3 -run '^TestNativeTitlebarStartup$' -count=1 -v .
+        # Background startup waits for a configure event from a window manager;
+        # bare Xvfb only supplies the X server.
+        run: |
+          xvfb-run -a sh -eu -c '
+            openbox >"$RUNNER_TEMP/openbox.log" 2>&1 &
+            wm_pid=$!
+            trap "kill $wm_pid 2>/dev/null || true" EXIT
+            for attempt in $(seq 1 100); do
+              if xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"; then
+                break
+              fi
+              if ! kill -0 "$wm_pid" 2>/dev/null || [ "$attempt" -eq 100 ]; then
+                cat "$RUNNER_TEMP/openbox.log"
+                exit 1
+              fi
+              sleep 0.1
+            done
+            go test -tags gtk3 -run "^TestNativeTitlebarStartup$" -count=1 -v .
+          '
         working-directory: desktop
         env:
           MERON_TEST_NATIVE_TITLEBAR: '1'

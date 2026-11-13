@@ -25,28 +25,28 @@ class EncryptionAddressesTest {
         val account =
             AccountSummary(
                 id = "acc",
-                email = " Ping@Nonbili.jp ",
-                aliases = listOf(AccountAlias("ping@nonbili.jp"), AccountAlias("Ping@Meron.im"), AccountAlias("ping@meron.im"), AccountAlias(" ")),
+                email = " Alex@Personal.example ",
+                aliases = listOf(AccountAlias("alex@personal.example"), AccountAlias("Alex@Work.example"), AccountAlias("alex@work.example"), AccountAlias(" ")),
             )
-        assertEquals(listOf("ping@nonbili.jp", "ping@meron.im"), encryptionAddresses(account))
+        assertEquals(listOf("alex@personal.example", "alex@work.example"), encryptionAddresses(account))
     }
 
     @Test
     fun matchingThePrimaryDoesNotHideAMissingAlias() {
-        val key = buildJsonObject { putJsonArray("emails") { add("ping@nonbili.jp") } }
+        val key = buildJsonObject { putJsonArray("emails") { add("alex@personal.example") } }
         assertEquals(
-            listOf("ping@meron.im"),
-            missingKeyAddresses(key, listOf("ping@nonbili.jp", "ping@meron.im")),
+            listOf("alex@work.example"),
+            missingKeyAddresses(key, listOf("alex@personal.example", "alex@work.example")),
         )
     }
 
     @Test
     fun addingAnAliasRevealsItWithoutChangingTheKey() {
-        val key = buildJsonObject { putJsonArray("emails") { add("PING@NONBILI.JP") } }
-        val account = AccountSummary(id = "acc", email = "ping@nonbili.jp")
+        val key = buildJsonObject { putJsonArray("emails") { add("ALEX@PERSONAL.EXAMPLE") } }
+        val account = AccountSummary(id = "acc", email = "alex@personal.example")
         assertEquals(emptyList(), missingKeyAddresses(key, encryptionAddresses(account)))
-        val updated = account.copy(aliases = listOf(AccountAlias("ping@meron.im")))
-        assertEquals(listOf("ping@meron.im"), missingKeyAddresses(key, encryptionAddresses(updated)))
+        val updated = account.copy(aliases = listOf(AccountAlias("alex@work.example")))
+        assertEquals(listOf("alex@work.example"), missingKeyAddresses(key, encryptionAddresses(updated)))
     }
 
     @Test
@@ -54,11 +54,11 @@ class EncryptionAddressesTest {
         val key =
             buildJsonObject {
                 putJsonArray("emails") {
-                    add("ping@nonbili.jp")
-                    add("ping@meron.im")
+                    add("alex@personal.example")
+                    add("alex@work.example")
                 }
             }
-        assertEquals(emptyList(), missingKeyAddresses(key, listOf("ping@nonbili.jp", "ping@meron.im")))
+        assertEquals(emptyList(), missingKeyAddresses(key, listOf("alex@personal.example", "alex@work.example")))
     }
 
     @Test

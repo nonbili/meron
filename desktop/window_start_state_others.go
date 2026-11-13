@@ -11,6 +11,8 @@ import (
 
 const startWindowHidden = true
 
+func prepareBackgroundWindow() {}
+
 func revealStartupWindow(ctx context.Context) {
 	wailsRuntime.WindowShow(ctx)
 }
@@ -30,3 +32,5 @@ func startWindowState(maximised bool) options.WindowStartState {
 }
 
 func maximiseOnDomReady(ctx context.Context, maximised bool) {}
+
+func maximiseOnNextShow(ctx context.Context, maximised bool) {}

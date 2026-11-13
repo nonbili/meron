@@ -96,6 +96,22 @@ static gboolean onWindowState(GtkWidget *widget, GdkEventWindowState *event, gpo
 	return FALSE;
 }
 
+static gboolean maximiseAfterConfigure = FALSE;
+
+static gboolean onBackgroundConfigure(GtkWidget *widget, GdkEventConfigure *event, gpointer data) {
+	if (maximiseAfterConfigure && gtk_widget_get_mapped(widget)) {
+		// The window manager has now configured the normal window and can
+		// retain its restore geometry before accepting maximisation.
+		maximiseAfterConfigure = FALSE;
+		gtk_window_maximize(GTK_WINDOW(widget));
+	}
+	return FALSE;
+}
+
+static void maximiseOnNextConfigure(void) {
+	maximiseAfterConfigure = TRUE;
+}
+
 // Whether the current GTK frame has transparent client-side decorations.
 // Re-read after installing a custom titlebar: KDE defaults to server-side
 // decorations, but a custom titlebar asks GTK to take ownership of the frame.
@@ -160,14 +176,11 @@ static void applyTitlebar(void) {
 // install the custom titlebar before the GdkWindow and WebKit child exist.
 // Installing the first titlebar from realize is too late: GTK unrealizes the
 // window while other realize handlers still expect a valid GdkWindow.
-static gboolean onStyleUpdated(GSignalInvocationHint *hint, guint n, const GValue *params, gpointer data) {
-	GObject *object = g_value_get_object(&params[0]);
-	if (!GTK_IS_WINDOW(object) || gtk_window_get_window_type(GTK_WINDOW(object)) != GTK_WINDOW_TOPLEVEL) return TRUE;
+static void prepareTitlebar(GtkWidget *widget) {
 	// Setting the titlebar may validate styles again before this hook returns.
 	static gboolean prepared = FALSE;
-	if (prepared) return FALSE;
+	if (prepared) return;
 	prepared = TRUE;
-	GtkWidget *widget = GTK_WIDGET(object);
 	GdkDisplay *display = gtk_widget_get_display(widget);
 	gboolean defaultCsd = g_strcmp0(g_getenv("GTK_CSD"), "1") == 0;
 #ifdef GDK_WINDOWING_WAYLAND
@@ -179,8 +192,14 @@ static gboolean onStyleUpdated(GSignalInvocationHint *hint, guint n, const GValu
 	if (wantIntegrated) {
 		GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 		gtk_widget_set_no_show_all(bar, TRUE);
-		gtk_window_set_titlebar(GTK_WINDOW(object), bar);
+		gtk_window_set_titlebar(GTK_WINDOW(widget), bar);
 	}
+}
+
+static gboolean onStyleUpdated(GSignalInvocationHint *hint, guint n, const GValue *params, gpointer data) {
+	GObject *object = g_value_get_object(&params[0]);
+	if (!GTK_IS_WINDOW(object) || gtk_window_get_window_type(GTK_WINDOW(object)) != GTK_WINDOW_TOPLEVEL) return TRUE;
+	prepareTitlebar(GTK_WIDGET(object));
 	return FALSE;
 }
 
@@ -197,6 +216,7 @@ static gboolean onRealize(GSignalInvocationHint *hint, guint n, const GValue *pa
 	gtk_widget_set_opacity(GTK_WIDGET(object), 0.0);
 	g_object_add_weak_pointer(object, (gpointer *)&mainWindow);
 	g_signal_connect(object, "window-state-event", G_CALLBACK(onWindowState), NULL);
+	g_signal_connect(object, "configure-event", G_CALLBACK(onBackgroundConfigure), NULL);
 	readChromeSettings();
 	GtkSettings *settings = gtk_settings_get_default();
 	if (settings != NULL) {
@@ -217,6 +237,13 @@ static gulong installWindowChrome(int integrated) {
 	guint id = g_signal_lookup("realize", GTK_TYPE_WIDGET);
 	g_signal_add_emission_hook(id, 0, onRealize, NULL, NULL);
 	return styleHook;
+}
+
+static void prepareBackgroundWindow(GtkWidget *window) {
+	// Hidden widgets have not passed through GTK's style validation yet.
+	// Prepare the titlebar before realize, just as style-updated normally does.
+	prepareTitlebar(window);
+	gtk_widget_realize(window);
 }
 
 static gboolean setIntegratedIdle(gpointer data) {
@@ -266,7 +293,13 @@ static char *copyChromeSetting(int doubleClick) {
 */
 import "C"
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"meron/internal/desktopruntime"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
+)
 
 const integratedTitlebarSupported = true
 
@@ -280,6 +313,20 @@ var titlebarSwitchesLive = func() bool { return C.switchesTitlebarLive() != 0 }
 
 func installWindowChrome(integrated bool) {
 	C.installWindowChrome(cBool(integrated))
+}
+
+func prepareBackgroundWindow() {
+	// Claim the main window's one-shot realize hook before a composer or
+	// document window opens, without mapping or focusing the main window.
+	application.InvokeSync(func() {
+		if window := desktopruntime.Window.NativeWindow(); window != nil {
+			C.prepareBackgroundWindow((*C.GtkWidget)(window))
+		}
+	})
+}
+
+func nativeMaximiseOnNextConfigure() {
+	application.InvokeSync(func() { C.maximiseOnNextConfigure() })
 }
 
 func setNativeTitlebarIntegrated(integrated bool) {

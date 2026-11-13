@@ -122,6 +122,14 @@ func (a *App) showMainWindow() {
 	if ctx == nil {
 		return
 	}
+	// Read before showing: resize events from the initially normal window
+	// can replace the saved maximised state as soon as it becomes visible.
+	a.windowMu.Lock()
+	maximised := a.window.Maximised
+	a.windowMu.Unlock()
+	if a.startInBackground {
+		startupWindowMaximiseOnShow(ctx, maximised)
+	}
 	a.windowHidden.Store(false)
 	a.revealWindow(true)
 	showAndRaiseMainWindow(ctx)

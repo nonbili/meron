@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn plain_folds_a_signature_under_the_quote_with_it() {
-        let body = "Does Tuesday work?\n\nOn Tue, Sep 8, 2026 at 8:14 PM Ping <ping@example.com>\nwrote:\n\n> Both days are good.\n>\n\n\n-- \n\n*MS*\n";
+        let body = "Does Tuesday work?\n\nOn Tue, Sep 8, 2026 at 8:14 PM Alex <alex@example.com>\nwrote:\n\n> Both days are good.\n>\n\n\n-- \n\n*MS*\n";
         let start = plain_quote_start(body).expect("quote");
         assert_eq!(&body[..start], "Does Tuesday work?\n\n");
     }

@@ -229,7 +229,7 @@ describe('messageHelpers recipient summary', () => {
       formatRecipientSummary('"nonbili/meron" <reply+abc@reply.github.com>', '"Comment" <comment@noreply.github.com>'),
     ).toBe('nonbili/meron, Comment')
     // The forward: empty display name falls back to the address local part.
-    expect(formatRecipientSummary('"" <ping.eminel@gmail.com>', undefined)).toBe('ping.eminel')
+    expect(formatRecipientSummary('"" <alex.smith@example.com>', undefined)).toBe('alex.smith')
     expect(formatRecipientSummary('ada@example.com, "Ada" <ada@example.com>')).toBe('ada')
     expect(formatRecipientSummary('Alice <alice@example.com>, Bob Jones <bob@example.com>')).toBe('Alice, Bob Jones')
     expect(formatRecipientSummary('', null)).toBe('')

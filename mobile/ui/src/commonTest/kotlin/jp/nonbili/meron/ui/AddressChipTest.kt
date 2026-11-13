@@ -22,24 +22,24 @@ class AddressChipTest {
 
     @Test
     fun namedAddressKeepsNameAndAddressApart() {
-        val items = addressChipItems(""""Ping Chen" <ping@example.com>""")
+        val items = addressChipItems(""""Alex Doe" <alex@example.com>""")
         assertEquals(1, items.size)
-        assertEquals("Ping Chen", items[0].display)
-        assertEquals("ping@example.com", items[0].email)
-        assertEquals(""""Ping Chen" <ping@example.com>""", items[0].full)
+        assertEquals("Alex Doe", items[0].display)
+        assertEquals("alex@example.com", items[0].email)
+        assertEquals(""""Alex Doe" <alex@example.com>""", items[0].full)
     }
 
     @Test
     fun bareAddressHasNoSeparateEmailLine() {
-        val items = addressChipItems("ping@example.com, second@example.com")
-        assertEquals(listOf("ping@example.com", "second@example.com"), items.map { it.display })
+        val items = addressChipItems("alex@example.com, second@example.com")
+        assertEquals(listOf("alex@example.com", "second@example.com"), items.map { it.display })
         assertEquals(listOf("", ""), items.map { it.email })
     }
 
     @Test
     fun nameRepeatingTheAddressIsNotShownTwice() {
-        val items = addressChipItems("ping@example.com <ping@example.com>")
-        assertEquals("ping@example.com", items[0].display)
+        val items = addressChipItems("alex@example.com <alex@example.com>")
+        assertEquals("alex@example.com", items[0].display)
         assertEquals("", items[0].email)
     }
 
@@ -48,14 +48,14 @@ class AddressChipTest {
         val message =
             MessageBody(
                 id = "1",
-                from = "Ping Chen",
+                from = "Alex Doe",
                 to = "someone@example.com",
                 subject = "hi",
                 body = "",
-                fromAddr = "ping@example.com",
+                fromAddr = "alex@example.com",
             )
-        assertEquals("Ping Chen <ping@example.com>", fullFromAddress(message))
-        assertEquals("ping@example.com", fullFromAddress(message.copy(from = "")))
-        assertEquals("Ping Chen", fullFromAddress(message.copy(fromAddr = "")))
+        assertEquals("Alex Doe <alex@example.com>", fullFromAddress(message))
+        assertEquals("alex@example.com", fullFromAddress(message.copy(from = "")))
+        assertEquals("Alex Doe", fullFromAddress(message.copy(fromAddr = "")))
     }
 }
