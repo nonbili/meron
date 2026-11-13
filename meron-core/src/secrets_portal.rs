@@ -59,7 +59,7 @@ pub fn force_local(reason: &str) {
 
 /// Set when the local keyring on disk turned out to be a leftover that lacks
 /// the store key the Secret Service still holds, so it no longer claims the
-/// profile (see `secrets::service_key_behind_stale_local_keyring`).
+/// profile (see `secrets::shadowed_db_key`).
 static LOCAL_STALE: AtomicBool = AtomicBool::new(false);
 
 /// Stop treating the local keyring on disk as this profile's backend.
@@ -68,9 +68,72 @@ pub fn prefer_service() {
         crate::mlog!(
             Level::Warn,
             "keyring",
-            "local file keyring has no store key but the Secret Service does; using the Secret Service"
+            "local file keyring lacks the store key the keyring it shadows holds; using that keyring"
         );
     }
+}
+
+/// Stop using a local keyring proven bogus (its store key does not open the
+/// store, the shadowed keyring's does): switch away from it for this run and
+/// move it aside so later launches don't pick it up again. Moved, not deleted,
+/// so nothing in it is lost.
+pub fn retire_local_keyring() {
+    prefer_service();
+    let dir = crate::store::app_dir().join("keyring");
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let aside = dir.with_file_name(format!("keyring.stale-{stamp}"));
+    match std::fs::rename(&dir, &aside) {
+        Ok(()) => crate::mlog!(
+            Level::Warn,
+            "keyring",
+            "moved the stale local keyring aside to {}",
+            aside.display()
+        ),
+        Err(error) => crate::mlog!(
+            Level::Warn,
+            "keyring",
+            "could not move the stale local keyring aside: {error}"
+        ),
+    }
+}
+
+/// Read one entry straight from the Secret portal, bypassing the worker and
+/// whichever backend it has settled on. Used to look behind a local keyring
+/// that may be shadowing the portal. Bounded by [`OP_TIMEOUT`]; any failure is
+/// `None` and, unlike the worker, demotes nothing.
+pub fn load_from_portal(account: &str) -> Option<String> {
+    let account = account.to_owned();
+    // Own thread and runtime: callers may already be inside a Tokio runtime,
+    // where block_on would panic.
+    std::thread::Builder::new()
+        .name("meron-portal-probe".into())
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .ok()?;
+            let probe = async {
+                let keyring = oo7::Keyring::new().await?;
+                load_async(&Backend::Portal(keyring), &account).await
+            };
+            match runtime.block_on(async { tokio::time::timeout(OP_TIMEOUT, probe).await }) {
+                Ok(Ok(value)) => value,
+                Ok(Err(error)) => {
+                    crate::mlog!(Level::Warn, "keyring", "portal probe failed: {error:#}");
+                    None
+                }
+                Err(_) => {
+                    crate::mlog!(Level::Warn, "keyring", "portal probe timed out");
+                    None
+                }
+            }
+        })
+        .ok()?
+        .join()
+        .ok()
+        .flatten()
 }
 
 /// Whether the local file keyring is already the active backend.
@@ -164,6 +227,10 @@ fn worker(receiver: mpsc::Receiver<Request>) {
     let mut backend = None;
 
     for request in receiver {
+        // A local backend stops applying once it is retired as stale.
+        if matches!(backend, Some(Backend::Local(_))) && !local_only() {
+            backend = None;
+        }
         if backend.is_none() {
             match runtime.block_on(open_backend()) {
                 Ok(opened) => backend = Some(opened),

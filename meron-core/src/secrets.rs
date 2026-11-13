@@ -499,18 +499,31 @@ fn with_service_fallback<T>(
 ///
 /// Returns `Ok(None)` when the keychain is disabled (`MERON_KEYRING=off`,
 /// tests/headless), so the store falls back to plaintext exactly as before.
-pub fn db_key() -> Result<Option<String>> {
+///
+/// `store_exists` says an encrypted store is already on disk. A fresh key is
+/// then never minted: it could not open that store, and persisting it would
+/// replace the keychain's answer for good, turning a keychain that is merely
+/// unavailable or not yet migrated into a store that can never be opened. The
+/// caller gets an error instead and the next launch asks the keychain again.
+pub fn db_key(store_exists: bool) -> Result<Option<String>> {
     if keyring_disabled() {
         return Ok(None);
     }
     match backend_load(DB_KEY_ACCOUNT).context("read db key from keychain")? {
         Some(key) if is_hex_key(&key) => Ok(Some(key)),
-        // Missing (first run) or a malformed entry: mint and persist a fresh key.
+        // Missing (first run) or a malformed entry.
         Some(_) | None => {
             #[cfg(target_os = "linux")]
-            if let Some(key) = service_key_behind_stale_local_keyring() {
+            if let Some(key) = shadowed_db_key() {
+                crate::secrets_portal::prefer_service();
                 return Ok(Some(key));
             }
+            anyhow::ensure!(
+                !store_exists,
+                "the keychain holds no store key for the existing encrypted store; \
+                 not creating a new one, which would lock the store for good \
+                 (is the keychain locked, or was it replaced?)"
+            );
             let key = generate_db_key();
             backend_store(DB_KEY_ACCOUNT, &key).context("store db key in keychain")?;
             Ok(Some(key))
@@ -518,35 +531,55 @@ pub fn db_key() -> Result<Option<String>> {
     }
 }
 
-/// The store key still held by the Secret Service when a local file keyring
-/// without one is shadowing it.
+/// The store key held by the keyring that the local file keyring is shadowing:
+/// the Secret portal under Flatpak, the Secret Service natively. `None` when no
+/// local keyring is shadowing anything, or the other keyring has no key.
 ///
 /// A local keyring on disk normally means the profile committed to it, store
-/// key included (see `secrets_portal::local_keyring_exists`). But a run that
-/// read its key from the service and was demoted afterwards leaves a local
-/// keyring holding no store key, and the next launch would mint a fresh one
-/// there and lock itself out of the database. Finding the real key in the
-/// service proves that is what happened, so the service takes over again.
+/// key included (see `secrets_portal::local_keyring_exists`). But a run whose
+/// keyring stopped answering is demoted to it mid-life, and that leaves a local
+/// keyring holding no store key — or, from builds that minted one there, the
+/// wrong one. Either way the real key is still in the keyring it shadows.
 #[cfg(target_os = "linux")]
-fn service_key_behind_stale_local_keyring() -> Option<String> {
-    let shadowed = !use_portal_keyring()
-        && !keyring_forced_to("file")
+fn shadowed_db_key() -> Option<String> {
+    let shadowed = !keyring_forced_to("file")
         && !crate::secrets_portal::local_forced()
         && crate::secrets_portal::local_keyring_exists();
     if !shadowed {
         return None;
     }
-    let key = service_call("read", || {
-        match Entry::new(SERVICE, DB_KEY_ACCOUNT)?.get_password() {
-            Ok(key) => Ok(Some(key)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(error) => Err(error),
-        }
-    })
-    .ok()
-    .flatten()
-    .filter(|key| is_hex_key(key))?;
-    crate::secrets_portal::prefer_service();
+    let key = if use_portal_keyring() {
+        crate::secrets_portal::load_from_portal(DB_KEY_ACCOUNT)
+    } else {
+        service_call("read", || {
+            match Entry::new(SERVICE, DB_KEY_ACCOUNT)?.get_password() {
+                Ok(key) => Ok(Some(key)),
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(error) => Err(error),
+            }
+        })
+        .ok()
+        .flatten()
+    };
+    key.filter(|key| is_hex_key(key))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn shadowed_db_key() -> Option<String> {
+    None
+}
+
+/// Recover from a local file keyring whose store key does not open the store:
+/// if the keyring it shadows holds a key that `opens` accepts, switch back to
+/// that keyring — for this run, and for later ones by moving the bogus local
+/// keyring aside — and return the key.
+pub fn recover_shadowed_db_key(opens: impl Fn(&str) -> bool) -> Option<String> {
+    if keyring_disabled() {
+        return None;
+    }
+    let key = shadowed_db_key().filter(|key| opens(key))?;
+    #[cfg(target_os = "linux")]
+    crate::secrets_portal::retire_local_keyring();
     Some(key)
 }
 

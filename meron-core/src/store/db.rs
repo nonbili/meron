@@ -242,7 +242,9 @@ pub fn open_notifying(on_upgrade: impl FnOnce()) -> Result<Connection> {
     // used to hang here forever). Bracket it in the log so a stall is visible.
     crate::mlog!(crate::log::Level::Warn, "store", "resolving store key");
     let started = std::time::Instant::now();
-    let key = crate::secrets::db_key();
+    let store_exists = is_encrypted_database(&path);
+    let key = crate::secrets::db_key(store_exists)
+        .map(|key| key.map(|key| recover_store_key(&path, store_exists, key)));
     crate::mlog!(
         crate::log::Level::Warn,
         "store",
@@ -286,8 +288,36 @@ pub fn open_archive() -> Result<Connection> {
 fn archive_key() -> Result<Option<String>> {
     match STORE_KEY.get() {
         Some(key) => Ok(key.clone()),
-        None => crate::secrets::db_key(),
+        None => crate::secrets::db_key(is_encrypted_database(&db_path())),
     }
+}
+
+/// `key` if it opens the store at `path` (or there is no encrypted store yet),
+/// else the key a shadowed keyring holds when that one does. Falls back to
+/// `key`, so a store neither key opens still fails with the usual error.
+fn recover_store_key(path: &Path, store_exists: bool, key: String) -> String {
+    if !store_exists || key_opens(path, &key) {
+        return key;
+    }
+    match crate::secrets::recover_shadowed_db_key(|candidate| key_opens(path, candidate)) {
+        Some(recovered) => {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "store",
+                "recovered the store key from the keyring the local one was shadowing"
+            );
+            recovered
+        }
+        None => key,
+    }
+}
+
+/// Whether `key` decrypts the existing store at `path`. Only reads the schema.
+fn key_opens(path: &Path, key: &str) -> bool {
+    let Ok(conn) = Connection::open(path) else {
+        return false;
+    };
+    apply_key(&conn, key).is_ok() && database_readable(&conn)
 }
 
 /// Open an archive at `path`, keyed when `key` is given. The archive shares
@@ -1428,6 +1458,17 @@ mod tests {
             .query_row("SELECT value FROM settings WHERE key='k'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(value, "v");
+    }
+
+    #[test]
+    fn key_opens_tells_the_right_key_from_a_minted_one() {
+        let path = tmp_db_path();
+        drop(open_at_keyed(&path, TEST_KEY).unwrap());
+        let other = "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100";
+        assert!(key_opens(&path, TEST_KEY));
+        assert!(!key_opens(&path, other));
+        // A key that opens is kept as is, with no keychain involved.
+        assert_eq!(recover_store_key(&path, true, TEST_KEY.into()), TEST_KEY);
     }
 
     #[test]
