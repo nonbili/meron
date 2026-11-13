@@ -54,9 +54,9 @@ Exec=%s %%U
 Icon=meron
 Terminal=false
 Categories=Office;Network;Email;
-StartupWMClass=meron
+StartupWMClass=%s
 MimeType=x-scheme-handler/mailto;message/rfc822;
-`, desktopExecArg(exe))
+`, desktopProgramName, desktopExecArg(desktopLaunchTarget(exe, os.Getenv)))
 	writeIfChanged(desktopPath, []byte(desktop))
 
 	// Refresh the MIME associations database so the mailto: handler takes
@@ -77,6 +77,43 @@ func writeIfChanged(path string, data []byte) {
 		return
 	}
 	_ = os.WriteFile(path, data, 0o644)
+}
+
+// desktopProgramName is the name the windows announce themselves under (the
+// Wayland app_id and the X11 WM_CLASS), and so what StartupWMClass has to say
+// for the shell to tie a window to the launcher. GTK would otherwise take it
+// from argv[0], which inside an AppImage is the image's file name.
+const desktopProgramName = "meron"
+
+// linuxProgramName is desktopProgramName for release builds. Dev launches keep
+// the name GTK derives, so they stay apart from an installed copy in the dock.
+func linuxProgramName() string {
+	if isWailsDevLaunch() {
+		return ""
+	}
+	return desktopProgramName
+}
+
+// desktopLaunchTarget returns the path the launcher should execute. That is
+// the executable, except inside an AppImage: there exe sits in the image's
+// temporary mount, which is gone once the app quits, and the image itself is
+// what has to be started. The runtime exports its path as APPIMAGE.
+//
+// APPIMAGE is inherited by child processes, so a copy merely started from
+// another AppImage sees it too; it only counts when exe is inside APPDIR.
+func desktopLaunchTarget(exe string, getenv func(string) string) string {
+	image, appDir := getenv("APPIMAGE"), getenv("APPDIR")
+	if image == "" || appDir == "" || !filepath.IsAbs(image) {
+		return exe
+	}
+	if resolved, err := filepath.EvalSymlinks(appDir); err == nil {
+		appDir = resolved
+	}
+	rel, err := filepath.Rel(appDir, exe)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return exe
+	}
+	return image
 }
 
 func desktopExecArg(path string) string {
