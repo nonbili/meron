@@ -588,6 +588,8 @@ fun formatSendIdentity(identity: SendIdentity): String =
         identity.email
     }
 
+/** Prefer an exact To/Cc identity, then a unique identity sharing a recipient's
+ * domain. Ambiguous or missing matches fall back to the primary (an empty string). */
 fun detectReplyFromIdentity(
     message: MessageBody,
     account: AccountSummary,
@@ -597,9 +599,22 @@ fun detectReplyFromIdentity(
             .map { bareAddress(it).lowercase() }
             .filter { it.isNotBlank() }
             .toSet()
-    val match =
-        accountSendIdentities(account).firstOrNull { identity ->
+    val identities = accountSendIdentities(account)
+    val exactMatch =
+        identities.firstOrNull { identity ->
             recipients.contains(identity.email.trim().lowercase())
+        }
+    val match =
+        exactMatch ?: run {
+            fun domain(email: String): String {
+                val at = email.lastIndexOf('@')
+                return if (at > 0) email.substring(at + 1).trim().lowercase() else ""
+            }
+            val domains = recipients.map(::domain).filter { it.isNotBlank() }.toSet()
+            identities
+                .filter { domain(it.email.trim()) in domains }
+                .distinctBy { it.email.trim().lowercase() }
+                .singleOrNull()
         } ?: return ""
     return if (match.email.equals(account.email, ignoreCase = true)) "" else match.email
 }

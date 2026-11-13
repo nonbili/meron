@@ -81,13 +81,31 @@ export function ownAddressSet(accounts: Account[]): Set<string> {
 
 /** Pick the send-as address for a reply: if the original was delivered to one of
  * the account's identities (primary or an alias) via To/Cc, reply from that
- * address; otherwise fall back to the account's primary. Returns "" when the
- * primary should be used (the draft treats "" as the primary). */
+ * address; otherwise use the sole identity sharing a recipient's domain, or
+ * fall back to the account's primary when there is no clear match. Returns ""
+ * when the primary should be used (the draft treats "" as the primary). */
 export function detectAliasFrom(target: Message, acc: Account): string {
   const recipients = new Set(
     [...splitAddressList(target.to), ...splitAddressList(target.cc)].map((e) => bareAddr(e).toLowerCase()),
   )
-  const match = accountIdentities(acc).find((id) => recipients.has(id.email.trim().toLowerCase()))
+  const identities = accountIdentities(acc)
+  let match = identities.find((id) => recipients.has(id.email.trim().toLowerCase()))
+  if (!match) {
+    const domain = (email: string) => {
+      const at = email.lastIndexOf('@')
+      return at > 0
+        ? email
+            .slice(at + 1)
+            .trim()
+            .toLowerCase()
+        : ''
+    }
+    const domains = new Set([...recipients].map(domain).filter(Boolean))
+    const matches = new Map(
+      identities.filter((id) => domains.has(domain(id.email.trim()))).map((id) => [id.email.trim().toLowerCase(), id]),
+    )
+    if (matches.size === 1) match = matches.values().next().value
+  }
   // Use the matched address, but leave "" when it's just the primary so the
   // draft's default (primary) handling stays in effect.
   return match && match.email.toLowerCase() !== acc.email.toLowerCase() ? match.email : ''

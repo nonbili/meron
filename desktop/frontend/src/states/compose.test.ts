@@ -3891,6 +3891,44 @@ describe('quick reply send-as identity', () => {
     expect(selected?.email).toBe('sales@example.com')
   })
 
+  it.each([
+    ['an unmatched recipient', 'dev@work.example', '', 'alex@work.example'],
+    ['a named recipient with mixed case', '"Dev, Team" <DEV@WORK.EXAMPLE>', '', 'alex@work.example'],
+    ['a copied recipient', 'other@elsewhere.test', 'dev@work.example', 'alex@work.example'],
+    [
+      'an exact alias despite another matching domain',
+      'dev@work.example',
+      'dev@personal.example',
+      'dev@personal.example',
+    ],
+    [
+      'the exact primary despite another matching domain',
+      'dev@work.example',
+      'alex@personal.example',
+      'alex@personal.example',
+    ],
+    ['an ambiguous domain', 'unknown@personal.example', '', 'alex@personal.example'],
+    ['multiple matching domains', 'dev@work.example, unknown@personal.example', '', 'alex@personal.example'],
+    ['an unrelated domain with a matching username', 'dev@elsewhere.test', '', 'alex@personal.example'],
+    ['a subdomain', 'dev@mail.work.example', '', 'alex@personal.example'],
+    ['missing recipients', '', '', 'alex@personal.example'],
+  ])('selects the reply identity for %s', (_label, to, cc, expected) => {
+    accounts$.set([
+      {
+        ...accounts$.get()[0],
+        email: 'alex@personal.example',
+        aliases: [{ email: 'alex@other.example' }, { email: 'dev@personal.example' }, { email: 'alex@work.example' }],
+      },
+    ])
+    const inbound = setUpThread({ to, cc })
+
+    expect(quickReplyFromState().selected?.email).toBe(expected)
+    expect(resolveQuickReplyFrom(inbound, accounts$.get()[0]) || accounts$.get()[0].email).toBe(expected)
+
+    replyToMessage(inbound)
+    expect(compose$.tabs.get().at(-1)?.compose?.fromEmail || accounts$.get()[0].email).toBe(expected)
+  })
+
   it('continues with the alias used by the newest outgoing reply', () => {
     accounts$.set([
       {

@@ -596,6 +596,41 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun detectsReplyIdentityByDomainWhenUnambiguous() {
+        val account =
+            AccountSummary(
+                id = "acc",
+                email = "alex@personal.example",
+                aliases =
+                    listOf(
+                        AccountAlias(email = "alex@other.example"),
+                        AccountAlias(email = "dev@personal.example"),
+                        AccountAlias(email = "alex@work.example"),
+                    ),
+            )
+        val cases =
+            listOf(
+                Triple("dev@work.example", "", "alex@work.example"),
+                Triple("\"Dev, Team\" <DEV@WORK.EXAMPLE>", "", "alex@work.example"),
+                Triple("other@elsewhere.test", "dev@work.example", "alex@work.example"),
+                Triple("dev@work.example", "dev@personal.example", "dev@personal.example"),
+                Triple("dev@work.example", "alex@personal.example", ""),
+                Triple("unknown@personal.example", "", ""),
+                Triple("dev@work.example, unknown@personal.example", "", ""),
+                Triple("dev@elsewhere.test", "", ""),
+                Triple("dev@mail.work.example", "", ""),
+                Triple("", "", ""),
+            )
+        for ((to, cc, expected) in cases) {
+            val message = MessageBody(id = "m", from = "Sender", to = to, cc = cc, subject = "Hello", body = "Body")
+            assertEquals(expected, detectReplyFromIdentity(message, account), "To: $to; Cc: $cc")
+        }
+        val duplicateIdentity = account.copy(aliases = account.aliases + AccountAlias(email = "ALEX@WORK.EXAMPLE"))
+        val message = MessageBody(id = "m", from = "Sender", to = "dev@work.example", cc = "", subject = "Hello", body = "Body")
+        assertEquals("alex@work.example", detectReplyFromIdentity(message, duplicateIdentity))
+    }
+
+    @Test
     fun detectsEditAsNewIdentityFromTheOriginalSender() {
         val account =
             AccountSummary(
