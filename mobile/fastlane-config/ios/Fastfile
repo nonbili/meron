@@ -77,6 +77,54 @@ platform :ios do
 
     UI.user_error!("IPA not found: #{ipa_path}") if !skip_binary_upload && !File.exist?(ipa_path)
 
+    # App Info is shared with macOS and may be locked by its review. Release
+    # notes and release type belong to the iOS version and remain editable.
+    app = Spaceship::ConnectAPI::App.find(app_identifier)
+    UI.user_error!("App not found: #{app_identifier}") unless app
+    platform = Spaceship::ConnectAPI::Platform::IOS
+    if ENV["IOS_REJECT_IF_POSSIBLE"] == "1"
+      submission = app.get_in_progress_review_submission(platform: platform)
+      submission.cancel_submission if submission
+      # Both records must leave review before we can edit and resubmit.
+      21.times do |attempt|
+        submission = app.get_in_progress_review_submission(platform: platform)
+        reviewing_versions = app.get_app_store_versions(filter: {
+          platform: platform,
+          appVersionState: "IN_REVIEW,WAITING_FOR_REVIEW,READY_FOR_REVIEW"
+        })
+        break if submission.nil? && reviewing_versions.empty?
+        UI.user_error!("iOS version is still in review after cancellation; retry once it becomes editable") if attempt == 20
+        UI.message("Waiting for iOS version to leave review...")
+        sleep(15)
+      end
+    end
+    app.ensure_version!(app_version, platform: platform) unless app_version.to_s.empty?
+    version = nil
+    21.times do |attempt|
+      version = app.get_edit_app_store_version(platform: platform)
+      break if version && (app_version.to_s.empty? || version.version_string == app_version)
+      break if attempt == 20
+      UI.message("Waiting for editable iOS version #{app_version} to appear...")
+      sleep(15)
+    end
+    UI.user_error!("No editable iOS version for #{app_identifier}") unless version
+    if !app_version.to_s.empty? && version.version_string != app_version
+      UI.user_error!("Expected iOS version #{app_version}, found #{version.version_string}")
+    end
+
+    version.update(attributes: { releaseType: ENV["IOS_AUTOMATIC_RELEASE"] == "1" ? "AFTER_APPROVAL" : "MANUAL" })
+    # App Store Connect does not accept What's New on the first iOS version.
+    first_version = app.get_app_store_versions(filter: { platform: platform }, limit: 2).count == 1
+    if !release_notes.to_s.empty? && !first_version
+      localization = version.get_app_store_version_localizations.find { |item| item.locale == "en-US" }
+      if localization
+        localization.update(attributes: { whats_new: release_notes })
+      else
+        version.create_app_store_version_localization(attributes: { locale: "en-US", whatsNew: release_notes })
+      end
+      UI.success("Updated iOS #{version.version_string} release notes (en-US)")
+    end
+
     upload_options = {
       force: true,
       api_key: api_key,
@@ -84,8 +132,7 @@ platform :ios do
       app_version: app_version,
       metadata_path: File.expand_path("../../fastlane/metadata/ios", __dir__),
       screenshots_path: File.expand_path("../../fastlane/metadata/ios", __dir__),
-      release_notes: release_notes.to_s.empty? ? nil : { "en-US" => release_notes },
-      skip_metadata: release_notes.to_s.empty?,
+      skip_metadata: true,
       skip_binary_upload: skip_binary_upload,
       skip_screenshots: true,
       ignore_language_directory_validation: true,

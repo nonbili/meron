@@ -90,3 +90,7 @@ APP_STORE_DEVELOPMENT_TEAM=XXXXXXXXXX \
 
 Useful flags: `SKIP_BUILD=1` (upload an existing artifact), `IOS_SUBMIT_FOR_REVIEW=1`,
 `GOOGLE_PLAY_TRACK=internal`, `GOOGLE_PLAY_UPLOAD_METADATA=1`.
+
+The iOS binary upload lane updates release notes and release type directly on the
+iOS version. It skips general App Info metadata, which can be locked while the
+macOS app is in review.

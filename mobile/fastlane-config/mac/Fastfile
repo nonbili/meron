@@ -47,6 +47,23 @@ platform :mac do
       reject_if_possible: true,
       submit_for_review: false
     )
+
+    # The review submission can disappear before its version leaves review.
+    # Wait for the version too, so upload_pkg can rename it instead of trying
+    # to create a new version while the old one still blocks creation.
+    app_identifier = options[:app_identifier] || ENV["MAC_APP_IDENTIFIER"] || "jp.nonbili.meron"
+    app = Spaceship::ConnectAPI::App.find(app_identifier)
+    UI.user_error!("App not found: #{app_identifier}") unless app
+    21.times do |attempt|
+      versions = app.get_app_store_versions(filter: {
+        platform: Spaceship::ConnectAPI::Platform::MAC_OS,
+        appVersionState: "IN_REVIEW,WAITING_FOR_REVIEW,READY_FOR_REVIEW"
+      })
+      break if versions.empty?
+      UI.user_error!("Mac version is still in review after cancellation; retry once it becomes editable") if attempt == 20
+      UI.message("Waiting for Mac version to leave review...")
+      sleep(15)
+    end
   end
 
   desc "Upload a Mac App Store .pkg to App Store Connect"
