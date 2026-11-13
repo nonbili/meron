@@ -1,0 +1,6 @@
+- Support mail rules for messages you send
+- Fix recipient suggestions and chip backspace in compose
+- Prevent Android hwui crash in conversation view
+- Select unambiguous same-domain reply identities
+- Clarify OpenPGP encryption offers and account alias coverage
+- Recognize localized Trash folder names and clean up sent drafts reliably
