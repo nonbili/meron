@@ -56,9 +56,15 @@ OUTPUT_DIR="$MOBILE_DIR/fastlane/screenshots/$PLATFORM/$LOCALE"
 # simulator and emulator are running. "ipad" runs on a booted iOS simulator;
 # pass the device name (e.g. "iPad Pro 12.9-inch") as the second argument.
 DEVICE_ARG=()
-if [ "$PLATFORM" = "ios" ] || [ "$PLATFORM" = "ipad" ]; then
+if [ -n "${DEVICE_ID:-}" ]; then
+  DEVICE_ARG=(--udid="$DEVICE_ID")
+elif [ "$PLATFORM" = "ios" ] || [ "$PLATFORM" = "ipad" ]; then
   if [ -n "$DEVICE_NAME" ]; then
     UDID="$(xcrun simctl list devices booted | grep -F "$DEVICE_NAME (" | grep -Eo '[0-9A-F-]{36}' | head -n 1 || true)"
+  fi
+  if [ -n "$DEVICE_NAME" ] && [ -z "${UDID:-}" ]; then
+    echo "Error: No booted simulator named '$DEVICE_NAME'. Set DEVICE_ID to target a custom simulator name." >&2
+    exit 1
   fi
   UDID="${UDID:-$(xcrun simctl list devices booted | grep -Eo '[0-9A-F-]{36}' | head -n 1 || true)}"
   [ -n "$UDID" ] && DEVICE_ARG=(--udid="$UDID")
@@ -72,12 +78,22 @@ echo "Output:   $OUTPUT_DIR"
 echo ""
 
 mkdir -p "$OUTPUT_DIR"
-# Drop any previous captures so stale screens don't linger.
-rm -f "$OUTPUT_DIR"/[0-9][0-9]_*.png
+# Stage a complete run before replacing previous captures.
+CAPTURE_DIR="$(mktemp -d "$OUTPUT_DIR/.capture.XXXXXX")"
+trap 'rm -rf "$CAPTURE_DIR"' EXIT
 
 echo "Running Maestro flow..."
-cd "$OUTPUT_DIR"
-maestro "${DEVICE_ARG[@]}" test "$FLOW"
+cd "$CAPTURE_DIR"
+maestro "${DEVICE_ARG[@]}" test --test-output-dir "$CAPTURE_DIR" "$FLOW"
+
+for screen in 01_inbox 02_kanban 03_thread 04_compose 05_accounts; do
+  if [ ! -s "$screen.png" ]; then
+    echo "Error: Missing capture: $screen.png" >&2
+    exit 1
+  fi
+done
+
+find "$OUTPUT_DIR" -maxdepth 1 -type f -name '*.png' -delete
 
 # Optionally prefix with a fastlane device name (Device-Name-NN_name.png).
 if [ -n "$DEVICE_NAME" ]; then
@@ -87,6 +103,8 @@ if [ -n "$DEVICE_NAME" ]; then
     mv -f "$f" "$DEVICE_NAME-$f"
   done
 fi
+
+mv ./*.png "$OUTPUT_DIR/"
 
 echo ""
 echo "Screenshots saved to: $OUTPUT_DIR"

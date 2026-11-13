@@ -4,9 +4,9 @@ Preview.html
 README.md
 *.html
 
-# intermediate captures + frameit config/assets; only the framed screenshots
-# under metadata/ are committed
-screenshots/
+# Intermediate captures and previews; store-ready screenshots under metadata/
+# are committed.
+/screenshots/
 
 # The shared changelog source is metadata/android/en-US/changelogs/<versionCode>.txt
 # and IS committed (Google Play and F-Droid read it directly). Only the derived

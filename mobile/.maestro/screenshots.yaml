@@ -3,35 +3,23 @@ appId: jp.nonbili.meron
 - launchApp:
     clearState: false
 
-# Wait for the inbox list to render
+# The capture profile uses fictional mail from the local test server.
 - extendedWaitUntil:
-    visible: "Meron Tips"
-    timeout: 20000
+    visible: "Friday lunch at the studio"
+    timeout: 60000
+- tapOn:
+    text: "Close"
+    optional: true
 - waitForAnimationToEnd
 
 - takeScreenshot: 01_inbox
 
-# Open a thread
-- tapOn: "Figma"
-- extendedWaitUntil:
-    visible: "Write a message..."
-    timeout: 15000
-- waitForAnimationToEnd
-
-- takeScreenshot: 02_thread
-
-# Back to inbox
-- tapOn: "Back"
-- waitForAnimationToEnd
-
-# Open navigation drawer
+# Show the board before the conversation in the store listing.
 - tapOn: "Open navigation"
 - extendedWaitUntil:
     visible: "Kanban board"
     timeout: 5000
 - waitForAnimationToEnd
-
-- takeScreenshot: 03_drawer
 
 # Open Kanban board
 - tapOn: "Kanban board"
@@ -40,9 +28,9 @@ appId: jp.nonbili.meron
     timeout: 5000
 - waitForAnimationToEnd
 
-- takeScreenshot: 04_kanban
+- takeScreenshot: 02_kanban
 
-# Back to the inbox to reach the compose button
+# Back to the inbox to open a conversation.
 - tapOn: "Open navigation"
 - extendedWaitUntil:
     visible: "Unified inbox"
@@ -50,11 +38,32 @@ appId: jp.nonbili.meron
 - tapOn: "Unified inbox"
 - waitForAnimationToEnd
 
-# Open compose
-- tapOn: "Compose"
+- tapOn: "Design review for the spring launch"
 - extendedWaitUntil:
-    visible: "New message"
-    timeout: 5000
+    visible: "Write a message..."
+    timeout: 15000
+- waitForAnimationToEnd
+- takeScreenshot: 03_thread
+- tapOn: "Back"
 - waitForAnimationToEnd
 
-- takeScreenshot: 05_compose
+# Capture accounts before opening a populated draft.
+- tapOn: "Open navigation"
+- waitForAnimationToEnd
+- takeScreenshot: 05_accounts
+- tapOn: "Unified inbox"
+
+# Open a populated draft in the simulator's mailto handler (Meron).
+- openLink: "mailto:mira@example.com?subject=A+few+ideas+for+Friday&body=Hi+Mira%2C%0A%0AI+loved+the+new+illustrations.+The+softer+colors+give+the+whole+page+a+little+more+room+to+breathe.%0A%0ALet%27s+review+the+final+details+on+Friday.%0A%0AElena"
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible: "New message"
+    timeout: 15000
+- assertVisible: "A few ideas for Friday"
+- extendedWaitUntil:
+    notVisible: "Loaded compose draft"
+    timeout: 10000
+- waitForAnimationToEnd
+- takeScreenshot: 04_compose

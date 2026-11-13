@@ -1,8 +1,8 @@
-# Fastlane: screenshots, framing & store uploads
+# Screenshots and store uploads
 
 Cross-platform release automation for the Meron mobile apps. Screenshots are
-captured with [Maestro](https://maestro.mobile.dev/), framed with Fastlane
-`frameit`, and uploaded to Google Play / App Store Connect with `supply` /
+captured with [Maestro](https://maestro.mobile.dev/), presented on store-sized
+canvases with Pillow, and uploaded to Google Play / App Store Connect with `supply` /
 `deliver`.
 
 All commands run from `mobile/`.
@@ -12,35 +12,41 @@ All commands run from `mobile/`.
 - `fastlane/Fastfile` — imports the per-platform lanes below.
 - `fastlane-config/android/{Appfile,Fastfile,Framefile.json}` — Play config + lanes.
 - `fastlane-config/ios/{Appfile,Fastfile,Framefile.json}` — App Store config + lanes.
-- `fastlane-config/assets/` — shared frame background + font.
+- `fastlane-config/assets/` — shared font and legacy frame background.
 - `fastlane/screenshots/<platform>/en-US/` — raw + framed captures (`android`, `ios`, `ipad`).
 - `fastlane/metadata/<store>/en-US/` — listing text, changelogs, and framed screenshots that get uploaded.
-- `.maestro/screenshots.yaml` — the capture flow (shared by every device).
+- `.maestro/screenshots.yaml` — inbox, kanban, conversation, compose and accounts captures.
+- `scripts/frame-screenshots.py` — renders captions and complete app captures without hardware frames.
 
 ## Setup
 
 ```sh
 cd mobile
 bundle install          # installs fastlane into vendor/bundle
+python3 -m pip install Pillow  # screenshot presentation
 # Maestro: curl -Ls "https://get.maestro.mobile.dev" | bash
 ```
 
 ## 1. Capture (Maestro)
 
-Boot the simulator/emulator and sign in to an account first (the flow expects a
-populated inbox), then:
+Boot the simulator/emulator and sign in to fictional test accounts first. The
+flow expects an inbox containing “Friday lunch at the studio,” a conversation
+“Design review for the spring launch,” and a board named “Kanban board.” Start
+in the unified inbox with Meron as the device's `mailto:` handler. The flow
+opens a fictional, populated draft for the composer capture; it does not send it.
+Then:
 
 ```sh
 ./scripts/maestro-screenshots.sh android
-./scripts/maestro-screenshots.sh ios   "iPhone 11 Pro Max"
-./scripts/maestro-screenshots.sh ipad  "iPad Pro 12.9-inch"
+./scripts/maestro-screenshots.sh ios   "iPhone 17 Pro Max"
+./scripts/maestro-screenshots.sh ipad  "iPad Pro 13-inch (M5)"
 ```
 
-Use a **frameit-supported** device size. App Store-accepted, frame-supported
-choices: iPhone 11 Pro Max (6.5", 1242×2688) and iPad Pro 12.9-inch
-(2048×2732). Newer iPhone Pro sizes have no frame yet.
+Capture at native store-accepted dimensions. The renderer keeps the capture's
+pixel dimensions and aspect ratio. Set `DEVICE_ID` when the simulator has a
+custom name; the device-name argument controls the output filename prefix.
 
-## 2. Frame (frameit)
+## 2. Present captures
 
 ```sh
 ./scripts/frame-screenshots.sh android
@@ -53,6 +59,9 @@ Framed images are copied into the metadata folders:
 - iOS + iPad → `fastlane/metadata/ios/en-US/screenshots/`
 
 Edit the keyword/title text per screen in `fastlane-config/<platform>/Framefile.json`.
+Titles can contain a newline. The renderer checks that all five captures exist
+before staging the set, and replaces earlier images for that device family.
+Inspect every image before uploading.
 
 ## 3. Credentials
 

@@ -1,16 +1,22 @@
-<h2>Features</h2>
-<ul>
-  <li>Unified Inbox, kanban and chat views</li>
-  <li>IMAP/SMTP email and RSS/Atom feeds</li>
-  <li>Threaded conversations with rich-text composing and media galleries</li>
-  <li>Easy setup with OAuth or automatic mailbox discovery</li>
-  <li>Encrypted local storage with credentials kept in the OS keyring</li>
-  <li>Themes and 20+ languages</li>
-</ul>
+Bring your email accounts together in Meron Mail. Read messages in a unified inbox, organize email on kanban boards, and follow conversations in a chat view. An RSS feed reader keeps blogs and news alongside your mail.
 
-<h2>How it works</h2>
-<ul>
-  <li>Meron syncs your mail and feeds through a shared Rust core for speed and reliability.</li>
-  <li>Your accounts and messages are stored encrypted on your device.</li>
-  <li>When you enable sender images, Meron sends a SHA-256 hash of each sender's email address to Gravatar and, as a fallback, the sender's domain (and, if needed, its parent domain) to DuckDuckGo.</li>
-</ul>
+ONE INBOX FOR YOUR ACCOUNTS
+Read mail from multiple accounts in one place or switch to an individual mailbox. Connect IMAP/SMTP accounts with OAuth sign-in where supported or automatic mailbox discovery.
+
+ORGANIZE EMAIL ON A KANBAN BOARD
+See mail in columns for folders, tags or saved searches. Use tags to group messages and rules to automate actions such as tagging, starring, archiving and moving mail.
+
+READ AND REPLY LIKE A CONVERSATION
+Choose chat or traditional conversation layouts. Keep replies together in threaded conversations, write with rich-text formatting, and browse attachments in media galleries.
+
+FOLLOW RSS AND ATOM FEEDS
+Read updates from your favorite blogs and publications in the same app as your email.
+
+ENCRYPTED STORAGE AND OPTIONAL OPENPGP
+Your local mail database is encrypted, with its key protected by Android Keystore. Enable OpenPGP per account to exchange encrypted email with recipients who have compatible keys. Ordinary email is not end-to-end encrypted by default.
+
+MAKE IT YOURS
+Choose a theme and use Meron in more than 20 languages. Meron is open source and is also available on iPhone, iPad and desktop.
+
+ABOUT SENDER IMAGES
+When you enable sender images, Meron sends a SHA-256 hash of each sender's email address to Gravatar and, as a fallback, the sender's domain (and, if needed, its parent domain) to DuckDuckGo.

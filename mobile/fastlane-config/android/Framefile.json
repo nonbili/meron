@@ -1,48 +1,49 @@
 {
-  "device_frame_version": "latest",
-  "default": {
-    "font": "./Regular.ttf",
-    "background": "./background.jpg",
-    "padding": 45,
-    "stack_title": true,
-    "show_complete_frame": false,
-    "title_below_image": false,
-    "keyword": {
-      "font": "./Regular.ttf",
-      "color": "#4F46E5",
-      "font_size": 140
-    },
-    "title": {
-      "font": "./Regular.ttf",
-      "color": "#FAFAF9",
-      "font_size": 120
-    }
-  },
   "data": [
     {
       "filter": "01_inbox",
-      "keyword": { "text": "Unified" },
-      "title": { "text": "All your inboxes in one place" }
+      "keyword": {
+        "text": "UNIFIED INBOX"
+      },
+      "title": {
+        "text": "All your email.\nOne calm place."
+      }
     },
     {
-      "filter": "02_thread",
-      "keyword": { "text": "Read" },
-      "title": { "text": "Conversations, clean and fast" }
+      "filter": "02_kanban",
+      "keyword": {
+        "text": "KANBAN BOARDS"
+      },
+      "title": {
+        "text": "Give your email\na clear next step."
+      }
     },
     {
-      "filter": "03_drawer",
-      "keyword": { "text": "Organize" },
-      "title": { "text": "Switch accounts and views instantly" }
+      "filter": "03_thread",
+      "keyword": {
+        "text": "CHAT VIEW"
+      },
+      "title": {
+        "text": "Email that feels\nlike a conversation."
+      }
     },
     {
-      "filter": "04_kanban",
-      "keyword": { "text": "Plan" },
-      "title": { "text": "Triage your mail on a board" }
+      "filter": "04_compose",
+      "keyword": {
+        "text": "WRITE & REPLY"
+      },
+      "title": {
+        "text": "Make every\nreply your own."
+      }
     },
     {
-      "filter": "05_compose",
-      "keyword": { "text": "Write" },
-      "title": { "text": "Compose without distractions" }
+      "filter": "05_accounts",
+      "keyword": {
+        "text": "MULTIPLE ACCOUNTS"
+      },
+      "title": {
+        "text": "Your accounts.\nYour way."
+      }
     }
   ]
 }

@@ -1,1 +1,1 @@
-Mail app that sparks joy
+Email with a unified inbox, kanban boards, chat views and an RSS feed reader.
