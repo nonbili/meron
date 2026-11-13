@@ -1317,6 +1317,8 @@
   "settings.appearance.appIconDefault": "默认",
   "settings.appearance.appIconHint": "Meron 运行时显示在程序坞中。访达仍显示原始图标。",
   "settings.appearance.appIconHintLinux": "用于启动器和程序坞。桌面可能需要片刻才会显示。",
+  "settings.appearance.appIconHintMobile": "更改主屏幕上的图标。更新可能需要片刻。",
+  "settings.appearance.appIconHintWindows": "Meron 运行时显示在任务栏中。“开始”菜单仍显示原始图标。",
   "settings.appearance.appIconLight": "浅色",
   "settings.appearance.monochromeTrayIcon": "单色托盘图标",
   "settings.appearance.monochromeTrayIconHint": "与栏中的其他图标保持一致，显示为黑色或白色。",

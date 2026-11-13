@@ -91,6 +91,10 @@ func main() {
 	if roundedWindowCorners {
 		options.BackgroundType = application.BackgroundTypeTransparent
 	}
+	// Every window, the main one included, starts with the shipped icon.
+	native.Window.OnCreate(func(window application.Window) {
+		window.OnWindowEvent(events.Common.WindowRuntimeReady, func(_ *application.WindowEvent) { refreshWindowIcons() })
+	})
 	desktopruntime.Window = native.Window.NewWithOptions(options)
 	if runtime.GOOS == "darwin" {
 		desktopruntime.Window.OnWindowEvent(events.Mac.WindowShow, func(_ *application.WindowEvent) {

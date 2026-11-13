@@ -1317,6 +1317,8 @@
   "settings.appearance.appIconDefault": "Default",
   "settings.appearance.appIconHint": "Ditampilkan di Dock selama Meron berjalan. Finder tetap memakai ikon asli.",
   "settings.appearance.appIconHintLinux": "Dipakai di peluncur dan dock. Desktop mungkin perlu beberapa saat untuk menampilkannya.",
+  "settings.appearance.appIconHintMobile": "Mengubah ikon di layar utama. Pembaruan mungkin perlu beberapa saat.",
+  "settings.appearance.appIconHintWindows": "Ditampilkan di bilah tugas selama Meron berjalan. Menu Mulai tetap memakai ikon asli.",
   "settings.appearance.appIconLight": "Terang",
   "settings.appearance.monochromeTrayIcon": "Ikon baki monokrom",
   "settings.appearance.monochromeTrayIconHint": "Menyesuaikan dengan ikon lain di bilah, dalam warna hitam atau putih.",

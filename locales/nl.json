@@ -1317,6 +1317,8 @@
   "settings.appearance.appIconDefault": "Standaard",
   "settings.appearance.appIconHint": "Zichtbaar in het Dock zolang Meron actief is. Finder houdt het oorspronkelijke icoon.",
   "settings.appearance.appIconHintLinux": "Wordt gebruikt in de starter en het dock. Het kan even duren voordat het zichtbaar is.",
+  "settings.appearance.appIconHintMobile": "Wijzigt het icoon op het startscherm. Het bijwerken kan even duren.",
+  "settings.appearance.appIconHintWindows": "Zichtbaar op de taakbalk zolang Meron actief is. Het menu Start houdt het oorspronkelijke icoon.",
   "settings.appearance.appIconLight": "Licht",
   "settings.appearance.monochromeTrayIcon": "Monochroom systeemvakpictogram",
   "settings.appearance.monochromeTrayIconHint": "Past bij de overige pictogrammen in de balk, in zwart of wit.",

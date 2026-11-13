@@ -1317,6 +1317,8 @@
   "settings.appearance.appIconDefault": "Domyślna",
   "settings.appearance.appIconHint": "Widoczna w Docku, gdy Meron jest uruchomiony. Finder zachowuje oryginalną ikonę.",
   "settings.appearance.appIconHintLinux": "Używana w programie uruchamiającym i w doku. Pulpit może potrzebować chwili, aby ją pokazać.",
+  "settings.appearance.appIconHintMobile": "Zmienia ikonę na ekranie głównym. Aktualizacja może chwilę potrwać.",
+  "settings.appearance.appIconHintWindows": "Widoczna na pasku zadań, gdy Meron jest uruchomiony. Menu Start zachowuje oryginalną ikonę.",
   "settings.appearance.appIconLight": "Jasna",
   "settings.appearance.monochromeTrayIcon": "Monochromatyczna ikona w zasobniku",
   "settings.appearance.monochromeTrayIconHint": "Pasuje do pozostałych ikon na pasku, w kolorze czarnym lub białym.",

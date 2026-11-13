@@ -1317,6 +1317,8 @@
   "settings.appearance.appIconDefault": "Varsayılan",
   "settings.appearance.appIconHint": "Meron çalışırken Dock’ta gösterilir. Finder özgün simgeyi korur.",
   "settings.appearance.appIconHintLinux": "Başlatıcıda ve dock’ta kullanılır. Masaüstünün göstermesi biraz zaman alabilir.",
+  "settings.appearance.appIconHintMobile": "Ana ekrandaki simgeyi değiştirir. Güncellenmesi biraz zaman alabilir.",
+  "settings.appearance.appIconHintWindows": "Meron çalışırken görev çubuğunda gösterilir. Başlat menüsü özgün simgeyi korur.",
   "settings.appearance.appIconLight": "Açık",
   "settings.appearance.monochromeTrayIcon": "Tek renkli sistem tepsisi simgesi",
   "settings.appearance.monochromeTrayIconHint": "Çubuktaki diğer simgelerle uyumlu olarak siyah veya beyaz görünür.",

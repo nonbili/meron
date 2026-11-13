@@ -1317,6 +1317,8 @@
   "settings.appearance.appIconDefault": "デフォルト",
   "settings.appearance.appIconHint": "Meronの実行中にDockに表示されます。Finderでは元のアイコンのままです。",
   "settings.appearance.appIconHintLinux": "ランチャーとドックに使われます。デスクトップに反映されるまで少し時間がかかることがあります。",
+  "settings.appearance.appIconHintMobile": "ホーム画面のアイコンを変更します。反映まで少し時間がかかることがあります。",
+  "settings.appearance.appIconHintWindows": "Meronの実行中にタスクバーに表示されます。スタートメニューでは元のアイコンのままです。",
   "settings.appearance.appIconLight": "ライト",
   "settings.appearance.monochromeTrayIcon": "モノクロのトレイアイコン",
   "settings.appearance.monochromeTrayIconHint": "バーの他のアイコンに合わせて黒または白で表示されます。",

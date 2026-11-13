@@ -1317,6 +1317,8 @@
   "settings.appearance.appIconDefault": "Mặc định",
   "settings.appearance.appIconHint": "Hiển thị trên Dock khi Meron đang chạy. Finder vẫn giữ biểu tượng gốc.",
   "settings.appearance.appIconHintLinux": "Dùng cho trình khởi chạy và dock. Màn hình nền có thể mất một lúc để hiển thị.",
+  "settings.appearance.appIconHintMobile": "Thay đổi biểu tượng trên màn hình chính. Có thể mất một lúc để cập nhật.",
+  "settings.appearance.appIconHintWindows": "Hiển thị trên thanh tác vụ khi Meron đang chạy. Menu Start vẫn giữ biểu tượng gốc.",
   "settings.appearance.appIconLight": "Sáng",
   "settings.appearance.monochromeTrayIcon": "Biểu tượng khay hệ thống đơn sắc",
   "settings.appearance.monochromeTrayIconHint": "Khớp với các biểu tượng khác trên thanh, màu đen hoặc trắng.",

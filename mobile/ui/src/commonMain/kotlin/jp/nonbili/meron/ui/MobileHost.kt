@@ -62,6 +62,12 @@ sealed interface ManagedTokenRefresh {
     data object TransientError : ManagedTokenRefresh
 }
 
+/** Launcher icon styles a host can offer; the same ids the desktop app uses. */
+const val APP_ICON_DEFAULT = "default"
+const val APP_ICON_BLUE = "blue"
+const val APP_ICON_LIGHT = "light"
+const val APP_ICON_DARK = "dark"
+
 /** Host-provided platform capabilities the shared UI/state needs beyond
  *  [PlatformServices]: notifications, live push, background refresh, build config,
  *  and the Android-only Google device-account OAuth. iOS supplies no-op/false
@@ -77,6 +83,18 @@ interface MobileHost {
      *  a foreground poll interval instead. */
     val supportsBackgroundPush: Boolean
         get() = true
+
+    /** Launcher icons the user can pick from, as style ids, or empty where the
+     *  platform cannot change the icon. There is no style that follows the
+     *  system appearance: a launcher icon is static, and the app is not
+     *  running when the appearance changes. */
+    val appIconStyles: List<String>
+        get() = emptyList()
+
+    /** The launcher icon in use; the platform remembers it. */
+    fun appIconStyle(): String = APP_ICON_DEFAULT
+
+    fun setAppIconStyle(style: String) {}
 
     fun syncLiveMailPush(enabled: Boolean)
 

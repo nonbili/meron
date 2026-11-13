@@ -87,7 +87,7 @@ object AndroidReminders {
                 val reminder = plan.getJSONObject(i)
                 if (reminder.getLong("at") > now) break
                 val claimed = invoke("reminders.claim", JSONObject().put("key", reminder.getString("key"))).optJSONObject("reminder") ?: continue
-                val open = PendingIntent.getActivity(context, 0, Intent(context, ComposeMainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                val open = PendingIntent.getActivity(context, 0, Intent(context, MeronActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 val kind = local.getString(if (claimed.getString("kind") == "tasks") R.string.tasks_title else R.string.calendar_title)
                 val body = listOf(kind, claimed.optString("body")).filter { it.isNotBlank() }.joinToString(" · ")
                 val notification =

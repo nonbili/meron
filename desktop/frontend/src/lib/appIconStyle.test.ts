@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { createAppIconStyleUpdater, parseAppIconStyle, type AppIconStyle } from './appIconStyle'
+import { appIconHintKey, createAppIconStyleUpdater, parseAppIconStyle, type AppIconStyle } from './appIconStyle'
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -9,6 +9,12 @@ test('unknown styles fall back to the shipped icon', () => {
   expect(parseAppIconStyle('auto')).toBe('auto')
   expect(parseAppIconStyle('neon')).toBe('default')
   expect(parseAppIconStyle(undefined)).toBe('default')
+})
+
+test('the hint names what the platform can change', () => {
+  expect(appIconHintKey('darwin')).toBe('settings.appearance.appIconHint')
+  expect(appIconHintKey('linux')).toBe('settings.appearance.appIconHintLinux')
+  expect(appIconHintKey('windows')).toBe('settings.appearance.appIconHintWindows')
 })
 
 test('quick style changes finish on the newest choice', async () => {

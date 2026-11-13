@@ -505,6 +505,9 @@ settings$.appIconStyle.onChange(({ value }) => {
 /** Whether this platform lets the app replace its icon; set at boot. */
 export const appIconStyleSupported$ = observable(false)
 
+/** The backend's platform ("darwin", "linux", "windows"), for the setting's hint. */
+export const appIconPlatform$ = observable('')
+
 // lib/shortcuts resolves chords from a local mirror, so keep it in step with the
 // persisted overrides (hydration included — onChange fires for those too).
 settings$.shortcutOverrides.onChange(({ value }) => setShortcutOverrides(value))
@@ -1135,11 +1138,12 @@ export function hydrateTrayStyle(monochrome: boolean) {
 }
 
 // Native storage owns this setting too; see hydrateTrayStyle.
-export function hydrateAppIconStyle(saved: { style?: unknown; supported?: unknown } | null) {
+export function hydrateAppIconStyle(saved: { style?: unknown; supported?: unknown; platform?: unknown } | null) {
   const previous = hydrating
   hydrating = true
   try {
     appIconStyleSupported$.set(saved?.supported === true)
+    appIconPlatform$.set(typeof saved?.platform === 'string' ? saved.platform : '')
     settings$.appIconStyle.set(parseAppIconStyle(saved?.style))
   } finally {
     hydrating = previous

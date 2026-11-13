@@ -39,7 +39,7 @@ export async function boot() {
       session: WRITE_SESSION,
     }).catch(() => ({ prefs: {} })),
     invoke<{ monochrome: boolean }>('tray.getStyle').catch(() => null),
-    invoke<{ style: string; supported: boolean }>('appIcon.getStyle').catch(() => null),
+    invoke<{ style: string; supported: boolean; platform: string }>('appIcon.getStyle').catch(() => null),
   ])
   const prefs: Record<string, unknown> = prefsResult.prefs || {}
   hydrateSettings(prefs)

@@ -50,7 +50,9 @@ type appIconState struct {
 func (a *App) appIconGetStyle() map[string]any {
 	a.appIcon.mu.Lock()
 	defer a.appIcon.mu.Unlock()
-	return map[string]any{"style": string(a.appIcon.style), "supported": appIconStyleSupported()}
+	// The platform tells the frontend which reach to describe: the Dock, the
+	// launcher or the taskbar.
+	return map[string]any{"style": string(a.appIcon.style), "supported": appIconStyleSupported(), "platform": runtime.GOOS}
 }
 
 func (a *App) appIconSetStyle(payload map[string]any) (any, error) {

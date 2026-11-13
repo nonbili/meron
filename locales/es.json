@@ -1317,6 +1317,8 @@
   "settings.appearance.appIconDefault": "Predeterminado",
   "settings.appearance.appIconHint": "Se muestra en el Dock mientras Meron está abierto. Finder conserva el icono original.",
   "settings.appearance.appIconHintLinux": "Se usa en el lanzador y en el dock. El escritorio puede tardar un momento en mostrarlo.",
+  "settings.appearance.appIconHintMobile": "Cambia el icono de la pantalla de inicio. Puede tardar un momento en actualizarse.",
+  "settings.appearance.appIconHintWindows": "Se muestra en la barra de tareas mientras Meron está abierto. El menú Inicio conserva el icono original.",
   "settings.appearance.appIconLight": "Claro",
   "settings.appearance.monochromeTrayIcon": "Icono de la bandeja monocromo",
   "settings.appearance.monochromeTrayIconHint": "Combina con los demás iconos de la barra, en negro o blanco.",

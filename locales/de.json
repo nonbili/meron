@@ -1317,6 +1317,8 @@
   "settings.appearance.appIconDefault": "Standard",
   "settings.appearance.appIconHint": "Wird im Dock angezeigt, solange Meron läuft. Der Finder behält das ursprüngliche Symbol.",
   "settings.appearance.appIconHintLinux": "Wird im Starter und im Dock verwendet. Es kann einen Moment dauern, bis es erscheint.",
+  "settings.appearance.appIconHintMobile": "Ändert das Symbol auf dem Startbildschirm. Die Aktualisierung kann einen Moment dauern.",
+  "settings.appearance.appIconHintWindows": "Wird in der Taskleiste angezeigt, solange Meron läuft. Das Startmenü behält das ursprüngliche Symbol.",
   "settings.appearance.appIconLight": "Hell",
   "settings.appearance.monochromeTrayIcon": "Einfarbiges Symbol im Infobereich",
   "settings.appearance.monochromeTrayIconHint": "Passt zu den anderen Symbolen in der Leiste, in Schwarz oder Weiß.",

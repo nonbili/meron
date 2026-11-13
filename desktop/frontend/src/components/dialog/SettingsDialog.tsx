@@ -51,6 +51,7 @@ import { accounts$, addLocalAccount, deleteAccount, isLocalAccountId, LOCAL_ACCO
 import {
   settings$,
   appIconStyleSupported$,
+  appIconPlatform$,
   clampKanbanColumnWidth,
   KANBAN_COLUMN_MAX_WIDTH,
   KANBAN_COLUMN_MIN_WIDTH,
@@ -89,7 +90,7 @@ import { pickImageFile } from '../../lib/nativeFilePicker'
 import { invoke } from '../../lib/bridge'
 import { isMac } from '../../lib/shortcuts'
 import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
-import { parseAppIconStyle } from '../../lib/appIconStyle'
+import { appIconHintKey, parseAppIconStyle } from '../../lib/appIconStyle'
 import { ALERT_MINUTES, ALL_DAY_ALERT_DAYS, NO_ALERT, alertLabel } from '../../lib/eventAlerts'
 import { McpSettingsPanel } from './McpSettingsPanel'
 import { AccountEncryptionCard } from '../crypto/AccountEncryptionCard'
@@ -839,10 +840,11 @@ function BackupRow() {
 }
 
 // Offered where the backend can replace the app's icon: the running app's on
-// macOS, the desktop entry's on Linux.
+// macOS and Windows, the desktop entry's on Linux.
 function AppIconRow() {
   const { t } = useTranslation()
   const supported = useValue(appIconStyleSupported$)
+  const platform = useValue(appIconPlatform$)
   const appIconStyle = useValue(settings$.appIconStyle)
 
   if (!supported) return null
@@ -851,7 +853,7 @@ function AppIconRow() {
     <SelectRow
       icon={<AppWindow size={15} />}
       title={t('settings.appearance.appIcon')}
-      hint={t(isMac ? 'settings.appearance.appIconHint' : 'settings.appearance.appIconHintLinux')}
+      hint={t(appIconHintKey(platform))}
       value={appIconStyle}
       options={[
         { value: 'default', label: t('settings.appearance.appIconDefault') },

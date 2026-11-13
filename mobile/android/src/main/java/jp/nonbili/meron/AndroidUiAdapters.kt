@@ -458,6 +458,14 @@ class AndroidMobileHost(
         AndroidBackgroundSyncScheduler.runOnce(activity)
     }
 
+    override val appIconStyles: List<String> = AndroidAppIcon.styles
+
+    override fun appIconStyle(): String = AndroidAppIcon.current(activity)
+
+    override fun setAppIconStyle(style: String) {
+        AndroidAppIcon.set(activity, style)
+    }
+
     override fun readDiagnosticLog(): String = AndroidSyncDiagnosticLog.read(activity)
 
     override fun shareDiagnosticLog() {

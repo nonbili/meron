@@ -1118,6 +1118,8 @@
   "settings.appearance.appIconDefault": "По умолчанию",
   "settings.appearance.appIconHint": "Виден в Dock, пока Meron запущен. В Finder остаётся исходный значок.",
   "settings.appearance.appIconHintLinux": "Используется в меню приложений и в доке. Рабочий стол может показать его не сразу.",
+  "settings.appearance.appIconHintMobile": "Меняет значок на главном экране. Обновление может занять немного времени.",
+  "settings.appearance.appIconHintWindows": "Виден на панели задач, пока Meron запущен. В меню «Пуск» остаётся исходный значок.",
   "settings.appearance.appIconLight": "Светлый",
   "settings.appearance.monochromeTrayIcon": "Одноцветный значок в трее",
   "settings.appearance.monochromeTrayIconHint": "Чёрный или белый значок в стиле остальных значков панели.",
