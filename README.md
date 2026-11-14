@@ -55,13 +55,13 @@ updater works as well and always fetches the full image.
 | --- | --- |
 | ![Unified inbox](screenshots/unified-inbox.png) | ![Kanban board](screenshots/kanban-board.png) |
 
-| Media gallery | Media grid |
+| Themes | Compose |
 | --- | --- |
-| ![Media gallery](screenshots/media-gallery.png) | ![Media grid](screenshots/media-grid.png) |
+| ![Themes](screenshots/themes.png) | ![Compose](screenshots/compose.png) |
 
-| Themes |
-| --- |
-| ![Themes](screenshots/themes.png) |
+| OpenPGP | Calendar |
+| --- | --- |
+| ![OpenPGP](screenshots/openpgp.png) | ![Calendar](screenshots/calendar.png) |
 
 ## Features
 
@@ -71,6 +71,7 @@ updater works as well and always fetches the full image.
 - IMAP/SMTP email and RSS/Atom feeds ([Exchange via DavMail](docs/exchange-davmail.md))
 - Threaded conversations with rich-text composing and media galleries
 - Easy setup with OAuth or automatic mailbox discovery
+- End-to-end OpenPGP encryption with automatic WKD and keyserver lookup
 - Encrypted local storage with credentials kept in the OS keyring
 - Optional local desktop MCP access for AI clients, with per-client account permissions
 - Themes and 20+ languages
