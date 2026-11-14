@@ -245,7 +245,7 @@ func (a *App) threadList(payload map[string]any) (any, error) {
 		return map[string]any{"threads": []Message{}}, nil
 	}
 	if req.Filter == "starred" {
-		a.logf("threadList starred: account=%s folder=%s query=%q refresh=%t", req.AccountID, req.FolderID, req.Query, req.Refresh)
+		a.logf("threadList starred: account=%s folder=%s query=%t refresh=%t", req.AccountID, req.FolderID, req.Query != "", req.Refresh)
 	}
 	method := "messages.recent"
 	// The unified fan-out resolves a *role* per account, not a folder id. The

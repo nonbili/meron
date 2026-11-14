@@ -148,7 +148,7 @@ func (a *App) Startup(ctx context.Context) {
 	}
 	a.startTray()
 	a.logf("startup: core path=%s", coreBinaryPath())
-	a.sidecar = NewSidecar(coreBinaryPath(), a.logWriter())
+	a.sidecar = NewSidecar(coreBinaryPath(), a.coreLogWriter())
 	a.sidecar.onEvent = a.handleSidecarEvent
 	if err := a.sidecar.Start(ctx); err != nil {
 		a.setCoreError(fmt.Sprintf("core failed to start: %v (path: %s)", err, coreBinaryPath()))
@@ -214,9 +214,24 @@ func (a *App) Shutdown(ctx context.Context) {
 	}
 }
 
-// quietCommands succeed without a log line: frequent UI updates would drown
-// out everything else in the log.
-var quietCommands = map[string]bool{"window.resized": true, "threadWindow.updateComposer": true}
+// quietCommands are frequent reads and UI updates (the folder list alone is
+// refreshed per account every minute). They are logged only when they fail or
+// take longer than slowInvoke; otherwise they would drown out everything else.
+var quietCommands = map[string]bool{
+	"window.resized":              true,
+	"threadWindow.updateComposer": true,
+	"window.chrome":               true,
+	"mail.folderList":             true,
+	"mail.threadList":             true,
+	"mail.threadRead":             true,
+	"avatar.resolve":              true,
+	"tray.setUnread":              true,
+	"pgp.keys.forRecipients":      true,
+	"app.prefsGet":                true,
+}
+
+// slowInvoke is how long a quiet command may take before it is logged anyway.
+const slowInvoke = time.Second
 
 func (a *App) Invoke(command string, payload map[string]any) (result any, err error) {
 	start := time.Now()
@@ -233,13 +248,14 @@ func (a *App) Invoke(command string, payload map[string]any) (result any, err er
 	if err == nil && notifyReconcileCommands[command] {
 		a.requestNotificationReconcile()
 	}
-	if err == nil && quietCommands[command] {
+	elapsed := time.Since(start)
+	if err == nil && quietCommands[command] && elapsed < slowInvoke {
 		return result, nil
 	}
 	if err != nil {
-		a.logf("invoke %s failed after %s: %v", command, time.Since(start).Round(time.Millisecond), err)
+		a.logf("invoke %s failed after %s: %v", command, elapsed.Round(time.Millisecond), err)
 	} else {
-		a.logf("invoke %s ok after %s", command, time.Since(start).Round(time.Millisecond))
+		a.logf("invoke %s ok after %s", command, elapsed.Round(time.Millisecond))
 	}
 	return result, err
 }

@@ -38,6 +38,7 @@ import {
   replySubject,
 } from './composeReply'
 import { mayQuoteInto, ownSentCrypto } from '../lib/crypto'
+import { fitImageSize, imageSize } from '../lib/imageSize'
 import { allocateMessageIdentity, compose$, newDraftMessageId } from './composeState'
 import {
   cancelQuickReplyDraftSave,
@@ -77,14 +78,25 @@ function prepareConversationAttachments(attachments: ComposerAttachment[]) {
   return { attachments: prepared, hasInlineImages }
 }
 
-function conversationHtmlBody(text: string, attachments: ComposerAttachment[]): string {
+// Quick reply has no resize handle, so each image is sized here: recipients like
+// Gmail otherwise show a phone screenshot at its full pixel size.
+const QUICK_REPLY_IMAGE_BOX = { width: 600, height: 480 }
+
+function inlineImageTag(image: ComposerAttachment): string {
+  const src = `cid:${escapeHtml(image.inlineId ?? '')}`
+  const alt = escapeHtml(image.filename)
+  const natural = imageSize(image.data)
+  if (!natural) return `<img src="${src}" alt="${alt}" style="max-width:100%;height:auto">`
+  const { width, height } = fitImageSize(natural, QUICK_REPLY_IMAGE_BOX)
+  return `<img src="${src}" alt="${alt}" width="${width}" height="${height}" style="max-width:100%;height:auto">`
+}
+
+export function conversationHtmlBody(text: string, attachments: ComposerAttachment[]): string {
   const images = attachments.filter((a) => a.inlineId && a.mime.toLowerCase().startsWith('image/'))
   if (images.length === 0) return ''
   const body = textToHtml(text)
-  const imageHtml = images
-    .map((image) => `<p><img src="cid:${escapeHtml(image.inlineId ?? '')}" alt="${escapeHtml(image.filename)}"></p>`)
-    .join('')
-  return `${body}${imageHtml}`
+  // One paragraph for all images, so readers lay them side by side when they fit.
+  return `${body}<p>${images.map(inlineImageTag).join(' ')}</p>`
 }
 
 export async function sendReply() {

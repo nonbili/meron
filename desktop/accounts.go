@@ -302,7 +302,7 @@ func (a *App) accountSetName(payload map[string]any) (any, error) {
 	if _, err := a.sidecar.Call("account.setName", map[string]any{"account": id, "name": name}); err != nil {
 		return nil, err
 	}
-	a.logf("account.setName: account=%s name=%s", id, name)
+	a.logf("account.setName: account=%s", id)
 	return map[string]any{"ok": true}, nil
 }
 
@@ -321,7 +321,7 @@ func (a *App) accountSetSenderName(payload map[string]any) (any, error) {
 	if _, err := a.sidecar.Call("account.setSenderName", map[string]any{"account": id, "name": name}); err != nil {
 		return nil, err
 	}
-	a.logf("account.setSenderName: account=%s name=%s", id, name)
+	a.logf("account.setSenderName: account=%s", id)
 	return map[string]any{"ok": true}, nil
 }
 

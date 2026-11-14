@@ -234,9 +234,11 @@ async fn write_line(out: &Writer, value: Value) {
     let flush_result = guard.flush().await;
     let flush_time = flush_started.elapsed();
     drop(guard);
-    if started.elapsed().as_millis() >= 100 {
-        eprintln!(
-            "meron-core: response timing: id={id:?} event={event} bytes={} serialize_ms={} output_lock_wait_ms={} write_ms={} flush_ms={} total_ms={} failed={}",
+    if let Some(level) = meron_core::log::slow_level(started.elapsed()) {
+        meron_core::mlog!(
+            level,
+            "response.timing",
+            "id={id:?} event={event} bytes={} serialize_ms={} output_lock_wait_ms={} write_ms={} flush_ms={} total_ms={} failed={}",
             line.len(),
             serialized.as_millis(),
             lock_wait.as_millis(),

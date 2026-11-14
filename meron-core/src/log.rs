@@ -42,9 +42,9 @@ impl Drop for TimedDbGuard<'_> {
     fn drop(&mut self) {
         let held = self.acquired.elapsed();
         drop(self.guard.take());
-        if held.as_millis() >= 100 || self.wait.as_millis() >= 100 {
+        if let Some(level) = slow_level(held.max(self.wait)) {
             crate::mlog!(
-                Level::Warn,
+                level,
                 "db.timing",
                 "operation={} lock_wait_ms={} held_ms={}",
                 self.operation,
@@ -79,13 +79,24 @@ type Sink = Box<dyn Fn(Level, &str, &str) + Send + Sync>;
 /// Process-global log sink. `None` falls back to stderr.
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);
 
+/// Level for a timing diagnostic: none under 100ms, Debug (development builds
+/// only) up to a second, Warn past that, where a user would notice the delay.
+pub fn slow_level(elapsed: std::time::Duration) -> Option<Level> {
+    match elapsed.as_millis() {
+        0..100 => None,
+        100..1000 => Some(Level::Debug),
+        _ => Some(Level::Warn),
+    }
+}
+
 /// Whether a record at [level] should be produced by this binary.
 ///
-/// Debug builds keep verbose diagnostics. Release builds keep warnings and
-/// errors only, so mobile does not spend work formatting and forwarding routine
-/// trace data across FFI.
+/// Debug builds keep verbose diagnostics. Release builds drop Debug, so mobile
+/// does not spend work formatting and forwarding routine trace data across FFI,
+/// but keep Info: the low-volume lifecycle records (a mail watcher connecting,
+/// new mail arriving) a sync problem can only be diagnosed from after the fact.
 pub fn enabled(level: Level) -> bool {
-    cfg!(debug_assertions) || matches!(level, Level::Warn | Level::Error)
+    cfg!(debug_assertions) || !matches!(level, Level::Debug)
 }
 
 /// Install the log sink (replaces any previous one). Mobile hosts call this on
@@ -158,10 +169,19 @@ mod tests {
     use super::{Level, enabled};
 
     #[test]
-    fn release_policy_keeps_only_warning_and_error() {
+    fn release_policy_drops_only_debug() {
         assert_eq!(enabled(Level::Debug), cfg!(debug_assertions));
-        assert_eq!(enabled(Level::Info), cfg!(debug_assertions));
+        assert!(enabled(Level::Info));
         assert!(enabled(Level::Warn));
         assert!(enabled(Level::Error));
+    }
+
+    #[test]
+    fn timing_is_only_a_warning_once_a_user_would_notice() {
+        use super::slow_level;
+        use std::time::Duration;
+        assert_eq!(slow_level(Duration::from_millis(99)), None);
+        assert_eq!(slow_level(Duration::from_millis(700)), Some(Level::Debug));
+        assert_eq!(slow_level(Duration::from_millis(1000)), Some(Level::Warn));
     }
 }

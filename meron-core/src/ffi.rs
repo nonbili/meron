@@ -460,6 +460,20 @@ fn sync_mobile_folder(data_dir: &str, account: &str, folder: &str) -> Result<Val
 /// Tell listeners what a sync found: the arrivals, or just that it ran.
 fn emit_mobile_sync_result(account: &str, folder: &str, sync: &Value) {
     if let Some(detail) = sync.get("new_messages").filter(|value| value.is_object()) {
+        // Message numbers only: the detail also carries senders and subjects.
+        let uids: Vec<u64> = detail
+            .get("messages")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|message| message.get("uid").and_then(Value::as_u64))
+            .collect();
+        let count = detail.get("count").and_then(Value::as_u64).unwrap_or(0);
+        crate::mlog!(
+            crate::log::Level::Info,
+            "mail.arrivals",
+            "{account}/{folder}: {count} new, uids={uids:?}"
+        );
         emit_event("mail.newMessages", detail.clone());
     } else {
         let synced = sync.get("synced").and_then(Value::as_u64).unwrap_or(0);
@@ -1151,25 +1165,71 @@ async fn mobile_idle_once(
     }
     let mut session = engine.connect(account, &creds).await?;
     session.select(folder).await?;
+    crate::mlog!(
+        crate::log::Level::Info,
+        "idle",
+        "{account}/{folder}: connected"
+    );
     mobile_sync_and_notify(data_dir, account, folder).await?;
+
+    // Updates sent outside the IDLE wait are only queued here; see imap::idle.
+    // What SELECT and the catch-up sync covered is already stale.
+    let unsolicited = session.unsolicited_responses.clone();
+    crate::imap::idle::drain_mailbox_changes(&unsolicited);
 
     while !stop.load(Ordering::SeqCst) {
         let mut handle = session.idle();
         handle.init().await?;
-        let response = {
-            let (idle_fut, _stop) = handle.wait_with_timeout(Duration::from_secs(15 * 60));
-            tokio::select! {
+        // A change announced while IDLE was starting needs no wait.
+        let pushed = crate::imap::idle::drain_mailbox_changes(&unsolicited)
+            || tokio::select! {
                 biased;
                 // Stopped: give the connection back now, without waiting for
                 // DONE. A quiet mailbox would otherwise hold it until the IDLE
                 // timeout, alongside whatever watch replaced this one.
                 _ = wait_for_mobile_watch_stop(stop) => return Ok(()),
-                response = idle_fut => response,
-            }
-        };
+                pushed = crate::imap::idle::wait_for_push(&mut handle, crate::imap::idle::IDLE_CYCLE) => pushed?,
+            };
         session = handle.done().await?;
-        if let async_imap::extensions::idle::IdleResponse::NewData(_) = response? {
+        // Drain even after a push, so a change queued with it is not taken
+        // for a fresh one next cycle.
+        let announced = crate::imap::idle::drain_mailbox_changes(&unsolicited);
+        if pushed || announced {
+            let how = if pushed {
+                "push"
+            } else {
+                "update outside IDLE"
+            };
+            crate::mlog!(
+                crate::log::Level::Info,
+                "idle",
+                "{account}/{folder}: woken by {how}"
+            );
             mobile_sync_and_notify(data_dir, account, folder).await?;
+        } else {
+            // Ask the server directly whether it skipped announcing mail.
+            let known = mobile_db(data_dir)
+                .ok()
+                .and_then(|conn| crate::store::get_folder_state(&conn, account, folder).ok())
+                .flatten();
+            let check = crate::imap::idle::missed_arrivals(&mut session, folder, known);
+            if tokio::time::timeout(Duration::from_secs(30), check)
+                .await
+                .map_err(|_| anyhow::anyhow!("missed-mail check timed out"))??
+            {
+                crate::mlog!(
+                    crate::log::Level::Info,
+                    "idle",
+                    "{account}/{folder}: found a change IDLE never announced"
+                );
+                mobile_sync_and_notify(data_dir, account, folder).await?;
+            } else {
+                crate::mlog!(
+                    crate::log::Level::Debug,
+                    "idle",
+                    "{account}/{folder}: cycle ended quietly"
+                );
+            }
         }
     }
     Ok(())

@@ -5,11 +5,16 @@ use std::time::Duration;
 
 use meron_core::engine::Engine;
 use meron_core::engine::*;
+use meron_core::log::Level;
 use meron_core::{imap, mail_model, parse, store};
 
 use crate::{Writer, emit};
 
 pub(crate) const IDLE_LIMIT: u32 = 50;
+
+/// How long the end-of-cycle check for unannounced mail may take before the
+/// connection is treated as dead and the watcher reconnects.
+const MISSED_CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Longest a notification waits on the body fetch its snippets need. Past this
 /// the event goes out with whatever bodies are cached: a late notification is
@@ -192,6 +197,7 @@ pub(crate) async fn idle_watch(engine: Arc<Engine>, out: Writer, account: String
             }
         }
     }
+    meron_core::mlog!(Level::Info, "idle", "{account}/{folder}: stopped");
     emit(
         &out,
         "watch.stopped",
@@ -312,6 +318,15 @@ pub(crate) async fn sync_and_notify(
     let synced = sync_messages(engine, account, folder, IDLE_LIMIT).await?;
 
     let arrivals = (!synced.arrivals.is_empty()).then_some(synced.arrivals);
+    if let Some(headers) = &arrivals {
+        let uids: Vec<u32> = headers.iter().map(|header| header.uid).collect();
+        meron_core::mlog!(
+            Level::Info,
+            "mail.arrivals",
+            "{account}/{folder}: {} new, uids={uids:?}",
+            uids.len()
+        );
+    }
 
     if let Some(headers) = arrivals {
         // Building the detail fetches the arrivals' own bodies (the notification
@@ -356,6 +371,7 @@ pub(crate) async fn idle_once(
             Ok::<_, anyhow::Error>(session)
         } => result?,
     };
+    meron_core::mlog!(Level::Info, "idle", "{account}/{folder}: connected");
 
     // Catch up before parking in IDLE: the server only pushes notifications for
     // mail that arrives *after* IDLE begins, so anything delivered while we were
@@ -367,29 +383,71 @@ pub(crate) async fn idle_once(
     // an incomplete JSON line on stdout while emit is writing it.
     sync_and_notify(engine, out, account, folder).await?;
 
+    // Mailbox updates the server sends outside the IDLE wait — before IDLE's
+    // continuation, or alongside the DONE that ends each 15-minute cycle — are
+    // queued here by async-imap, not returned as NewData. Mail that lands in
+    // that window is only ever announced there, so it must be read, or the
+    // arrival waits for some later push. What SELECT and the catch-up sync
+    // covered is already stale.
+    let unsolicited = session.unsolicited_responses.clone();
+    imap::idle::drain_mailbox_changes(&unsolicited);
+
     loop {
         // Only cancel socket work. Checking persistent stop state here also
         // catches stops received during the preceding sync or event write.
         // Unrelated pause signals leave this connection in IDLE.
-        let (next_session, response) = tokio::select! {
+        let (next_session, pushed) = tokio::select! {
             biased;
             _ = wait_for_watch_stop(engine, account, &key) => return Ok(()),
             // Drop a socket held across suspend without waiting for DONE.
-            _ = engine.resume_signal.notified() => return Ok(()),
+            _ = engine.resume_signal.notified() => {
+                meron_core::mlog!(Level::Info, "idle", "{account}/{folder}: reconnecting after resume");
+                return Ok(());
+            }
             result = async {
                 let mut handle = session.idle();
                 handle.init().await.context("IDLE init")?;
-                let response = {
-                    let (idle_fut, _stop) = handle.wait_with_timeout(Duration::from_secs(15 * 60));
-                    idle_fut.await.context("IDLE")?
-                };
+                // A change announced while IDLE was starting needs no wait.
+                let pushed = imap::idle::drain_mailbox_changes(&unsolicited)
+                    || imap::idle::wait_for_push(&mut handle, imap::idle::IDLE_CYCLE).await?;
                 let session = handle.done().await.context("IDLE done")?;
-                Ok::<_, anyhow::Error>((session, response))
+                Ok::<_, anyhow::Error>((session, pushed))
             } => result?,
         };
         session = next_session;
-        if let async_imap::extensions::idle::IdleResponse::NewData(_) = response {
+        // Drain even after a push, so a change queued with it is not taken
+        // for a fresh one next cycle.
+        let announced = imap::idle::drain_mailbox_changes(&unsolicited);
+        if pushed || announced {
+            let how = if pushed {
+                "push"
+            } else {
+                "update outside IDLE"
+            };
+            meron_core::mlog!(Level::Info, "idle", "{account}/{folder}: woken by {how}");
             sync_and_notify(engine, out, account, folder).await?;
+        } else {
+            let known = store::get_folder_state(&engine.db.lock().unwrap(), account, folder)
+                .ok()
+                .flatten();
+            let check = imap::idle::missed_arrivals(&mut session, folder, known);
+            if tokio::time::timeout(MISSED_CHECK_TIMEOUT, check)
+                .await
+                .context("missed-mail check timed out")??
+            {
+                meron_core::mlog!(
+                    Level::Info,
+                    "idle",
+                    "{account}/{folder}: found a change IDLE never announced"
+                );
+                sync_and_notify(engine, out, account, folder).await?;
+            } else {
+                meron_core::mlog!(
+                    Level::Debug,
+                    "idle",
+                    "{account}/{folder}: cycle ended quietly"
+                );
+            }
         }
     }
 }

@@ -48,8 +48,26 @@ func redactLogEmails(text string) string {
 	})
 }
 
-// appLogTail returns the newest maxLogViewLines of meron.log with email
-// addresses redacted, ready to show in the Settings log viewer or export.
+// redactLogHome replaces the user's home directory with "~": paths to the
+// config, cache and chosen import files otherwise carry the OS username.
+func redactLogHome(text, home string) string {
+	home = strings.TrimRight(home, `/\`)
+	if len(home) < 2 {
+		return text
+	}
+	return strings.ReplaceAll(text, home, "~")
+}
+
+// redactLog removes the personal details that reach the log through account
+// ids and file paths. Logging code keeps names, subjects, search text and
+// message content out of the log in the first place.
+func redactLog(text string) string {
+	home, _ := os.UserHomeDir()
+	return redactLogEmails(redactLogHome(text, home))
+}
+
+// appLogTail returns the newest maxLogViewLines of meron.log with personal
+// details redacted, ready to show in the Settings log viewer or export.
 func appLogTail() (string, error) {
 	data, err := os.ReadFile(filepath.Join(appConfigDir(), "meron.log"))
 	if err != nil {
@@ -62,7 +80,7 @@ func appLogTail() (string, error) {
 	if len(lines) > maxLogViewLines {
 		lines = lines[len(lines)-maxLogViewLines:]
 	}
-	return redactLogEmails(strings.Join(lines, "\n")), nil
+	return redactLog(strings.Join(lines, "\n")), nil
 }
 
 func (a *App) logRead() (any, error) {
@@ -119,8 +137,8 @@ func (a *App) logExport() (any, error) {
 	if dest == "" {
 		return map[string]any{"saved": false}, nil // user cancelled
 	}
-	disclosure := "Account emails below are masked to only the first letter and domain (e.g. j***@gmail.com).\n" +
-		"Review before sharing.\n\n"
+	disclosure := "Account emails below are masked to only the first letter and domain (e.g. j***@gmail.com),\n" +
+		"and your home folder is shown as ~. Review before sharing.\n\n"
 	if err := os.WriteFile(dest, []byte(disclosure+tail), 0o644); err != nil {
 		return nil, fmt.Errorf("write log: %w", err)
 	}

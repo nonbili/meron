@@ -1013,9 +1013,9 @@ async fn sync_messages_with_policy(
     let state_time = phase_started.elapsed();
     let total = persist_started.elapsed();
     drop(db);
-    if total.as_millis() >= 100 {
+    if let Some(level) = crate::log::slow_level(total) {
         crate::mlog!(
-            crate::log::Level::Warn,
+            level,
             "sync.persist.timing",
             "account={account} folder={folder:?} fetched={count} server_uids={} pruned={pruned} flag_changes={flag_count} clear_ms={} upsert_ms={} ensure_ms={} prune_ms={} flags_ms={} state_ms={} total_ms={}",
             server_uids.as_ref().map_or(0, |uids| uids.len()),

@@ -7,6 +7,8 @@
 //! when no live session is available. IMAP IDLE watchers hold their own
 //! dedicated long-lived connections, separate from that pool.
 
+pub mod idle;
+
 use anyhow::{Context, Result, anyhow};
 use futures::StreamExt;
 use mailparse::MailHeaderMap;

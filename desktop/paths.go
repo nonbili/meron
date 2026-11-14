@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
 
 func decode(payload map[string]any, out any) error {
@@ -255,6 +257,59 @@ func (a *App) logWriter() io.Writer {
 		return os.Stderr
 	}
 	return logSinks{os.Stderr, a.logFile}
+}
+
+// coreLogWriter timestamps each line the core writes to stderr, in the same
+// format as the app's own log lines, so the two can be read in order.
+func (a *App) coreLogWriter() io.Writer {
+	return newTimestampLines(a.logWriter(), time.Now)
+}
+
+// timestampLines prefixes every complete line written through it with the
+// time it completed. A partial line waits for its newline, up to
+// maxPendingLine bytes, so a write split mid-line keeps a single stamp.
+type timestampLines struct {
+	mu      sync.Mutex
+	out     io.Writer
+	now     func() time.Time
+	pending []byte
+}
+
+const maxPendingLine = 64 << 10
+
+func newTimestampLines(out io.Writer, now func() time.Time) *timestampLines {
+	return &timestampLines{out: out, now: now}
+}
+
+func (w *timestampLines) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.pending = append(w.pending, p...)
+	var out []byte
+	for {
+		i := bytes.IndexByte(w.pending, '\n')
+		if i < 0 {
+			if len(w.pending) < maxPendingLine {
+				break
+			}
+			i = len(w.pending) - 1
+		}
+		out = w.now().AppendFormat(out, "2006/01/02 15:04:05.000000 ")
+		out = append(out, w.pending[:i+1]...)
+		if w.pending[i] != '\n' {
+			out = append(out, '\n')
+		}
+		w.pending = w.pending[i+1:]
+	}
+	if len(w.pending) == 0 {
+		w.pending = nil
+	}
+	if len(out) > 0 {
+		if _, err := w.out.Write(out); err != nil {
+			return 0, err
+		}
+	}
+	return len(p), nil
 }
 
 func (a *App) logf(format string, args ...any) {

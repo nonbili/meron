@@ -53,7 +53,7 @@ import {
   quickReplyOutgoingText,
   withoutHydratedQuickReplyDraft,
 } from './quickReply'
-import { retrySend, sendReply } from './quickReplySend'
+import { conversationHtmlBody, retrySend, sendReply } from './quickReplySend'
 import { accounts$ } from './accounts'
 import { settings$ } from './settings'
 import { ui$ } from './ui'
@@ -5353,6 +5353,40 @@ describe('textToHtml', () => {
   it('leaves non-URLs as escaped text', () => {
     expect(textToHtml('https:// and www.nodot and me@www.example.com <b>')).toBe(
       '<p>https:// and www.nodot and me@www.example.com &lt;b&gt;</p>',
+    )
+  })
+})
+
+describe('quick reply inline images', () => {
+  // A 37x21 PNG, and a 898x2014 phone screenshot header (only IHDR is read).
+  const small =
+    'iVBORw0KGgoAAAANSUhEUgAAACUAAAAVAQMAAAD7KrXtAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAADUExURf8AABniCTcAAAAHdElNRQfqCw4MOS9AS53hAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTExLTE0VDEyOjU3OjQ3KzAwOjAwsErT2gAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0xMS0xNFQxMjo1Nzo0NyswMDowMMEXa2YAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMTEtMTRUMTI6NTc6NDcrMDA6MDCWAkq5AAAADElEQVQI12NgGEgAAAB+AAH9tTdSAAAAAElFTkSuQmCC'
+  const tallBytes = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0x03, 0x82, 0, 0, 0x07,
+    0xde,
+  ])
+  const tall = btoa(String.fromCharCode(...tallBytes))
+  const image = (inlineId: string, data: string) => ({
+    id: inlineId,
+    filename: `${inlineId}.png`,
+    mime: 'image/png',
+    size: data.length,
+    data,
+    inlineId,
+  })
+
+  it('puts every image in one paragraph, sized to fit without enlarging', () => {
+    expect(conversationHtmlBody('hi', [image('a', tall), image('b', small)])).toBe(
+      '<p>hi</p><p>' +
+        '<img src="cid:a" alt="a.png" width="214" height="480" style="max-width:100%;height:auto"> ' +
+        '<img src="cid:b" alt="b.png" width="37" height="21" style="max-width:100%;height:auto">' +
+        '</p>',
+    )
+  })
+
+  it('leaves an image of unknown size unsized', () => {
+    expect(conversationHtmlBody('hi', [image('c', btoa('????'))])).toBe(
+      '<p>hi</p><p><img src="cid:c" alt="c.png" style="max-width:100%;height:auto"></p>',
     )
   })
 })
