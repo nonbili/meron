@@ -4,6 +4,7 @@ import { downloadAttachment, openAttachment } from '../../states/mail'
 import { thread$ } from '../../states/thread'
 import type { Message } from '../../types'
 import { InviteCard } from './InviteCard'
+import { VerificationCodeCard } from './VerificationCodeCard'
 import { fileIconFor, formatFileSize, mediaSrc } from './messageHelpers'
 import { MessageBubbleBody } from './MessageBubbleBody'
 import { RetryWhenRestored } from './RetryWhenRestored'
@@ -133,6 +134,9 @@ export function MessageContent({
 
       {/* A calendar invitation's event, with its RSVP buttons */}
       {message.invite && <InviteCard message={message} invite={message.invite} />}
+
+      {/* A verification mail's one-time code, ready to copy */}
+      {message.verification_code && !message.outgoing && <VerificationCodeCard code={message.verification_code} />}
 
       <MessageBubbleBody
         message={message}

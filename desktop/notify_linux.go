@@ -57,6 +57,8 @@ type notificationTarget struct {
 
 type fdoNotificationTarget struct {
 	target notificationTarget
+	// The one-time code its "copy code" button puts on the clipboard.
+	code string
 	// Signals received before the Notify reply belong to an older use of the
 	// same server-generated id, even if their handlers run after this entry is
 	// installed.
@@ -118,11 +120,15 @@ func (a *App) setupNotificationListener() {
 				}
 				switch signal.Name {
 				case portalNotificationAction:
-					if target, ok := portalNotificationTarget(signal.Body); ok {
+					if code, ok := portalNotificationCode(signal.Body); ok {
+						a.copyNotificationCode(code)
+					} else if target, ok := portalNotificationTarget(signal.Body); ok {
 						a.openThreadFromNotification(target.Account, target.ThreadID)
 					}
 				case fdoNotificationAction:
-					if target, ok := takeFdoNotificationTarget(signal.Body, signal.Sequence); ok && target.ThreadID != "" {
+					if code, ok := fdoNotificationCode(signal.Body, signal.Sequence); ok {
+						a.copyNotificationCode(code)
+					} else if target, ok := takeFdoNotificationTarget(signal.Body, signal.Sequence); ok && target.ThreadID != "" {
 						a.openThreadFromNotification(target.Account, target.ThreadID)
 					}
 				case fdoNotificationClosed:
@@ -265,6 +271,9 @@ func (a *App) notifyFreedesktop(conn *dbus.Conn, n notification) (bool, uint32) 
 	if n.account != "" && n.threadID != "" {
 		actions = []string{fdoNotificationDefaultAction, "Open"}
 	}
+	if n.code != "" {
+		actions = append(actions, fdoNotificationCopyAction, n.copyLabel)
+	}
 	hints := map[string]dbus.Variant{
 		// Attributes the notification to the installed desktop entry, which is
 		// what the shell keys its per-app icon and notification settings off.
@@ -298,10 +307,37 @@ func (a *App) notifyFreedesktop(conn *dbus.Conn, n notification) (bool, uint32) 
 	notificationMu.Lock()
 	fdoNotificationTargets[id] = fdoNotificationTarget{
 		target:           notificationTarget{Account: n.account, ThreadID: n.threadID},
+		code:             n.code,
 		responseSequence: call.ResponseSequence,
 	}
 	notificationMu.Unlock()
 	return true, id
+}
+
+// fdoNotificationCopyAction is the action key of the "copy code" button.
+const fdoNotificationCopyAction = "copy-code"
+
+// fdoNotificationCode resolves an ActionInvoked signal for the "copy code"
+// button to the code. The entry stays: the server closes the notification
+// after an action, and NotificationClosed drops it then.
+func fdoNotificationCode(body []any, sequence dbus.Sequence) (string, bool) {
+	if len(body) < 2 {
+		return "", false
+	}
+	id, ok := body[0].(uint32)
+	if !ok {
+		return "", false
+	}
+	if action, ok := body[1].(string); !ok || action != fdoNotificationCopyAction {
+		return "", false
+	}
+	notificationMu.Lock()
+	defer notificationMu.Unlock()
+	entry, known := fdoNotificationTargets[id]
+	if !known || sequence <= entry.responseSequence || entry.code == "" {
+		return "", false
+	}
+	return entry.code, true
 }
 
 // linuxDesktopEntry is the basename of this build's installed .desktop file.
@@ -381,6 +417,16 @@ func portalNotificationOptions(n notification) map[string]dbus.Variant {
 		}),
 	}
 
+	// Unlike the freedesktop service, the portal hands a button's target back
+	// with the signal, so the code travels with the notification.
+	if n.code != "" {
+		options["buttons"] = dbus.MakeVariant([]map[string]dbus.Variant{{
+			"label":  dbus.MakeVariant(n.copyLabel),
+			"action": dbus.MakeVariant(portalNotificationCopyAction),
+			"target": dbus.MakeVariant(n.code),
+		}})
+	}
+
 	if n.account == "" || n.threadID == "" {
 		return options
 	}
@@ -394,6 +440,25 @@ func portalNotificationOptions(n notification) map[string]dbus.Variant {
 	options["default-action"] = dbus.MakeVariant(portalNotificationOpenAction)
 	options["default-action-target"] = dbus.MakeVariant(string(target))
 	return options
+}
+
+// portalNotificationCopyAction is the action name of the "copy code" button.
+const portalNotificationCopyAction = "copy-code"
+
+// portalNotificationCode reads the code off a "copy code" button's signal.
+func portalNotificationCode(body []any) (string, bool) {
+	if len(body) < 3 {
+		return "", false
+	}
+	if action, ok := body[1].(string); !ok || action != portalNotificationCopyAction {
+		return "", false
+	}
+	parameters, ok := body[2].([]dbus.Variant)
+	if !ok || len(parameters) == 0 {
+		return "", false
+	}
+	code, ok := parameters[0].Value().(string)
+	return code, ok && code != ""
 }
 
 func portalNotificationTarget(body []any) (notificationTarget, bool) {

@@ -713,6 +713,13 @@ internal fun ColumnScope.MessageBodyContent(
             modifier = Modifier.padding(horizontal = chromeInset).padding(bottom = 6.dp),
         )
     }
+    if (message.verificationCode.isNotEmpty() && !message.outgoing) {
+        VerificationCodeCard(
+            code = message.verificationCode,
+            textColor = textColor,
+            modifier = Modifier.padding(horizontal = chromeInset).padding(bottom = 6.dp),
+        )
+    }
     val htmlBody = usesHtmlBody(message, preferHtml, searchQuery)
     val standaloneAttachmentsForMessage = standaloneAttachments(message)
     val (imageAttachments, otherAttachments) =

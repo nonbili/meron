@@ -31,6 +31,9 @@ const val ACTION_ARCHIVE = "jp.nonbili.meron.action.ARCHIVE"
 const val ACTION_DELETE = "jp.nonbili.meron.action.DELETE"
 const val ACTION_MARK_READ = "jp.nonbili.meron.action.MARK_READ"
 
+/** Copies a verification mail's one-time code; touches no mail. */
+const val ACTION_COPY_CODE = "jp.nonbili.meron.action.COPY_CODE"
+
 /** Undoes an archive or a delete alike: both are moves, reversed the same way.
  *  The intent string predates Delete and stays as it was, so an undo row
  *  already in the shade across an update still resolves. */
@@ -39,6 +42,7 @@ const val ACTION_UNDO_MOVE = "jp.nonbili.meron.action.UNDO_ARCHIVE"
 private const val EXTRA_NOTIFICATION_ID = "jp.nonbili.meron.extra.NOTIFICATION_ID"
 private const val EXTRA_ACCOUNT_NAME = "jp.nonbili.meron.extra.ACCOUNT_NAME"
 private const val EXTRA_TITLE = "jp.nonbili.meron.extra.TITLE"
+private const val EXTRA_CODE = "jp.nonbili.meron.extra.CODE"
 
 private const val KEY_ACTION = "action"
 private const val KEY_ACCOUNT_ID = "accountId"
@@ -63,6 +67,10 @@ class AndroidNotificationActionReceiver : BroadcastReceiver() {
         intent: Intent,
     ) {
         val action = intent.action ?: return
+        if (action == ACTION_COPY_CODE) {
+            copyCode(context, intent.getStringExtra(EXTRA_CODE).orEmpty())
+            return
+        }
         val accountId = intent.getStringExtra(AndroidNotificationService.EXTRA_ACCOUNT_ID).orEmpty()
         val folder = intent.getStringExtra(AndroidNotificationService.EXTRA_FOLDER).orEmpty()
         val threadKey = intent.getStringExtra(AndroidNotificationService.EXTRA_THREAD_KEY).orEmpty()
@@ -424,6 +432,52 @@ internal fun notificationActionIntent(
         intent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
+}
+
+/** Puts a one-time code on the clipboard. The notification stays: the mail is
+ *  still unread, and the code may be wanted again. */
+private fun copyCode(
+    context: Context,
+    code: String,
+) {
+    if (code.isEmpty()) return
+    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java) ?: return
+    val clip = android.content.ClipData.newPlainText(context.getString(R.string.notification_action_copy_code), code)
+    // Keeps the code out of the clipboard preview and of keyboards' history.
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        clip.description.extras =
+            android.os.PersistableBundle().apply { putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true) }
+    }
+    clipboard.setPrimaryClip(clip)
+    // Android 13 and later confirm a copy themselves.
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+        android.widget.Toast
+            .makeText(context, R.string.notification_code_copied, android.widget.Toast.LENGTH_SHORT)
+            .show()
+    }
+}
+
+internal fun copyCodeAction(
+    context: Context,
+    code: String,
+    notificationId: Int,
+): NotificationCompat.Action {
+    val intent =
+        Intent(context, AndroidNotificationActionReceiver::class.java).apply {
+            action = ACTION_COPY_CODE
+            putExtra(EXTRA_CODE, code)
+        }
+    val pending =
+        PendingIntent.getBroadcast(
+            context,
+            "$ACTION_COPY_CODE|$notificationId".hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    return NotificationCompat
+        .Action
+        .Builder(R.drawable.ic_action_copy, context.getString(R.string.notification_action_copy_code), pending)
+        .build()
 }
 
 internal fun archiveAction(

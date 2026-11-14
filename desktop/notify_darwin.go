@@ -9,7 +9,7 @@ package main
 #include <stdlib.h>
 
 void setupNotificationDelegate();
-void deliverUserNotification(char *title, char *body, char *account, char *threadID, char *identifier);
+void deliverUserNotification(char *title, char *body, char *account, char *threadID, char *identifier, char *code, char *copyLabel);
 void removeUserNotification(char *identifier);
 */
 import "C"
@@ -35,6 +35,16 @@ func goNotificationClicked(account, threadID *C.char) {
 	}()
 }
 
+//export goNotificationCopyCode
+func goNotificationCopyCode(code *C.char) {
+	if globalApp == nil {
+		return
+	}
+	// Copied before returning, as above.
+	codeGo := C.GoString(code)
+	go globalApp.copyNotificationCode(codeGo)
+}
+
 func (a *App) setupNotificationListener() {
 	C.setupNotificationDelegate()
 }
@@ -51,12 +61,16 @@ func (a *App) deliverNotification(n notification) string {
 	cAccount := C.CString(n.account)
 	cThreadID := C.CString(n.threadID)
 	cIdentifier := C.CString(identifier)
+	cCode := C.CString(n.code)
+	cCopyLabel := C.CString(n.copyLabel)
 	defer C.free(unsafe.Pointer(cTitle))
 	defer C.free(unsafe.Pointer(cBody))
 	defer C.free(unsafe.Pointer(cAccount))
 	defer C.free(unsafe.Pointer(cThreadID))
 	defer C.free(unsafe.Pointer(cIdentifier))
-	C.deliverUserNotification(cTitle, cBody, cAccount, cThreadID, cIdentifier)
+	defer C.free(unsafe.Pointer(cCode))
+	defer C.free(unsafe.Pointer(cCopyLabel))
+	C.deliverUserNotification(cTitle, cBody, cAccount, cThreadID, cIdentifier, cCode, cCopyLabel)
 	return identifier
 }
 
