@@ -1012,7 +1012,7 @@ internal fun ThreadScreen(
             ChatWallpaperBackground(
                 presetId = wallpaperPresetId,
                 customUrl = wallpaperCustomUrl,
-                modifier = Modifier.fillMaxSize().padding(contentPadding).hazeSource(hazeState, zIndex = 0f),
+                modifier = Modifier.fillMaxSize().padding(contentPadding).readerHazeSource(hazeState, zIndex = 0f),
             )
             Column(
                 Modifier
@@ -1072,7 +1072,7 @@ internal fun ThreadScreen(
                         LazyColumn(
                             Modifier
                                 .fillMaxSize()
-                                .hazeSource(hazeState, zIndex = 1f)
+                                .readerHazeSource(hazeState, zIndex = 1f)
                                 .appScrollbar(listState),
                             state = listState,
                             contentPadding =
@@ -1859,17 +1859,13 @@ internal fun FloatingBarChip(
     }
 }
 
-/**
- * Frosts what [hazeState]'s sources draw behind this band: content scrolling on
- * under the system bars and the floating controls stays visible as movement
- * without its text competing with them. [fadeAtTopPx] and [fadeAtBottomPx]
- * soften an edge that shows in the open.
- *
- * The sources are drawn into an offscreen layer, which MailWebView.android.kt
- * notes crashes Android's WebView natively on some GL-pipeline devices. A Pixel
- * 3a on Skia GL renders HTML bodies into it fine; fall back to a plain veil if
- * reports say otherwise.
- */
+/** WebViews must not be captured into Haze's offscreen layers on Android. */
+internal fun Modifier.readerHazeSource(
+    hazeState: HazeState,
+    zIndex: Float = 0f,
+): Modifier = if (platformName == "android") this else hazeSource(hazeState, zIndex = zIndex)
+
+/** Frosts the reader on iOS; Android uses a veil without capturing its WebViews. */
 @Composable
 internal fun FrostedBand(
     hazeState: HazeState,
@@ -1883,6 +1879,26 @@ internal fun FrostedBand(
 ) {
     if (heightPx <= 0) return
     val background = MaterialTheme.colorScheme.background
+    if (platformName == "android") {
+        // Keep the bands legible without drawing the message list into an
+        // offscreen layer: native WebView GL functors can crash inside one.
+        val veil = background.copy(alpha = 0.7f)
+        val height = heightPx.toFloat()
+        Box(
+            modifier
+                .fillMaxWidth()
+                .height(with(LocalDensity.current) { heightPx.toDp() })
+                .background(
+                    Brush.verticalGradient(
+                        0f to if (fadeAtTopPx > 0f) Color.Transparent else veil,
+                        (fadeAtTopPx / height).coerceIn(0f, 0.5f) to veil,
+                        (1f - fadeAtBottomPx / height).coerceIn(0.5f, 1f) to veil,
+                        1f to if (fadeAtBottomPx > 0f) Color.Transparent else veil,
+                    ),
+                ),
+        )
+        return
+    }
     val style =
         remember(background, heightPx, fadeAtTopPx, fadeAtBottomPx, tintAlpha) {
             val height = heightPx.toFloat()
@@ -1891,8 +1907,7 @@ internal fun FrostedBand(
                 blurRadius(12.dp)
                 noiseFactor(0f)
                 colorEffects(listOf(HazeColorEffect.tint(background.copy(alpha = tintAlpha))))
-                // Where blurring is unavailable (before Android 12); Haze
-                // strengthens it to make up for the missing blur.
+                // Keep the controls readable where blur is unavailable.
                 fallbackColorEffect(HazeColorEffect.tint(background.copy(alpha = 0.7f)))
                 if (fadeAtTopPx > 0f || fadeAtBottomPx > 0f) {
                     mask(

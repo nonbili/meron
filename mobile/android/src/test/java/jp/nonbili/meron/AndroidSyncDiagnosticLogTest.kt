@@ -7,6 +7,26 @@ import java.io.File
 
 class AndroidSyncDiagnosticLogTest {
     @Test
+    fun batchPreservesEveryEntryWhenTheirCombinedSizeExceedsTheSingleEntryLimit() {
+        val file = File.createTempFile("diag", ".log").apply { deleteOnExit() }
+        file.writeText("existing entry\n")
+        val messages = (1..16).map { "exit $it " + "x".repeat(1000) }
+        AndroidSyncDiagnosticLog.appendEntries(file, messages, "timestamp")
+        assertEquals(listOf("existing entry") + messages.map { "timestamp $it" }, file.readLines())
+    }
+
+    @Test
+    fun batchRetainsTheNewestFiveHundredLines() {
+        val file = File.createTempFile("diag", ".log").apply { deleteOnExit() }
+        file.writeText((1..500).joinToString("\n") { "old $it" } + "\n")
+        AndroidSyncDiagnosticLog.appendEntries(file, listOf("new 1", "new 2"), "timestamp")
+        val lines = file.readLines()
+        assertEquals(500, lines.size)
+        assertEquals("old 3", lines.first())
+        assertEquals(listOf("timestamp new 1", "timestamp new 2"), lines.takeLast(2))
+    }
+
+    @Test
     fun testReadTailOfMissingFileIsEmpty() {
         assertEquals("", AndroidSyncDiagnosticLog.readTail(File("does-not-exist-${System.nanoTime()}.log")))
     }

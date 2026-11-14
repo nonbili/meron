@@ -27,5 +27,6 @@ class MeronApplication : Application() {
         AndroidReminders.refresh(this)
         AndroidCrashLog.install(this)
         AndroidSyncDiagnosticLog.installUiLogSink(this)
+        AndroidProcessExitLog.install(this)
     }
 }

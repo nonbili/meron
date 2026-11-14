@@ -42,11 +42,33 @@ object AndroidSyncDiagnosticLog {
         context: Context,
         message: String,
     ) {
-        val file = logFile(context)
-        val timestamp = timestampFormat.format(Date())
-        val entry = if (message.length > MAX_ENTRY_CHARS) message.take(MAX_ENTRY_CHARS) + "…" else message
-        val lines = (if (file.exists()) file.readLines() else emptyList()) + "$timestamp $entry"
+        appendEntries(logFile(context), listOf(message), timestampFormat.format(Date()))
+    }
+
+    /** Write a group with one file rewrite, retaining the per-entry size limit. */
+    @Synchronized
+    internal fun appendEntries(
+        file: File,
+        messages: List<String>,
+        timestamp: String,
+    ) {
+        if (messages.isEmpty()) return
+        val entries =
+            messages.map { message ->
+                val entry = if (message.length > MAX_ENTRY_CHARS) message.take(MAX_ENTRY_CHARS) + "…" else message
+                "$timestamp $entry"
+            }
+        val lines = (if (file.exists()) file.readLines() else emptyList()) + entries
         file.writeText(lines.takeLast(MAX_LINES).joinToString("\n") + "\n")
+    }
+
+    @Synchronized
+    fun appendRedactedBatch(
+        context: Context,
+        messages: List<String>,
+    ) {
+        if (messages.isEmpty()) return
+        appendEntries(logFile(context), messages.map(::redactMessage), timestampFormat.format(Date()))
     }
 
     /** Append with any email addresses masked so the log stays shareable. */

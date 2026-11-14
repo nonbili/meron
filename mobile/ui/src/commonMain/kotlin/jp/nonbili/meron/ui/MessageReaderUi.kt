@@ -58,7 +58,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MessageBody
@@ -212,7 +211,7 @@ internal fun MessageReaderScreen(
                                 end = innerPadding.calculateEndPadding(layoutDirection),
                             ),
                         ).background(MaterialTheme.colorScheme.background)
-                        .hazeSource(hazeState)
+                        .readerHazeSource(hazeState)
                         .appScrollbar(scrollState)
                         .verticalScroll(scrollState)
                         .padding(
