@@ -634,6 +634,12 @@ class MobileCommandsTest {
         assertEquals("""{"thread_id":"rss-account#rss#feed-1"}""", core.lastPayloadJson)
 
         runSuspend {
+            client.renameRssFeed(RenameRssFeedParams(threadId = "rss-account#rss#feed-1", title = "Reuters"))
+        }
+        assertEquals(MobileCommand.FeedRename, core.lastCommand)
+        assertEquals("""{"thread_id":"rss-account#rss#feed-1","title":"Reuters"}""", core.lastPayloadJson)
+
+        runSuspend {
             client.moveRssFeed(
                 MoveRssFeedParams(
                     threadId = "rss-account#rss#feed-1",

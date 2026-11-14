@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Account, Message } from '../types'
 import { accounts$ } from './accounts'
-import { nextRssAccountDisplayName, removeFeed } from './feeds'
+import { nextRssAccountDisplayName, removeFeed, renameFeed } from './feeds'
 import { kanban$ } from './kanban'
 import { mail$ } from './mail'
 import { ui$ } from './ui'
@@ -81,6 +81,34 @@ describe('removeFeed', () => {
     expect(mail$.threads.get()).toEqual([])
     expect(ui$.selectedThread.get()).toBe('')
     expect(ui$.editFeed.get()).toBeNull()
+  })
+})
+
+describe('renameFeed', () => {
+  beforeEach(() => {
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: async (command: string) => (command === 'rss.renameFeed' ? { ok: true, title: 'Reuters' } : {}),
+        },
+      },
+    }
+  })
+
+  it('shows the new name on a Kanban card, which the mail list reload skips', async () => {
+    kanban$.activeBoardId.set('board-1')
+    kanban$.threads.set({
+      column: [feed({ id: 'rss-account#rss#feed-1', from_name: 'Old', subject: 'Old' })],
+      starred: [feed({ from_name: 'Old', subject: 'A starred article' })],
+    })
+
+    await renameFeed('rss-account#rss#feed-1', 'Reuters')
+
+    expect(kanban$.threads.get().column[0]).toMatchObject({ from_name: 'Reuters', subject: 'Reuters' })
+    // An article of the feed keeps its own title.
+    expect(kanban$.threads.get().starred[0]).toMatchObject({ from_name: 'Reuters', subject: 'A starred article' })
+    kanban$.activeBoardId.set('')
+    kanban$.threads.set({})
   })
 })
 

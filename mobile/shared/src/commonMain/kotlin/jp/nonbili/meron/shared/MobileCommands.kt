@@ -39,6 +39,7 @@ object MobileCommand {
     const val FeedAdd = "feed.add"
     const val FeedRemove = "feed.remove"
     const val FeedMove = "feed.move"
+    const val FeedRename = "feed.rename"
     const val FeedExportOpml = "rss.exportOpml"
     const val FeedImportOpml = "rss.importOpml"
     const val BackupExport = "backup.export"
@@ -318,6 +319,18 @@ data class RemoveRssFeedParams(
     val threadId: String,
 ) {
     fun toJson(): String = jsonObject("thread_id" to threadId.jsonString())
+}
+
+/** [title] empty restores the feed's own title. */
+data class RenameRssFeedParams(
+    val threadId: String,
+    val title: String,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "thread_id" to threadId.jsonString(),
+            "title" to title.jsonString(),
+        )
 }
 
 data class MoveRssFeedParams(
@@ -1356,6 +1369,8 @@ class MobileMailCommandClient(
     suspend fun removeRssFeed(params: RemoveRssFeedParams): String = core.invoke(MobileCommand.FeedRemove, params.toJson())
 
     suspend fun moveRssFeed(params: MoveRssFeedParams): String = core.invoke(MobileCommand.FeedMove, params.toJson())
+
+    suspend fun renameRssFeed(params: RenameRssFeedParams): String = core.invoke(MobileCommand.FeedRename, params.toJson())
 
     suspend fun exportOpml(params: ExportOpmlParams): String = core.invoke(MobileCommand.FeedExportOpml, params.toJson())
 

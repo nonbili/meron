@@ -270,7 +270,12 @@ export function ThreadContextMenu({
           icon={<Pencil size={13} className="text-secondary" />}
           label={t('buttons.edit')}
           onClick={() => {
-            openFeedEdit({ threadId: menu.threadId, name: menu.name, url: menu.url })
+            openFeedEdit({
+              threadId: menu.threadId,
+              name: menu.name,
+              title: menu.message.from_name ?? '',
+              url: menu.url,
+            })
             close()
             void after('edit-feed', menu.threadId)
           }}

@@ -55,6 +55,18 @@ pub(crate) async fn dispatch(
             Ok(res)
         }
 
+        // Name a feed in the list; an empty title restores the feed's own.
+        "feed.rename" => {
+            let thread_id = req_str(p, "thread_id")?;
+            let title = p
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let res = rss::rename_feed(&engine.db.lock().unwrap(), &thread_id, &title)?;
+            Ok(res)
+        }
+
         // Serialize one RSS account's feeds to an OPML 2.0 document.
         "rss.exportOpml" => {
             let account = req_str(p, "account")?;

@@ -742,6 +742,12 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun parseFeedRenameResponseReadsTheListedName() {
+        assertEquals("Reuters: World News", parseFeedRenameResponse("""{"ok":true,"title":"Reuters: World News"}"""))
+        assertEquals("", parseFeedRenameResponse("""{"ok":true}"""))
+    }
+
+    @Test
     fun requireCoreOkThrowsOnErrorAndPassesThroughSuccess() {
         val success = """{"ok":true,"deleted":1}"""
         assertEquals(success, requireCoreOk(success))

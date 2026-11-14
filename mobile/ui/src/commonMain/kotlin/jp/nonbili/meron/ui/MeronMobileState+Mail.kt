@@ -22,6 +22,7 @@ import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.MoveThreadParams
 import jp.nonbili.meron.shared.RemoveRssFeedParams
+import jp.nonbili.meron.shared.RenameRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.Rule
@@ -34,6 +35,7 @@ import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.mailThreadIdFolder
+import jp.nonbili.meron.shared.parseFeedRenameResponse
 import jp.nonbili.meron.shared.parseFolderDeleteResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
 import jp.nonbili.meron.shared.parseFolderRenameResponse
@@ -1522,6 +1524,51 @@ internal fun MeronMobileState.setMailFolderNotify(
             status = it.message ?: trs("folders.notify.failed", mapOf("folder" to folderName))
         }
     }
+}
+
+/** Names a feed in the list; an empty [name] restores the feed's own title,
+ *  which only the core knows, so every cached row (the visible list, Kanban
+ *  columns and the open feed) takes the name the core answers with. */
+internal fun MeronMobileState.renameFeed(
+    thread: ThreadSummary,
+    name: String,
+) {
+    var listed = name
+    val feedId = thread.backendThreadId()
+    // A starred article shares its feed's thread id but keeps its own subject;
+    // only the feed's own row is titled by the feed's name.
+    val rename = { threads: List<ThreadSummary> ->
+        if (listed.isEmpty()) {
+            threads
+        } else {
+            threads.map {
+                when {
+                    it.backendThreadId() != feedId -> it
+                    it.rssItemKeys().isEmpty() -> it.copy(subject = listed, sender = listed)
+                    else -> it.copy(sender = listed)
+                }
+            }
+        }
+    }
+    runCoreThreadAction(
+        thread = thread,
+        label = "Rename feed",
+        doneStatus = trs("feeds.toast.feedRenamed"),
+        failedStatus = trs("feeds.toast.failedToRename"),
+        action = {
+            renameRssFeed(RenameRssFeedParams(threadId = thread.id, title = name)).also { response ->
+                parseFeedRenameResponse(response).takeIf { it.isNotEmpty() }?.let { listed = it }
+            }
+        },
+        update = rename,
+        afterSuccess = {
+            coreThreads = rename(coreThreads)
+            kanbanColumns = kanbanColumns.mapValues { (_, state) -> state.copy(threads = rename(state.threads)) }
+            if (listed.isNotEmpty() && selectedCoreThread?.id == thread.id) {
+                selectedCoreThread = selectedCoreThread?.copy(subject = listed, sender = listed)
+            }
+        },
+    )
 }
 
 internal fun MeronMobileState.archiveOrRemove(thread: ThreadSummary) {

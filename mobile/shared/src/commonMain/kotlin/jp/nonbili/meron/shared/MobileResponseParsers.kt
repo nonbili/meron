@@ -620,6 +620,9 @@ fun parseOpmlExportResponse(responseJson: String): String = responseJson.findJso
 
 fun parseOpmlImportCountResponse(responseJson: String): Int = responseJson.findJsonLongProperty("imported")?.toInt() ?: 0
 
+/** The name a feed is now listed under: the new name, or its own title once restored. */
+fun parseFeedRenameResponse(responseJson: String): String = responseJson.findJsonStringProperty("title").orEmpty()
+
 /** The serialized backup document from `backup.export`. */
 fun parseBackupExportResponse(responseJson: String): String = responseJson.findJsonStringProperty("backup").orEmpty()
 

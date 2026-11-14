@@ -33,6 +33,14 @@ pub(crate) fn move_mobile_rss_feed(data_dir: &str, params: &Value) -> Result<Val
     })
 }
 
+pub(crate) fn rename_mobile_rss_feed(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let thread_id = req_str(params, "thread_id")?;
+    let title = opt_str(params, "title");
+    with_mobile_db(data_dir, |conn| {
+        rss::rename_feed(&conn, &thread_id, &title).map_err(|err| format!("{err:#}"))
+    })
+}
+
 pub(crate) fn export_mobile_opml(data_dir: &str, params: &Value) -> Result<Value, String> {
     let account = req_account_id(params)?;
     with_mobile_db(data_dir, |conn| {

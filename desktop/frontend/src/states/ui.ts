@@ -20,7 +20,9 @@ export type ToastTone = 'success' | 'error'
 // Where the toast floats: centred on the window, or over the Tasks panel for
 // the panel's own actions, so the Undo appears beside what it would undo.
 export type ToastPlacement = 'app' | 'tasks'
-export type EditFeed = { threadId: string; name: string; url?: string }
+// `name` labels the dialog and may be a placeholder; `title` is the name the
+// feed is actually listed under, which the rename field edits.
+export type EditFeed = { threadId: string; name: string; title?: string; url?: string }
 export type ConfirmTone = 'default' | 'danger'
 export type ConfirmState = {
   id: string

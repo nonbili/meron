@@ -362,6 +362,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.feedRemove(payload)
 	case "rss.moveFeed":
 		return a.feedMove(payload)
+	case "rss.renameFeed":
+		return a.feedRename(payload)
 	case "rss.exportOpml":
 		return a.exportOpml(payload)
 	case "rss.importOpml":

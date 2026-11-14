@@ -173,6 +173,74 @@ fn move_feed_reassigns_subscription_and_preserves_items() {
     assert_eq!(starred, 1);
 }
 
+fn feed_named(conn: &Connection, title: &str, feed_title: &str) {
+    crate::store::run_migrations(conn).unwrap();
+    conn.execute(
+        "INSERT INTO accounts(id, engine, provider, display_name, config)
+             VALUES('rss-one', 'rss', 'rss', 'News', '{}')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO subscriptions(id, account, url, title, feed_title, enabled)
+             VALUES('feed-1', 'rss-one', 'https://example.com/feed', ?1, ?2, 1)",
+        params![title, feed_title],
+    )
+    .unwrap();
+}
+
+fn feed_title_now(conn: &Connection) -> String {
+    conn.query_row(
+        "SELECT title FROM subscriptions WHERE id = 'feed-1'",
+        [],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+#[test]
+fn rename_feed_sets_the_listed_name_and_leaves_the_feeds_own_alone() {
+    let conn = Connection::open_in_memory().unwrap();
+    feed_named(
+        &conn,
+        "Reuters: World News | Top Stories",
+        "Reuters: World News | Top Stories",
+    );
+
+    let res = rename_feed(&conn, "rss-one#rss#feed-1", "  Reuters\n ").unwrap();
+    assert_eq!(res["title"], "Reuters");
+    assert_eq!(feed_title_now(&conn), "Reuters");
+    let feed_title: String = conn
+        .query_row(
+            "SELECT feed_title FROM subscriptions WHERE id = 'feed-1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(feed_title, "Reuters: World News | Top Stories");
+    // The name is what the thread list shows.
+    let threads = recent(&conn, "rss-one", "", "", 10).unwrap();
+    assert_eq!(threads[0]["subject"], "Reuters");
+}
+
+#[test]
+fn rename_feed_with_an_empty_name_restores_the_feeds_own() {
+    let conn = Connection::open_in_memory().unwrap();
+    feed_named(&conn, "Reuters", "Reuters: World News");
+
+    let res = rename_feed(&conn, "rss-one#rss#feed-1", "   ").unwrap();
+    assert_eq!(res["title"], "Reuters: World News");
+    assert_eq!(feed_title_now(&conn), "Reuters: World News");
+}
+
+#[test]
+fn rename_feed_rejects_unknown_feeds() {
+    let conn = Connection::open_in_memory().unwrap();
+    feed_named(&conn, "Reuters", "Reuters");
+    assert!(rename_feed(&conn, "rss-one#rss#missing", "X").is_err());
+    assert!(rename_feed(&conn, "garbage", "X").is_err());
+}
+
 #[test]
 fn move_feed_rejects_non_rss_target() {
     let conn = Connection::open_in_memory().unwrap();
@@ -1007,6 +1075,87 @@ fn add_fetches_parses_and_syncs_over_http() {
         new_items.is_empty(),
         "unchanged feed yields no new items on re-sync"
     );
+}
+
+#[test]
+fn a_renamed_feed_keeps_its_name_through_sync_and_adding_it_again() {
+    let media = std::env::temp_dir().join(format!("meron-rss-test-{}", std::process::id()));
+    unsafe { std::env::set_var("MERON_MEDIA_DIR", &media) };
+
+    let url = serve_feed(SAMPLE_RSS);
+    let conn = Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let db = Mutex::new(conn);
+    let account = add(&db, &url, "Sample Feed").unwrap();
+    let account_id = account["id"].as_str().unwrap().to_string();
+    let thread_id = {
+        let conn = db.lock().unwrap();
+        recent(&conn, &account_id, "", "", 10).unwrap()[0]["thread_id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let listed = |db: &Mutex<Connection>| {
+        let conn = db.lock().unwrap();
+        recent(&conn, &account_id, "", "", 10).unwrap()[0]["from_name"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    rename_feed(&db.lock().unwrap(), &thread_id, "Mine").unwrap();
+    sync_account(&db, &account_id).unwrap();
+    assert_eq!(listed(&db), "Mine");
+    add_feed(&db, &account_id, &url).unwrap();
+    assert_eq!(listed(&db), "Mine");
+
+    rename_feed(&db.lock().unwrap(), &thread_id, "").unwrap();
+    assert_eq!(listed(&db), "Sample Feed");
+}
+
+const UNTITLED_RSS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <link>https://example.com</link>
+    <item>
+      <title>A post</title>
+      <link>https://example.com/1</link>
+      <guid>untitled-1</guid>
+    </item>
+  </channel>
+</rss>"#;
+
+#[test]
+fn restoring_an_untitled_feeds_name_falls_back_to_its_host() {
+    let media = std::env::temp_dir().join(format!("meron-rss-test-{}", std::process::id()));
+    unsafe { std::env::set_var("MERON_MEDIA_DIR", &media) };
+
+    let url = serve_feed(UNTITLED_RSS);
+    let conn = Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let db = Mutex::new(conn);
+    let account = add(&db, &url, "").unwrap();
+    let account_id = account["id"].as_str().unwrap().to_string();
+    sync_account(&db, &account_id).unwrap();
+    let thread_id = {
+        let conn = db.lock().unwrap();
+        recent(&conn, &account_id, "", "", 10).unwrap()[0]["thread_id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    rename_feed(&db.lock().unwrap(), &thread_id, "Mine").unwrap();
+    let res = rename_feed(&db.lock().unwrap(), &thread_id, "").unwrap();
+    assert_eq!(res["title"], "127.0.0.1");
+}
+
+#[test]
+fn restoring_a_feed_that_never_synced_falls_back_to_its_host() {
+    let conn = Connection::open_in_memory().unwrap();
+    feed_named(&conn, "Mine", "");
+    let res = rename_feed(&conn, "rss-one#rss#feed-1", "").unwrap();
+    assert_eq!(res["title"], "example.com");
 }
 
 /// Spawn a throwaway HTTP/1.1 server that serves `bodies` in order, one per
