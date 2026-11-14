@@ -687,7 +687,7 @@ object AndroidNotificationService {
         threadKey: String = "",
     ): PendingIntent {
         val intent =
-            Intent(context, ComposeMainActivity::class.java).apply {
+            Intent(context, MeronActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 // A blank thread key still navigates: the group summary targets
                 // the account's folder, and only the thread is left unopened.

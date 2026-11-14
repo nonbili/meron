@@ -606,6 +606,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 44684984D13B3D27A9CE1F39 /* Version.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconBlue AppIconDark AppIconLight";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -656,6 +657,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 44684984D13B3D27A9CE1F39 /* Version.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconBlue AppIconDark AppIconLight";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Meron/Meron.entitlements;
 				CODE_SIGN_STYLE = Automatic;

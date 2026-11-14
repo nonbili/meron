@@ -57,6 +57,10 @@ func (a *App) setSystemAppearance(dark bool) {
 	systemAppearanceDark = dark
 	systemAppearanceMu.Unlock()
 	systemAppearanceSettled()
+	if changed {
+		// An automatic app icon follows the system, not the app's own theme.
+		a.applyAppIcon()
+	}
 	if changed && a.ctx != nil {
 		wailsRuntime.EventsEmit(a.ctx, "system.appearance", map[string]any{"dark": dark})
 	}

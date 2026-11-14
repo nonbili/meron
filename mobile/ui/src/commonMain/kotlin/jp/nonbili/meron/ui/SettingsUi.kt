@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.DarkMode
@@ -166,6 +167,9 @@ internal fun SettingsScreen(
     onAppLanguageChange: (String) -> Unit,
     showSenderImages: Boolean,
     onToggleSenderImages: () -> Unit,
+    appIconStyles: List<String>,
+    appIconStyle: String,
+    onAppIconStyleChange: (String) -> Unit,
     darkMailBodies: Boolean,
     onToggleDarkMailBodies: () -> Unit,
     chatFullMessages: Boolean,
@@ -375,6 +379,9 @@ internal fun SettingsScreen(
                     onOpenLanguage = { showLanguagePicker = true },
                     showSenderImages = showSenderImages,
                     onToggleSenderImages = onToggleSenderImages,
+                    appIconStyles = appIconStyles,
+                    appIconStyle = appIconStyle,
+                    onAppIconStyleChange = onAppIconStyleChange,
                     showUnreadBadges = showUnreadBadges,
                     onToggleUnreadBadges = onToggleUnreadBadges,
                     showUnifiedInboxNav = showUnifiedInboxNav,
@@ -865,6 +872,9 @@ internal fun SettingsGeneralPage(
     onOpenLanguage: () -> Unit,
     showSenderImages: Boolean,
     onToggleSenderImages: () -> Unit,
+    appIconStyles: List<String>,
+    appIconStyle: String,
+    onAppIconStyleChange: (String) -> Unit,
     showUnreadBadges: Boolean,
     onToggleUnreadBadges: () -> Unit,
     showUnifiedInboxNav: Boolean,
@@ -904,10 +914,10 @@ internal fun SettingsGeneralPage(
     focusProxy: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    // The Network label: Appearance (label + 3 rows), Side navigation (label +
-    // 4 rows, plus the 2 alert defaults while the calendar is on) and Kanban
-    // (2) come before it on every platform.
-    val proxyIndex = if (calendarEnabled) 12 else 10
+    // The Network label: Appearance (label + 3 rows, plus the app icon where
+    // it can be changed), Side navigation (label + 4 rows, plus the 2 alert
+    // defaults while the calendar is on) and Kanban (2) come before it.
+    val proxyIndex = (if (calendarEnabled) 12 else 10) + (if (appIconStyles.isEmpty()) 0 else 1)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy) proxyIndex else 0)
     SettingsList(modifier.appScrollbar(listState), state = listState) {
         section(tr("settings.pages.appearance"))
@@ -967,6 +977,15 @@ internal fun SettingsGeneralPage(
                 checked = showSenderImages,
                 onToggle = onToggleSenderImages,
             )
+        }
+        if (appIconStyles.isNotEmpty()) {
+            item {
+                AppIconRow(
+                    styles = appIconStyles,
+                    selected = appIconStyle,
+                    onChange = onAppIconStyleChange,
+                )
+            }
         }
 
         section(tr("settings.sections.sideNav"))
@@ -1348,6 +1367,44 @@ private fun AlertDefaultRow(
                     onClick = {
                         menu = false
                         if (option != lead) onChange(option)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun appIconLabelKey(style: String): String =
+    when (style) {
+        APP_ICON_BLUE -> "settings.appearance.appIconBlue"
+        APP_ICON_LIGHT -> "settings.appearance.appIconLight"
+        APP_ICON_DARK -> "settings.appearance.appIconDark"
+        else -> "settings.appearance.appIconDefault"
+    }
+
+/** The launcher icon, picked from the ones the platform ships. */
+@Composable
+private fun AppIconRow(
+    styles: List<String>,
+    selected: String,
+    onChange: (String) -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        SettingsRow(
+            icon = Icons.Filled.Apps,
+            title = tr("settings.appearance.appIcon"),
+            hint = tr("settings.appearance.appIconHintMobile"),
+            onClick = { menu = true },
+            trailing = { Text(tr(appIconLabelKey(selected)), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            styles.forEach { style ->
+                DropdownMenuItem(
+                    text = { Text(tr(appIconLabelKey(style))) },
+                    onClick = {
+                        menu = false
+                        if (style != selected) onChange(style)
                     },
                 )
             }

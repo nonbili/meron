@@ -481,6 +481,7 @@ internal class MeronMobileState(
     var pendingQuickReplySend: PendingQuickReplySend? = null
     var addSection by mutableStateOf(0)
     var notificationPermissionGranted by mutableStateOf(mobileHost.notificationsEnabled())
+    var appIconStyle by mutableStateOf(mobileHost.appIconStyle())
     var notificationBannerDismissed by mutableStateOf(loadAppBoolean(prefs, NOTIFICATION_BANNER_DISMISSED_PREF, false))
     var accountsLoading by mutableStateOf(false)
     var mailboxMenuOpen by mutableStateOf(false)

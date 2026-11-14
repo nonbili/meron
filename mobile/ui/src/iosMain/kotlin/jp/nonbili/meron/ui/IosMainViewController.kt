@@ -38,6 +38,9 @@ import platform.UIKit.UIApplicationWillEnterForegroundNotification
 import platform.UIKit.UIModalPresentationFullScreen
 import platform.UIKit.UIViewController
 import platform.UIKit.UIWindow
+import platform.UIKit.alternateIconName
+import platform.UIKit.setAlternateIconName
+import platform.UIKit.supportsAlternateIcons
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionBadge
 import platform.UserNotifications.UNAuthorizationOptionSound
@@ -130,6 +133,36 @@ private class IosMobileHost(
             null,
             NSOperationQueue.mainQueue,
         ) { _ -> refreshNotificationAuthorization() }
+    }
+
+    // Alternate icons are icon sets in the asset catalog, listed in the
+    // target's ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES. iOS remembers
+    // the choice and tells the user itself when it changes.
+    private val alternateIcons =
+        mapOf(
+            APP_ICON_BLUE to "AppIconBlue",
+            APP_ICON_LIGHT to "AppIconLight",
+            APP_ICON_DARK to "AppIconDark",
+        )
+
+    override val appIconStyles: List<String>
+        get() =
+            if (UIApplication.sharedApplication.supportsAlternateIcons) {
+                listOf(APP_ICON_DEFAULT) + alternateIcons.keys
+            } else {
+                emptyList()
+            }
+
+    override fun appIconStyle(): String {
+        val name = UIApplication.sharedApplication.alternateIconName
+        return alternateIcons.entries.firstOrNull { it.value == name }?.key ?: APP_ICON_DEFAULT
+    }
+
+    override fun setAppIconStyle(style: String) {
+        // A null name is the primary icon.
+        UIApplication.sharedApplication.setAlternateIconName(alternateIcons[style]) { error ->
+            if (error != null) Log.w("AppIcon", "could not change the app icon: ${error.localizedDescription}")
+        }
     }
 
     override fun readDiagnosticLog(): String = readSyncDiagnosticLog()

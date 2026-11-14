@@ -4,7 +4,9 @@ import {
   deleteCustomTheme,
   EMPTY_PROXY,
   hydrateSettings,
+  hydrateAppIconStyle,
   hydrateTrayStyle,
+  appIconStyleSupported$,
   SETTINGS_DB_KEYS,
   isProxyUsable,
   normalizeSenderAddr,
@@ -434,6 +436,49 @@ describe('native monochrome tray icon setting', () => {
       expect(calls.some((call) => call.command === 'app.prefsSet' && call.payload.key === 'monochrome_tray_icon')).toBe(
         false,
       )
+    } finally {
+      ;(window as any).go = wails
+    }
+  })
+})
+
+describe('app icon style', () => {
+  afterEach(() => hydrateAppIconStyle(null))
+
+  it('hydrates the native choice and falls back to the shipped icon', () => {
+    hydrateAppIconStyle({ style: 'auto', supported: true })
+    expect(settings$.appIconStyle.get()).toBe('auto')
+    expect(appIconStyleSupported$.get()).toBe(true)
+    hydrateAppIconStyle({ style: 'neon', supported: false })
+    expect(settings$.appIconStyle.get()).toBe('default')
+    expect(appIconStyleSupported$.get()).toBe(false)
+    hydrateAppIconStyle(null)
+    expect(settings$.appIconStyle.get()).toBe('default')
+    expect(SETTINGS_DB_KEYS).not.toContain('app_icon_style')
+  })
+
+  it('does not write during hydration and sends user changes only to native storage', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const wails = (window as any).go
+    const calls: { command: string; payload: any }[] = []
+    ;(window as any).go = {
+      main: {
+        App: {
+          Invoke: (command: string, payload: unknown) => {
+            calls.push({ command, payload })
+            return Promise.resolve()
+          },
+        },
+      },
+    }
+    try {
+      hydrateAppIconStyle({ style: 'dark', supported: true })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(calls.filter((call) => call.command === 'appIcon.setStyle')).toEqual([])
+      settings$.appIconStyle.set('auto')
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(calls.filter((call) => call.command === 'appIcon.setStyle').at(-1)?.payload).toEqual({ style: 'auto' })
+      expect(calls.some((call) => call.command === 'app.prefsSet')).toBe(false)
     } finally {
       ;(window as any).go = wails
     }

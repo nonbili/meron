@@ -1372,6 +1372,12 @@ private fun MeronMobileScreenContent(
                                     enabled = enabled,
                                 )
                             },
+                            appIconStyles = mobileHost.appIconStyles,
+                            appIconStyle = appIconStyle,
+                            onAppIconStyleChange = { style ->
+                                mobileHost.setAppIconStyle(style)
+                                appIconStyle = style
+                            },
                             kanbanColumnWidth = kanbanColumnWidth,
                             onCycleKanbanColumnWidth = {
                                 val next = nextKanbanColumnWidth(kanbanColumnWidth)

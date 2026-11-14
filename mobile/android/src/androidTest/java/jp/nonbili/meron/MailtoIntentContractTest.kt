@@ -25,9 +25,9 @@ class MailtoIntentContractTest {
                     "mailto:to@example.com?cc=cc@example.com&bcc=bcc@example.com" +
                         "&subject=Mobile%20Draft&body=Line%20one%0ALine%20two",
                 ),
-            ).setClass(context, ComposeMainActivity::class.java)
+            ).setClass(context, MeronActivity::class.java)
 
-        ActivityScenario.launch<ComposeMainActivity>(intent).use {
+        ActivityScenario.launch<MeronActivity>(intent).use {
             it.onActivity { activity ->
                 val draft = activity.currentMailtoDraftForTesting()
                 assertEquals("to@example.com", draft?.to)
@@ -47,9 +47,9 @@ class MailtoIntentContractTest {
                 .setType("text/plain")
                 .putExtra(Intent.EXTRA_SUBJECT, "Shared subject")
                 .putExtra(Intent.EXTRA_TEXT, "Shared body")
-                .setClass(context, ComposeMainActivity::class.java)
+                .setClass(context, MeronActivity::class.java)
 
-        ActivityScenario.launch<ComposeMainActivity>(intent).use {
+        ActivityScenario.launch<MeronActivity>(intent).use {
             it.onActivity { activity ->
                 val draft = activity.currentMailtoDraftForTesting()
                 assertEquals("Shared subject", draft?.subject)
@@ -73,9 +73,9 @@ class MailtoIntentContractTest {
                 .setType("text/plain")
                 .putExtra(Intent.EXTRA_STREAM, uri)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                .setClass(context, ComposeMainActivity::class.java)
+                .setClass(context, MeronActivity::class.java)
 
-        ActivityScenario.launch<ComposeMainActivity>(intent).use {
+        ActivityScenario.launch<MeronActivity>(intent).use {
             it.onActivity { activity ->
                 val attachment = activity.currentMailtoDraftForTesting()?.attachments?.single()
                 assertEquals("shared.txt", attachment?.displayName)

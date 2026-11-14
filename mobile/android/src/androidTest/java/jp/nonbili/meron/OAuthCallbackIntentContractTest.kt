@@ -20,9 +20,9 @@ class OAuthCallbackIntentContractTest {
         val callbackUrl = "jp.nonbili.meron.oauth://oauth?code=mobile-code&state=state-123"
         val intent =
             Intent(Intent.ACTION_VIEW, Uri.parse(callbackUrl))
-                .setClass(context, ComposeMainActivity::class.java)
+                .setClass(context, MeronActivity::class.java)
 
-        ActivityScenario.launch<ComposeMainActivity>(intent).use {
+        ActivityScenario.launch<MeronActivity>(intent).use {
             it.onActivity { activity ->
                 assertEquals(callbackUrl, activity.currentOAuthCallbackUrlForTesting())
             }
@@ -35,9 +35,9 @@ class OAuthCallbackIntentContractTest {
         val callbackUrl = "https://oauth.example.invalid/meron/oauth?code=mobile-code&state=state-123"
         val intent =
             Intent(Intent.ACTION_VIEW, Uri.parse(callbackUrl))
-                .setClass(context, ComposeMainActivity::class.java)
+                .setClass(context, MeronActivity::class.java)
 
-        ActivityScenario.launch<ComposeMainActivity>(intent).use {
+        ActivityScenario.launch<MeronActivity>(intent).use {
             it.onActivity { activity ->
                 assertEquals(callbackUrl, activity.currentOAuthCallbackUrlForTesting())
             }
@@ -56,7 +56,7 @@ class OAuthCallbackIntentContractTest {
         val matches = context.packageManager.queryIntentActivities(intent, 0)
 
         assertTrue(
-            matches.any { it.activityInfo.name == ComposeMainActivity::class.java.name },
+            matches.any { it.activityInfo.name == MeronActivity::class.java.name },
         )
     }
 
@@ -74,7 +74,7 @@ class OAuthCallbackIntentContractTest {
         assertEquals("jp.nonbili.meron.oauth", redirectUri.scheme)
         assertEquals("oauth", redirectUri.host)
         assertTrue(
-            matches.any { it.activityInfo.name == ComposeMainActivity::class.java.name },
+            matches.any { it.activityInfo.name == MeronActivity::class.java.name },
         )
     }
 }

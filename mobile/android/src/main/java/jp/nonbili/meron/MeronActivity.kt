@@ -271,7 +271,7 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 
-class ComposeMainActivity : ComponentActivity() {
+class MeronActivity : ComponentActivity() {
     private var incomingMailtoDraft by mutableStateOf<ComposeDraft?>(null)
     private var incomingOAuthCallbackUrl by mutableStateOf<String?>(null)
     private var incomingNotificationThreadTarget by mutableStateOf<jp.nonbili.meron.ui.NotificationThreadTarget?>(null)
