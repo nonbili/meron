@@ -3,8 +3,21 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestDesktopEntry(t *testing.T) {
+	entry := desktopEntry("/home/u/My Apps/meron.appimage")
+	for _, line := range []string{
+		`Exec="/home/u/My Apps/meron.appimage" %U`,
+		"StartupWMClass=" + desktopProgramName,
+	} {
+		if !strings.Contains(entry, "\n"+line+"\n") {
+			t.Errorf("desktop entry lacks %q:\n%s", line, entry)
+		}
+	}
+}
 
 func TestDesktopLaunchTarget(t *testing.T) {
 	mount := t.TempDir()

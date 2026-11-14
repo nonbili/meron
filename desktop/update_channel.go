@@ -108,7 +108,9 @@ func detectChannelFrom(goos, exe string, getenv func(string) string) (channel up
 	case "linux":
 		// The AppImage runtime exports APPIMAGE with the path of the image
 		// itself; exe points inside the temporary mount, which is read-only.
-		if image := getenv("APPIMAGE"); image != "" {
+		// An APPIMAGE inherited from another image must not count, or the
+		// update would overwrite that image.
+		if image := appImagePath(exe, getenv); image != "" {
 			return updateChannel{Kind: channelAppImage, Target: image}
 		}
 		return updateChannel{Kind: channelTarball, Target: exe}
