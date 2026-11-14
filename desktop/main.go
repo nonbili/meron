@@ -58,6 +58,7 @@ func main() {
 		Name:                        appTitle(),
 		Icon:                        appIconPNG,
 		Windows:                     application.WindowsOptions{WndClass: "wailsWindow"},
+		Linux:                       application.LinuxOptions{ProgramName: linuxProgramName()},
 		Mac:                         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: false},
 		Services:                    []application.Service{application.NewService(&desktopService{app: app})},
 		DisableDefaultSignalHandler: true,

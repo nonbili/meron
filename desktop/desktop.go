@@ -46,17 +46,7 @@ func installDesktopEntry() {
 
 	writeIfChanged(iconPath, appIconPNG)
 
-	desktop := fmt.Sprintf(`[Desktop Entry]
-Type=Application
-Name=Meron
-Comment=Messages that spark joy
-Exec=%s %%U
-Icon=meron
-Terminal=false
-Categories=Office;Network;Email;
-StartupWMClass=meron
-MimeType=x-scheme-handler/mailto;message/rfc822;
-`, desktopExecArg(exe))
+	desktop := desktopEntry(desktopLaunchTarget(exe, os.Getenv))
 	writeIfChanged(desktopPath, []byte(desktop))
 
 	// Refresh the MIME associations database so the mailto: handler takes
@@ -65,6 +55,21 @@ MimeType=x-scheme-handler/mailto;message/rfc822;
 		appsDir := filepath.Join(dataHome, "applications")
 		go func() { _ = exec.Command(bin, appsDir).Run() }()
 	}
+}
+
+// desktopEntry renders the .desktop file launching target.
+func desktopEntry(target string) string {
+	return fmt.Sprintf(`[Desktop Entry]
+Type=Application
+Name=Meron
+Comment=Messages that spark joy
+Exec=%s %%U
+Icon=meron
+Terminal=false
+Categories=Office;Network;Email;
+StartupWMClass=%s
+MimeType=x-scheme-handler/mailto;message/rfc822;
+`, desktopExecArg(target), desktopProgramName)
 }
 
 func writeIfChanged(path string, data []byte) {
@@ -77,6 +82,53 @@ func writeIfChanged(path string, data []byte) {
 		return
 	}
 	_ = os.WriteFile(path, data, 0o644)
+}
+
+// desktopProgramName is the name the windows announce themselves under (the
+// Wayland app_id and the X11 WM_CLASS), and so what StartupWMClass has to say
+// for the shell to tie a window to the launcher. GTK would otherwise take it
+// from argv[0], which inside an AppImage is the image's file name.
+const desktopProgramName = "meron"
+
+// linuxProgramName is desktopProgramName for release builds. Dev launches keep
+// the name GTK derives, so they stay apart from an installed copy in the dock.
+func linuxProgramName() string {
+	if isWailsDevLaunch() {
+		return ""
+	}
+	return desktopProgramName
+}
+
+// desktopLaunchTarget returns the path the launcher should execute. That is
+// the executable, except inside an AppImage: there exe sits in the image's
+// temporary mount, which is gone once the app quits, and the image itself is
+// what has to be started.
+func desktopLaunchTarget(exe string, getenv func(string) string) string {
+	if image := appImagePath(exe, getenv); image != "" {
+		return image
+	}
+	return exe
+}
+
+// appImagePath returns the path of the AppImage exe runs from, or "" when it
+// is not running from one. The runtime exports the image's path as APPIMAGE
+// and its mount as APPDIR.
+//
+// Both are inherited by child processes, so a copy merely started from
+// another AppImage sees them too; they only count when exe is inside APPDIR.
+func appImagePath(exe string, getenv func(string) string) string {
+	image, appDir := getenv("APPIMAGE"), getenv("APPDIR")
+	if image == "" || appDir == "" || !filepath.IsAbs(image) {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(appDir); err == nil {
+		appDir = resolved
+	}
+	rel, err := filepath.Rel(appDir, exe)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	return image
 }
 
 func desktopExecArg(path string) string {

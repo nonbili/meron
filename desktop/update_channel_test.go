@@ -41,9 +41,17 @@ func TestDetectChannelFrom(t *testing.T) {
 			name:       "appimage targets the image, not the mount",
 			goos:       "linux",
 			exe:        "/tmp/.mount_meronXY/usr/bin/meron",
-			env:        map[string]string{"APPIMAGE": "/home/u/Apps/Meron.AppImage"},
+			env:        map[string]string{"APPIMAGE": "/home/u/Apps/Meron.AppImage", "APPDIR": "/tmp/.mount_meronXY"},
 			wantKind:   channelAppImage,
 			wantTarget: "/home/u/Apps/Meron.AppImage",
+		},
+		{
+			name:       "appimage env inherited from another image",
+			goos:       "linux",
+			exe:        "/opt/meron/meron",
+			env:        map[string]string{"APPIMAGE": "/home/u/Apps/Other.AppImage", "APPDIR": "/tmp/.mount_otherXY"},
+			wantKind:   channelTarball,
+			wantTarget: "/opt/meron/meron",
 		},
 		{
 			name:       "plain linux binary",
