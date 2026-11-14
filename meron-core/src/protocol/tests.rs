@@ -3299,6 +3299,10 @@ fn protocol_invoke_wraps_noop_mail_mutations() {
             json!({ "ok": true, "moved": 0 }),
         ),
         (
+            r#"{"id":176,"method":"rss.renameFeed","params":{"thread_id":"rss#rss#feed","title":"Feed"}}"#,
+            json!({ "ok": true, "title": "" }),
+        ),
+        (
             r#"{"id":77,"method":"mail.readAttachment","params":{"key":"acc/INBOX/1/note.txt"}}"#,
             json!({ "data": "" }),
         ),

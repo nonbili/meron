@@ -66,6 +66,20 @@ export async function removeFeed(threadId: string) {
   }
 }
 
+// Name a feed in the list; an empty name hands it back to the feed's own
+// title. The core keeps the name across syncs.
+export async function renameFeed(threadId: string, title: string) {
+  if (!threadId) return
+  try {
+    await invoke('rss.renameFeed', { thread_id: threadId, title })
+    ui$.editFeed.set(null)
+    await loadThreads(false)
+    showToast(t('feeds.toast.feedRenamed'))
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : t('feeds.toast.failedToRename'), 'error')
+  }
+}
+
 function rssAccountFromThreadId(threadId: string) {
   const marker = '#rss#'
   const index = threadId.indexOf(marker)

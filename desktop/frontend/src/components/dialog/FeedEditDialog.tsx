@@ -4,7 +4,7 @@ import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { Dialog } from './Dialog'
 import { copyText } from '../../lib/native'
-import { removeFeed } from '../../states/feeds'
+import { removeFeed, renameFeed } from '../../states/feeds'
 import { ui$ } from '../../states/ui'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
@@ -15,9 +15,12 @@ export function FeedEditDialog() {
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [copied, setCopied] = useState(false)
+  // The dialog is mounted per feed, so the feed's current name seeds the field.
+  const [name, setName] = useState(feed?.name ?? '')
+  const [saving, setSaving] = useState(false)
 
   const onClose = () => {
-    if (deleting) return
+    if (deleting || saving) return
     ui$.editFeed.set(null)
   }
 
@@ -28,6 +31,14 @@ export function FeedEditDialog() {
     await copyText(feed.url)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
+  }
+
+  const renamed = name.trim() !== feed.name.trim()
+  const onRename = async () => {
+    if (saving || !renamed) return
+    setSaving(true)
+    await renameFeed(feed.threadId, name.trim())
+    setSaving(false)
   }
 
   const onDelete = async () => {
@@ -44,7 +55,7 @@ export function FeedEditDialog() {
   return (
     <Dialog
       onClose={onClose}
-      dismissible={!deleting}
+      dismissible={!deleting && !saving}
       closeOnBackdrop={false}
       aria-label={feed.name}
       className="max-w-md p-6 flex flex-col gap-5"
@@ -63,6 +74,26 @@ export function FeedEditDialog() {
           </div>
         </div>
         <IconButton icon={X} iconSize={15} label={t('buttons.close')} size="sm" onClick={onClose} />
+      </div>
+
+      {/* Name in the list */}
+      <div className="flex flex-col gap-2">
+        <label className="text-[0.6875rem] font-semibold text-secondary px-1">{t('feeds.name')}</label>
+        <div className="flex items-center gap-2">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void onRename()
+            }}
+            disabled={saving}
+            className="min-w-0 flex-1 rounded-xl bg-hover px-3.5 py-2.5 text-[0.8125rem] text-primary placeholder-secondary focus:ring-1 focus:ring-accent focus:bg-chats border border-transparent transition-all duration-150"
+          />
+          <Button onClick={onRename} disabled={saving || !renamed}>
+            {t('buttons.save')}
+          </Button>
+        </div>
+        <p className="text-[0.65625rem] text-secondary px-1 leading-relaxed font-medium">{t('feeds.nameHint')}</p>
       </div>
 
       {/* Feed URL */}

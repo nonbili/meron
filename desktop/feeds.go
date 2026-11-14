@@ -71,6 +71,21 @@ func (a *App) feedMove(payload map[string]any) (any, error) {
 	return res, nil
 }
 
+// feedRename names a feed in the list; an empty title restores the feed's own.
+func (a *App) feedRename(payload map[string]any) (any, error) {
+	threadID, _ := payload["thread_id"].(string)
+	title, _ := payload["title"].(string)
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, a.engineUnavailable()
+	}
+	res, err := a.sidecar.Call("feed.rename", map[string]any{"thread_id": threadID, "title": title})
+	if err != nil {
+		return nil, err
+	}
+	a.logf("rss.renameFeed: renamed feed thread=%s", threadID)
+	return res, nil
+}
+
 // exportOpml asks the sidecar for an OPML document of one RSS account's feeds,
 // then writes it to a user-chosen path via a native save dialog.
 func (a *App) exportOpml(payload map[string]any) (any, error) {

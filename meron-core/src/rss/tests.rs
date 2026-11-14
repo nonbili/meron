@@ -173,6 +173,74 @@ fn move_feed_reassigns_subscription_and_preserves_items() {
     assert_eq!(starred, 1);
 }
 
+fn feed_named(conn: &Connection, title: &str, feed_title: &str) {
+    crate::store::run_migrations(conn).unwrap();
+    conn.execute(
+        "INSERT INTO accounts(id, engine, provider, display_name, config)
+             VALUES('rss-one', 'rss', 'rss', 'News', '{}')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO subscriptions(id, account, url, title, feed_title, enabled)
+             VALUES('feed-1', 'rss-one', 'https://example.com/feed', ?1, ?2, 1)",
+        params![title, feed_title],
+    )
+    .unwrap();
+}
+
+fn feed_title_now(conn: &Connection) -> String {
+    conn.query_row(
+        "SELECT title FROM subscriptions WHERE id = 'feed-1'",
+        [],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+#[test]
+fn rename_feed_sets_the_listed_name_and_leaves_the_feeds_own_alone() {
+    let conn = Connection::open_in_memory().unwrap();
+    feed_named(
+        &conn,
+        "Reuters: World News | Top Stories",
+        "Reuters: World News | Top Stories",
+    );
+
+    let res = rename_feed(&conn, "rss-one#rss#feed-1", "  Reuters\n ").unwrap();
+    assert_eq!(res["title"], "Reuters");
+    assert_eq!(feed_title_now(&conn), "Reuters");
+    let feed_title: String = conn
+        .query_row(
+            "SELECT feed_title FROM subscriptions WHERE id = 'feed-1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(feed_title, "Reuters: World News | Top Stories");
+    // The name is what the thread list shows.
+    let threads = recent(&conn, "rss-one", "", "", 10).unwrap();
+    assert_eq!(threads[0]["subject"], "Reuters");
+}
+
+#[test]
+fn rename_feed_with_an_empty_name_restores_the_feeds_own() {
+    let conn = Connection::open_in_memory().unwrap();
+    feed_named(&conn, "Reuters", "Reuters: World News");
+
+    let res = rename_feed(&conn, "rss-one#rss#feed-1", "   ").unwrap();
+    assert_eq!(res["title"], "Reuters: World News");
+    assert_eq!(feed_title_now(&conn), "Reuters: World News");
+}
+
+#[test]
+fn rename_feed_rejects_unknown_feeds() {
+    let conn = Connection::open_in_memory().unwrap();
+    feed_named(&conn, "Reuters", "Reuters");
+    assert!(rename_feed(&conn, "rss-one#rss#missing", "X").is_err());
+    assert!(rename_feed(&conn, "garbage", "X").is_err());
+}
+
 #[test]
 fn move_feed_rejects_non_rss_target() {
     let conn = Connection::open_in_memory().unwrap();

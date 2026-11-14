@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
@@ -157,6 +158,8 @@ internal fun ThreadScreen(
     onPreferHtmlChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onArchive: () -> Unit,
+    /** Names the feed in the list; null where the thread is not a feed. */
+    onRenameFeed: ((String) -> Unit)? = null,
     onDelete: () -> Unit,
     onToggleStar: () -> Unit,
     /** Null when Tasks is switched off, which hides the action entirely. */
@@ -262,6 +265,19 @@ internal fun ThreadScreen(
     var printing by remember(thread?.id) { mutableStateOf(false) }
     val printScope = rememberCoroutineScope()
     var overflowOpen by remember(thread?.id) { mutableStateOf(false) }
+    // The feed's name while it is being edited; null while the dialog is closed.
+    var feedName by remember(thread?.id) { mutableStateOf<String?>(null) }
+    feedName?.let { name ->
+        RenameFeedDialog(
+            name = name,
+            onNameChange = { feedName = it },
+            onSave = {
+                feedName = null
+                onRenameFeed?.invoke(name.trim())
+            },
+            onDismiss = { feedName = null },
+        )
+    }
     LaunchedEffect(overflowOpen, thread?.accountId) {
         if (overflowOpen) loadRecentTransferFolders()
     }
@@ -813,6 +829,16 @@ internal fun ThreadScreen(
                                             onArchive()
                                         },
                                     )
+                                    if (isRss && onRenameFeed != null && thread != null) {
+                                        DropdownMenuItem(
+                                            text = { Text(tr("mobile.actions.renameFeed")) },
+                                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                                            onClick = {
+                                                overflowOpen = false
+                                                feedName = thread.subject
+                                            },
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text(tr("chat.searchThread")) },
                                         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },

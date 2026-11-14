@@ -219,6 +219,32 @@ pub fn move_feed(conn: &Connection, thread_id: &str, target_account: &str) -> Re
     }))
 }
 
+/// Give a feed the name it is listed under, or with an empty `title` hand the
+/// name back to the feed's own. A sync only fills in a missing title, so the
+/// name set here stays until it is changed again.
+pub fn rename_feed(conn: &Connection, thread_id: &str, title: &str) -> Result<Value> {
+    let (account, sub_id) =
+        parse_thread_id(thread_id).ok_or_else(|| anyhow!("invalid RSS thread id: {thread_id}"))?;
+    // One line: the name is a list label, and a pasted line break would
+    // otherwise end up in notifications and OPML exports.
+    let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    let renamed = conn.execute(
+        "UPDATE subscriptions
+         SET title = CASE WHEN ?3 = '' THEN feed_title ELSE ?3 END, updated_at = ?4
+         WHERE id = ?1 AND account = ?2",
+        params![sub_id, account, title, now_unix()],
+    )?;
+    if renamed == 0 {
+        return Err(anyhow!("unknown feed: {thread_id}"));
+    }
+    let title: String = conn.query_row(
+        "SELECT title FROM subscriptions WHERE id = ?1 AND account = ?2",
+        params![sub_id, account],
+        |row| row.get(0),
+    )?;
+    Ok(json!({ "ok": true, "title": title }))
+}
+
 mod opml;
 
 pub use opml::{export_opml, import_opml};

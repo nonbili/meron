@@ -1594,6 +1594,11 @@ private fun MeronMobileScreenContent(
                                                     popAppBack()
                                                 }
                                             },
+                                            // A feed's own page, not one of its entries opened on its own.
+                                            onRenameFeed =
+                                                pageThread
+                                                    ?.takeIf { active && threadIdIsRss(it.id) && it.rssItemKeys().isEmpty() }
+                                                    ?.let { feed -> { name -> renameFeed(feed, name) } },
                                             onDelete = {
                                                 selectedCoreThread?.let {
                                                     deleteThread(it)

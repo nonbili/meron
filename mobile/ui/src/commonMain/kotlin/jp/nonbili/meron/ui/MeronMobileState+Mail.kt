@@ -22,6 +22,7 @@ import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.MobileMailCommandClient
 import jp.nonbili.meron.shared.MoveThreadParams
 import jp.nonbili.meron.shared.RemoveRssFeedParams
+import jp.nonbili.meron.shared.RenameRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.Rule
@@ -1522,6 +1523,35 @@ internal fun MeronMobileState.setMailFolderNotify(
             status = it.message ?: trs("folders.notify.failed", mapOf("folder" to folderName))
         }
     }
+}
+
+/** Names a feed in the list; an empty [name] restores the feed's own title,
+ *  which only the core knows, so the list is re-read either way. */
+internal fun MeronMobileState.renameFeed(
+    thread: ThreadSummary,
+    name: String,
+) {
+    runCoreThreadAction(
+        thread = thread,
+        label = "Rename feed",
+        doneStatus = trs("feeds.toast.feedRenamed"),
+        failedStatus = trs("feeds.toast.failedToRename"),
+        action = { renameRssFeed(RenameRssFeedParams(threadId = thread.id, title = name)) },
+        update = { threads ->
+            if (name.isEmpty()) threads else threads.map { if (it.id == thread.id) it.copy(subject = name, sender = name) else it }
+        },
+        afterSuccess = {
+            if (name.isNotEmpty() && selectedCoreThread?.id == thread.id) {
+                selectedCoreThread = selectedCoreThread?.copy(subject = name, sender = name)
+            }
+            syncCoreThreads(
+                accountOverride = thread.accountId,
+                folderOverride = INBOX_FOLDER,
+                syncFirst = false,
+                successStatus = trs("feeds.toast.feedRenamed"),
+            )
+        },
+    )
 }
 
 internal fun MeronMobileState.archiveOrRemove(thread: ThreadSummary) {

@@ -69,6 +69,36 @@ internal fun AddFeedDialog(
     )
 }
 
+/** Names a feed in the list. An empty name restores the feed's own title. */
+@Composable
+internal fun RenameFeedDialog(
+    name: String,
+    onNameChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("mobile.actions.renameFeed")) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = onNameChange,
+                label = { Text(tr("feeds.name")) },
+                supportingText = { Text(tr("feeds.nameHint")) },
+                singleLine = true,
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = { TextButton(onClick = onSave) { Text(tr("buttons.save")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("buttons.cancel")) } },
+    )
+}
+
 /**
  * Confirms emptying a Trash or Junk folder. The delete is permanent — there is no
  * Trash left to restore from — so the action always goes through this dialog.

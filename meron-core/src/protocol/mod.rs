@@ -98,6 +98,7 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "feed.add" | "rss.addFeed" => Ok(json!({ "ok": true })),
         "feed.remove" | "rss.removeFeed" => Ok(json!({ "ok": true })),
         "feed.move" | "rss.moveFeed" => Ok(json!({ "ok": true, "moved": 0 })),
+        "feed.rename" | "rss.renameFeed" => Ok(json!({ "ok": true, "title": "" })),
         "backup.export" => Ok(json!({ "backup": "" })),
         "backup.import" => {
             Ok(json!({ "accounts": 0, "skipped": 0, "feeds": 0, "settings": 0, "secrets": 0 }))
@@ -223,6 +224,7 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "feed.add" | "rss.addFeed" => add_mobile_rss_feed(data_dir, &req.params),
         "feed.remove" | "rss.removeFeed" => remove_mobile_rss_feed(data_dir, &req.params),
         "feed.move" | "rss.moveFeed" => move_mobile_rss_feed(data_dir, &req.params),
+        "feed.rename" | "rss.renameFeed" => rename_mobile_rss_feed(data_dir, &req.params),
         "backup.export" => export_mobile_backup(data_dir, &req.params),
         "backup.import" => import_mobile_backup(data_dir, &req.params),
         "rss.exportOpml" => export_mobile_opml(data_dir, &req.params),

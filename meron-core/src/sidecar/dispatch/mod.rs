@@ -105,9 +105,9 @@ pub(crate) async fn dispatch(
         | "account.setRSSSyncInterval"
         | "account.reorder" => accounts::dispatch(engine, req, out).await,
 
-        "account.addRss" | "feed.add" | "feed.remove" | "feed.move" | "rss.exportOpml"
-        | "rss.importOpml" | "rss.thread" | "rss.markRead" | "rss.markAllRead"
-        | "rss.markStarred" => feeds::dispatch(engine, req, out).await,
+        "account.addRss" | "feed.add" | "feed.remove" | "feed.move" | "feed.rename"
+        | "rss.exportOpml" | "rss.importOpml" | "rss.thread" | "rss.markRead"
+        | "rss.markAllRead" | "rss.markStarred" => feeds::dispatch(engine, req, out).await,
 
         "tasks.lists"
         | "tasks.listCreate"
