@@ -927,6 +927,10 @@ pub fn thread_message_json(
         // or is still filling in the background — not that the message is
         // empty. Clients offer a retry / re-read for these.
         "body_missing": cached.is_none(),
+        // The one-time code of a verification mail, which clients offer for
+        // copying; null for every other message.
+        "verification_code": cached
+            .and_then(|message| crate::verification_code::detect(&message.subject, &message.body)),
         "date": cached.map(|message| message.date).unwrap_or(header.date),
         "unread": !header.seen,
         "starred": header.starred,

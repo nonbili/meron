@@ -21,6 +21,7 @@ type nativeLabels struct {
 	calendar, tasks                                            string
 	trayCompose, trayShow, trayHide, trayHideTooltip, trayQuit string
 	newMessage, newMessageCount, noSubject, unknownSender      string
+	copyCode                                                   string
 }
 
 var (
@@ -32,6 +33,7 @@ var (
 		newMessage:      "New message",
 		newMessageCount: "{count, plural, one {1 new message} other {{count} new messages}}",
 		noSubject:       "(no subject)", unknownSender: "unknown sender",
+		copyCode: "Copy code",
 	}
 )
 
@@ -60,6 +62,7 @@ func (a *App) setNativeLabels(payload map[string]any) (any, error) {
 	set(&currentLabels.newMessageCount, "newMessageCount")
 	set(&currentLabels.noSubject, "noSubject")
 	set(&currentLabels.unknownSender, "unknownSender")
+	set(&currentLabels.copyCode, "copyCode")
 	labels := currentLabels
 	// Released before trayMenuMu is taken: trayReady holds trayMenuMu while it
 	// reads the labels, so holding both here in the other order would deadlock.
@@ -146,6 +149,10 @@ type notification struct {
 	body     string
 	account  string
 	threadID string
+	// A verification mail's one-time code, offered as a "copy" button where
+	// the platform's notifications carry one, with the button's label.
+	code      string
+	copyLabel string
 	// The arrivals it announces, so it can be withdrawn once all are read;
 	// empty when they cannot all be named (see parseStoreMessages).
 	storeMessages []storeMessage
@@ -278,6 +285,17 @@ func (a *App) checkProtocolVersion(detail any) {
 	}
 }
 
+// copyNotificationCode is where every platform's "copy code" button lands. The
+// code itself stays out of the log.
+func (a *App) copyNotificationCode(code string) {
+	if a == nil || code == "" || wailsRuntime.App == nil {
+		return
+	}
+	if !wailsRuntime.App.Clipboard.SetText(code) {
+		a.logf("notification: could not copy the code to the clipboard")
+	}
+}
+
 // openThreadFromNotification is the single funnel every platform's click handler
 // routes through: focus the window and tell the frontend which thread to open.
 // The frontend (useAppEffects) keys off threadId/threadKey; account is passed for
@@ -302,7 +320,7 @@ func (a *App) openThreadFromNotification(account, threadID string) {
 func (a *App) notifyNewMail(detail any) {
 	labels := a.currentNativeLabels()
 	count := 1
-	var account, accountName, folder, folderName, from, subject, preview, threadKey string
+	var account, accountName, folder, folderName, from, subject, preview, threadKey, code string
 	var storeMessages []storeMessage
 	if m, ok := detail.(map[string]any); ok {
 		// Muted accounts still sync (the UI refreshes), they just don't raise an
@@ -321,6 +339,12 @@ func (a *App) notifyNewMail(detail any) {
 		subject, _ = m["subject"].(string)
 		preview, _ = m["preview"].(string)
 		threadKey, _ = m["threadKey"].(string)
+		// The core finds the one-time code of a verification mail (null for
+		// any other). It belongs to the newest arrival, so it is only offered
+		// when the notification stands for that one mail.
+		if count == 1 {
+			code, _ = m["code"].(string)
+		}
 		storeMessages = parseStoreMessages(m, count)
 	}
 
@@ -345,6 +369,11 @@ func (a *App) notifyNewMail(detail any) {
 		if preview != "" {
 			body = fmt.Sprintf("%s — %s", body, preview)
 		}
+		// Lead with the code: a banner cuts the body short, and the code is
+		// what the user is waiting for.
+		if code != "" {
+			body = fmt.Sprintf("%s · %s", code, body)
+		}
 		if accountName != "" && title != accountName {
 			title = fmt.Sprintf("%s - %s", title, accountName)
 		}
@@ -366,6 +395,8 @@ func (a *App) notifyNewMail(detail any) {
 		body:          body,
 		account:       account,
 		threadID:      notificationThreadID(account, folder, threadKey),
+		code:          code,
+		copyLabel:     labels.copyCode,
 		storeMessages: storeMessages,
 	}
 

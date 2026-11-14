@@ -35,6 +35,10 @@ func (a *App) setupNotificationListener() {
 	}
 
 	toast.SetActivationCallback(func(args string, _ []toast.UserData) {
+		if code, ok := strings.CutPrefix(args, notifyCopyCodePrefix); ok {
+			a.copyNotificationCode(code)
+			return
+		}
 		account, threadID := parseNotifyArgs(args)
 		a.openThreadFromNotification(account, threadID)
 	})
@@ -54,6 +58,9 @@ func (a *App) deliverNotification(n notification) string {
 		ActivationType:      toast.Foreground, // required for the activation callback to fire
 		ActivationArguments: n.account + notifyArgSeparator + n.threadID,
 	}
+	if n.code != "" {
+		t.Actions = []toast.Action{{Type: toast.Foreground, Content: n.copyLabel, Arguments: notifyCopyCodePrefix + n.code}}
+	}
 	if err := t.Push(); err != nil {
 		a.logf("toast notify failed: %v, falling back to beeep", err)
 		if err := beeep.Notify(n.title, n.body, notifyIcon()); err != nil {
@@ -64,6 +71,10 @@ func (a *App) deliverNotification(n notification) string {
 }
 
 func (a *App) withdrawNotification(string) {}
+
+// notifyCopyCodePrefix marks the activation arguments of the "copy code"
+// button; what follows is the code. An account id never starts with it.
+const notifyCopyCodePrefix = "copy-code" + notifyArgSeparator
 
 func parseNotifyArgs(args string) (account, threadID string) {
 	account, threadID, _ = strings.Cut(args, notifyArgSeparator)

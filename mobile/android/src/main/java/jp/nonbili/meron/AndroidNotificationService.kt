@@ -27,6 +27,9 @@ data class NewMailItem(
     val preview: String,
     val threadKey: String,
     val date: Long,
+    /** A verification mail's one-time code, found by the core; empty for any
+     *  other mail. Offered as a "copy code" button. */
+    val code: String = "",
     /** A feed entry's stable key, empty for mail (which has a uid instead).
      *  A feed is one thread, so this is all that tells its entries apart. */
     val itemKey: String = "",
@@ -238,6 +241,13 @@ object AndroidNotificationService {
             // the thread by id, so a payload missing any part of it gets no
             // buttons rather than buttons that quietly do nothing.
             .apply {
+                // First, ahead of the buttons that file the mail away: a code is
+                // what the user opened the shade for. Android shows three
+                // buttons at most, so with all three others enabled it is the
+                // destructive one that gives way.
+                if (item.code.isNotEmpty()) {
+                    addAction(copyCodeAction(context, item.code, newMailNotificationId(batch.accountId, item)))
+                }
                 if (batch.accountId.isNotBlank() && batch.folder.isNotBlank() && item.threadKey.isNotBlank()) {
                     val id = newMailNotificationId(batch.accountId, item)
                     val actions = newMailActions(batch.accountId, loadNotificationActions(context))
@@ -730,6 +740,8 @@ fun parseNewMailBatch(detail: JSONObject): NewMailBatch {
                         preview = entry.optString("preview"),
                         threadKey = entry.optString("threadKey"),
                         date = entry.optLong("date"),
+                        // optString turns a JSON null into the text "null".
+                        code = if (entry.isNull("code")) "" else entry.optString("code"),
                     )
                 }
             }
@@ -742,6 +754,7 @@ fun parseNewMailBatch(detail: JSONObject): NewMailBatch {
                     preview = detail.optString("preview"),
                     threadKey = detail.optString("threadKey"),
                     date = 0,
+                    code = if (detail.isNull("code")) "" else detail.optString("code"),
                 ),
             )
         }
