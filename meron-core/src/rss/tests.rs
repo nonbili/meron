@@ -1077,6 +1077,87 @@ fn add_fetches_parses_and_syncs_over_http() {
     );
 }
 
+#[test]
+fn a_renamed_feed_keeps_its_name_through_sync_and_adding_it_again() {
+    let media = std::env::temp_dir().join(format!("meron-rss-test-{}", std::process::id()));
+    unsafe { std::env::set_var("MERON_MEDIA_DIR", &media) };
+
+    let url = serve_feed(SAMPLE_RSS);
+    let conn = Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let db = Mutex::new(conn);
+    let account = add(&db, &url, "Sample Feed").unwrap();
+    let account_id = account["id"].as_str().unwrap().to_string();
+    let thread_id = {
+        let conn = db.lock().unwrap();
+        recent(&conn, &account_id, "", "", 10).unwrap()[0]["thread_id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let listed = |db: &Mutex<Connection>| {
+        let conn = db.lock().unwrap();
+        recent(&conn, &account_id, "", "", 10).unwrap()[0]["from_name"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    rename_feed(&db.lock().unwrap(), &thread_id, "Mine").unwrap();
+    sync_account(&db, &account_id).unwrap();
+    assert_eq!(listed(&db), "Mine");
+    add_feed(&db, &account_id, &url).unwrap();
+    assert_eq!(listed(&db), "Mine");
+
+    rename_feed(&db.lock().unwrap(), &thread_id, "").unwrap();
+    assert_eq!(listed(&db), "Sample Feed");
+}
+
+const UNTITLED_RSS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <link>https://example.com</link>
+    <item>
+      <title>A post</title>
+      <link>https://example.com/1</link>
+      <guid>untitled-1</guid>
+    </item>
+  </channel>
+</rss>"#;
+
+#[test]
+fn restoring_an_untitled_feeds_name_falls_back_to_its_host() {
+    let media = std::env::temp_dir().join(format!("meron-rss-test-{}", std::process::id()));
+    unsafe { std::env::set_var("MERON_MEDIA_DIR", &media) };
+
+    let url = serve_feed(UNTITLED_RSS);
+    let conn = Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let db = Mutex::new(conn);
+    let account = add(&db, &url, "").unwrap();
+    let account_id = account["id"].as_str().unwrap().to_string();
+    sync_account(&db, &account_id).unwrap();
+    let thread_id = {
+        let conn = db.lock().unwrap();
+        recent(&conn, &account_id, "", "", 10).unwrap()[0]["thread_id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    rename_feed(&db.lock().unwrap(), &thread_id, "Mine").unwrap();
+    let res = rename_feed(&db.lock().unwrap(), &thread_id, "").unwrap();
+    assert_eq!(res["title"], "127.0.0.1");
+}
+
+#[test]
+fn restoring_a_feed_that_never_synced_falls_back_to_its_host() {
+    let conn = Connection::open_in_memory().unwrap();
+    feed_named(&conn, "Mine", "");
+    let res = rename_feed(&conn, "rss-one#rss#feed-1", "").unwrap();
+    assert_eq!(res["title"], "example.com");
+}
+
 /// Spawn a throwaway HTTP/1.1 server that serves `bodies` in order, one per
 /// request, repeating the last body once the list runs out. Lets a test fetch a
 /// feed, then re-fetch it after a new entry appeared.

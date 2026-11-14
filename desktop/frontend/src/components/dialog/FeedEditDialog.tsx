@@ -8,6 +8,7 @@ import { removeFeed, renameFeed } from '../../states/feeds'
 import { ui$ } from '../../states/ui'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
+import { TextInput } from '../field/Field'
 
 export function FeedEditDialog() {
   const { t } = useTranslation()
@@ -15,8 +16,9 @@ export function FeedEditDialog() {
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [copied, setCopied] = useState(false)
-  // The dialog is mounted per feed, so the feed's current name seeds the field.
-  const [name, setName] = useState(feed?.name ?? '')
+  // The dialog is mounted per feed, so the feed's listed name seeds the field.
+  const listed = feed?.title ?? feed?.name ?? ''
+  const [name, setName] = useState(listed)
   const [saving, setSaving] = useState(false)
 
   const onClose = () => {
@@ -33,7 +35,7 @@ export function FeedEditDialog() {
     setTimeout(() => setCopied(false), 1500)
   }
 
-  const renamed = name.trim() !== feed.name.trim()
+  const renamed = name.trim() !== listed.trim()
   const onRename = async () => {
     if (saving || !renamed) return
     setSaving(true)
@@ -80,14 +82,18 @@ export function FeedEditDialog() {
       <div className="flex flex-col gap-2">
         <label className="text-[0.6875rem] font-semibold text-secondary px-1">{t('feeds.name')}</label>
         <div className="flex items-center gap-2">
-          <input
+          <TextInput
+            fieldSize="lg"
+            surface="hover"
             value={name}
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => {
+              // Enter that confirms an IME conversion is not a submit.
+              if (event.nativeEvent.isComposing || event.keyCode === 229) return
               if (event.key === 'Enter') void onRename()
             }}
             disabled={saving}
-            className="min-w-0 flex-1 rounded-xl bg-hover px-3.5 py-2.5 text-[0.8125rem] text-primary placeholder-secondary focus:ring-1 focus:ring-accent focus:bg-chats border border-transparent transition-all duration-150"
+            className="flex-1"
           />
           <Button onClick={onRename} disabled={saving || !renamed}>
             {t('buttons.save')}

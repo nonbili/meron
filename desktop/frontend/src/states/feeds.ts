@@ -2,9 +2,10 @@ import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
 import { isRssAccount } from '../lib/threadActions'
 import { boot } from '../boot'
-import type { Account } from '../types'
-import { ui$, showToast } from './ui'
-import { loadThreads } from './mail'
+import type { Account, Message } from '../types'
+import { ui$, showToast, type EditFeed } from './ui'
+import { kanban$ } from './kanban'
+import { loadThreads, mail$ } from './mail'
 import { loadFolders } from './mailFolders'
 
 // RSS/feed management. RSS accounts hold feeds; each feed surfaces as a thread.
@@ -40,7 +41,7 @@ export async function submitFeed(accountId: string, url: string) {
 }
 
 // Open the feed edit modal for a single RSS feed (thread).
-export function openFeedEdit(feed: { threadId: string; name: string; url?: string }) {
+export function openFeedEdit(feed: EditFeed) {
   if (!feed.threadId) return
   ui$.editFeed.set(feed)
 }
@@ -71,12 +72,32 @@ export async function removeFeed(threadId: string) {
 export async function renameFeed(threadId: string, title: string) {
   if (!threadId) return
   try {
-    await invoke('rss.renameFeed', { thread_id: threadId, title })
+    const res = await invoke<{ title?: string }>('rss.renameFeed', { thread_id: threadId, title })
     ui$.editFeed.set(null)
+    if (res?.title) showFeedName(threadId, res.title)
     await loadThreads(false)
     showToast(t('feeds.toast.feedRenamed'))
   } catch (error) {
     showToast(error instanceof Error ? error.message : t('feeds.toast.failedToRename'), 'error')
+  }
+}
+
+// Put the feed's new name on every cached row that lists it. The mail list
+// reloads anyway, but Kanban columns and an inactive mail list would otherwise
+// keep the old name until their next load. A starred article shares its feed's
+// thread id but keeps its own subject; only the feed's own row (id = thread id)
+// is titled by the feed's name.
+function showFeedName(threadId: string, title: string) {
+  const renameRow = (row: Message): Message =>
+    row.id === threadId ? { ...row, from_name: title, subject: title } : { ...row, from_name: title }
+  const rename = (rows: Message[]) =>
+    rows.some((row) => row.thread_id === threadId)
+      ? rows.map((row) => (row.thread_id === threadId ? renameRow(row) : row))
+      : rows
+  mail$.threads.set(rename(mail$.threads.peek()))
+  for (const [key, rows] of Object.entries(kanban$.threads.peek())) {
+    const next = rename(rows)
+    if (next !== rows) kanban$.threads[key].set(next)
   }
 }
 

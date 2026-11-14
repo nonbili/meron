@@ -33,7 +33,6 @@ struct Subscription {
     id: String,
     account: String,
     url: String,
-    title: String,
     etag: String,
     last_modified: String,
 }
@@ -228,19 +227,26 @@ pub fn rename_feed(conn: &Connection, thread_id: &str, title: &str) -> Result<Va
     // One line: the name is a list label, and a pasted line break would
     // otherwise end up in notifications and OPML exports.
     let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
-    let renamed = conn.execute(
-        "UPDATE subscriptions
-         SET title = CASE WHEN ?3 = '' THEN feed_title ELSE ?3 END, updated_at = ?4
-         WHERE id = ?1 AND account = ?2",
+    let (url, feed_title): (String, String) = conn
+        .query_row(
+            "SELECT url, feed_title FROM subscriptions WHERE id = ?1 AND account = ?2",
+            params![sub_id, account],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?
+        .ok_or_else(|| anyhow!("unknown feed: {thread_id}"))?;
+    // Restoring falls back to the host label, as adding a feed does, so a feed
+    // with no title of its own is never left without a name.
+    let title = if !title.is_empty() {
+        title
+    } else if !feed_title.trim().is_empty() {
+        feed_title.trim().to_string()
+    } else {
+        feed_host_label(&url)
+    };
+    conn.execute(
+        "UPDATE subscriptions SET title = ?3, updated_at = ?4 WHERE id = ?1 AND account = ?2",
         params![sub_id, account, title, now_unix()],
-    )?;
-    if renamed == 0 {
-        return Err(anyhow!("unknown feed: {thread_id}"));
-    }
-    let title: String = conn.query_row(
-        "SELECT title FROM subscriptions WHERE id = ?1 AND account = ?2",
-        params![sub_id, account],
-        |row| row.get(0),
     )?;
     Ok(json!({ "ok": true, "title": title }))
 }
@@ -318,7 +324,10 @@ fn store_parsed_feed(tx: &Connection, account: &str, parsed: &FetchedParsed) -> 
          ON CONFLICT(id) DO UPDATE SET
            account = excluded.account,
            url = excluded.url,
-           title = excluded.title,
+           -- A name the user gave the feed survives adding it again; a title
+           -- that was only ever the feed's own follows the fresh one.
+           title = CASE WHEN subscriptions.title = '' OR subscriptions.title = subscriptions.feed_title
+                        THEN excluded.title ELSE subscriptions.title END,
            site_url = excluded.site_url,
            feed_title = excluded.feed_title,
            json = excluded.json,
@@ -460,7 +469,12 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<Vec<N
     if db_load_remote_images(db, &sub.account) {
         cache_feed_images(&sub.account, &sub.id, &mut items);
     }
-    let feed_title = text_content(&feed.title);
+    // The host label stands in for a missing feed title, as when the feed was
+    // added, so restoring a renamed feed's own name never leaves it blank.
+    let feed_title = match text_content(&feed.title).trim() {
+        "" => feed_host_label(&fetched.resolved_url),
+        t => t.to_string(),
+    };
     let site_url = feed
         .links
         .first()
@@ -471,14 +485,36 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<Vec<N
     // from /media with no remote fetch. Unconditional: it's first-party branding,
     // not the third-party content the remote-images gate is meant to hold back.
     let icon_key = cache_feed_icon(&sub.account, &sub.id, &icon_url).unwrap_or_default();
-    let title = if sub.title.is_empty() {
-        feed_title.trim().to_string()
-    } else {
-        sub.title.clone()
-    };
-
     let conn = crate::log::timed_db_lock(db, "rss.sync.persist_items");
     let tx = conn.unchecked_transaction()?;
+    // Only a missing title is filled in. The row's current title is kept as it
+    // is, not the copy read before the fetch, so a rename made while this sync
+    // was fetching is not written over.
+    let Some(title): Option<String> = tx
+        .query_row(
+            "UPDATE subscriptions
+         SET title = CASE WHEN title = '' THEN ?2 ELSE title END, url = ?3, site_url = ?4,
+             feed_title = ?2, json = ?5, etag = ?6, last_modified = ?7, last_sync_at = ?8,
+             last_error = '', updated_at = ?8
+         WHERE id = ?1
+         RETURNING title",
+            params![
+                sub.id,
+                feed_title,
+                fetched.resolved_url,
+                site_url,
+                subscription_json(&icon_url, &icon_key),
+                fetched.etag,
+                fetched.last_modified,
+                now
+            ],
+            |row| row.get(0),
+        )
+        .optional()?
+    else {
+        // Removed while it was being fetched: nothing left to store items under.
+        return Ok(Vec::new());
+    };
     let mut new_items = Vec::new();
     for item in &items {
         if store::upsert_rss_item(
@@ -507,23 +543,6 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<Vec<N
             });
         }
     }
-    tx.execute(
-        "UPDATE subscriptions
-         SET title = ?2, url = ?3, site_url = ?4, feed_title = ?5, json = ?6,
-             etag = ?7, last_modified = ?8, last_sync_at = ?9, last_error = '', updated_at = ?9
-         WHERE id = ?1",
-        params![
-            sub.id,
-            title,
-            fetched.resolved_url,
-            site_url,
-            feed_title.trim(),
-            subscription_json(&icon_url, &icon_key),
-            fetched.etag,
-            fetched.last_modified,
-            now
-        ],
-    )?;
     tx.commit()?;
     Ok(new_items)
 }
@@ -963,7 +982,7 @@ pub fn account_json(id: &str, title: &str) -> Value {
 
 fn load_subscriptions(conn: &Connection, account: &str) -> Result<Vec<Subscription>> {
     let mut stmt = conn.prepare(
-        "SELECT id, account, url, title, etag, last_modified FROM subscriptions
+        "SELECT id, account, url, etag, last_modified FROM subscriptions
          WHERE account = ?1 AND enabled = 1 ORDER BY title COLLATE NOCASE, url",
     )?;
     let rows = stmt.query_map(params![account], |row| {
@@ -971,9 +990,8 @@ fn load_subscriptions(conn: &Connection, account: &str) -> Result<Vec<Subscripti
             id: row.get(0)?,
             account: row.get(1)?,
             url: row.get(2)?,
-            title: row.get(3)?,
-            etag: row.get(4)?,
-            last_modified: row.get(5)?,
+            etag: row.get(3)?,
+            last_modified: row.get(4)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)

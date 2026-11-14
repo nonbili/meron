@@ -273,7 +273,8 @@ internal fun ThreadScreen(
             onNameChange = { feedName = it },
             onSave = {
                 feedName = null
-                onRenameFeed?.invoke(name.trim())
+                // Saving the name it already has is a no-op, not a rename.
+                if (name.trim() != thread?.subject?.trim()) onRenameFeed?.invoke(name.trim())
             },
             onDismiss = { feedName = null },
         )
