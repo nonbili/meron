@@ -15,10 +15,14 @@
   <description>
     <ul>
       <li>Unified Inbox, kanban and chat views</li>
+      <li>Tags synced as IMAP keywords and mail rules for automatic organization</li>
       <li>IMAP/SMTP email and RSS/Atom feeds</li>
       <li>Threaded conversations with rich-text composing and media galleries</li>
+      <li>Built-in calendar, tasks, and contacts</li>
       <li>Easy setup with OAuth or automatic mailbox discovery</li>
+      <li>End-to-end OpenPGP encryption with Autocrypt, WKD, and keyserver lookup</li>
       <li>Encrypted local storage with credentials kept in the OS keyring</li>
+      <li>Optional local MCP server for AI clients with per-client account permissions</li>
       <li>Themes and 20+ languages</li>
     </ul>
   </description>
@@ -35,24 +39,32 @@
   <launchable type="desktop-id">jp.nonbili.meron.desktop</launchable>
   <screenshots>
     <screenshot>
-      <image>https://raw.githubusercontent.com/nonbili/meron/25c4752e0597018d98e55b8b5d5f87c153bc646c/screenshots/kanban-board.png</image>
+      <image>https://raw.githubusercontent.com/nonbili/meron/a71abb2958e5f96dd89915ec0e40ae73a7df2fd2/screenshots/kanban-board.png</image>
       <caption>Kanban board</caption>
     </screenshot>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/nonbili/meron/25c4752e0597018d98e55b8b5d5f87c153bc646c/screenshots/unified-inbox.png</image>
+      <image>https://raw.githubusercontent.com/nonbili/meron/a71abb2958e5f96dd89915ec0e40ae73a7df2fd2/screenshots/unified-inbox.png</image>
       <caption>Unified inbox</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/nonbili/meron/25c4752e0597018d98e55b8b5d5f87c153bc646c/screenshots/chat-view.png</image>
+      <image>https://raw.githubusercontent.com/nonbili/meron/a71abb2958e5f96dd89915ec0e40ae73a7df2fd2/screenshots/chat-view.png</image>
       <caption>Chat view</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/nonbili/meron/25c4752e0597018d98e55b8b5d5f87c153bc646c/screenshots/compose.png</image>
+      <image>https://raw.githubusercontent.com/nonbili/meron/a71abb2958e5f96dd89915ec0e40ae73a7df2fd2/screenshots/compose.png</image>
       <caption>Compose</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/nonbili/meron/25c4752e0597018d98e55b8b5d5f87c153bc646c/screenshots/themes.png</image>
+      <image>https://raw.githubusercontent.com/nonbili/meron/a71abb2958e5f96dd89915ec0e40ae73a7df2fd2/screenshots/themes.png</image>
       <caption>Themes</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/nonbili/meron/a71abb2958e5f96dd89915ec0e40ae73a7df2fd2/screenshots/openpgp.png</image>
+      <caption>OpenPGP</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/nonbili/meron/a71abb2958e5f96dd89915ec0e40ae73a7df2fd2/screenshots/calendar.png</image>
+      <caption>Calendar</caption>
     </screenshot>
   </screenshots>
 
