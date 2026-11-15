@@ -1,44 +1,42 @@
 package jp.nonbili.meron.ui
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 
-/**
- * Bounds on a decoded image. A hardware canvas refuses to draw a bitmap over
- * 100 MB and takes the whole app down with it ("Canvas: trying to draw too
- * large bitmap"), which a single oversized picture in a feed entry or a mail
- * is enough to trigger: 12 megapixels is 48 MB at four bytes a pixel. The side
- * limit covers pictures that are small in area but absurdly long or wide.
- */
-private const val MAX_DECODED_PIXELS = 12_000_000L
-private const val MAX_DECODED_SIDE = 8192
+/** The decoder's density arithmetic is in integers; this is its denominator. */
+private const val SCALE_DENSITY = 10_000
 
 /**
- * How much to shrink a [width] by [height] image while decoding so it stays
- * within the bounds above: 1 for none, otherwise a power of two, which is all
- * the decoder accepts. Unknown dimensions (a file that is not an image) get 1
- * and fail in the decoder as before.
+ * The decoder options that scale an image by [scale] (see [imageDecodeScale]).
+ * `inSampleSize` only halves, so it takes the largest power of two that still
+ * leaves the image at or above the target, and density scaling does the rest:
+ * the result lands on the budget instead of up to four times under it.
  */
-internal fun imageSampleSize(
-    width: Int,
-    height: Int,
-): Int {
-    if (width <= 0 || height <= 0) return 1
-    var sample = 1
-    while (
-        (width.toLong() / sample) * (height.toLong() / sample) > MAX_DECODED_PIXELS ||
-        maxOf(width, height) / sample > MAX_DECODED_SIDE
-    ) {
-        sample *= 2
+internal fun imageDecodeOptions(scale: Double): BitmapFactory.Options =
+    BitmapFactory.Options().apply {
+        if (scale >= 1.0) return@apply
+        var sample = 1
+        while (sample * 2 * scale <= 1.0) sample *= 2
+        inSampleSize = sample
+        inScaled = true
+        inDensity = SCALE_DENSITY
+        // Rounded down, so the scaled image never ends up over the budget.
+        inTargetDensity = maxOf(1, (SCALE_DENSITY * scale * sample).toInt())
     }
-    return sample
-}
 
-actual fun decodeImageBitmap(bytes: ByteArray): ImageBitmap? =
+actual fun decodeImageBitmap(
+    bytes: ByteArray,
+    maxBytes: Long,
+): ImageBitmap? =
     runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        val options = BitmapFactory.Options().apply { inSampleSize = imageSampleSize(bounds.outWidth, bounds.outHeight) }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
+        // A 16-bit or wide-gamut source decodes to half-float pixels, twice
+        // the size; the bounds pass says which it will be.
+        val wide = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bounds.outConfig == Bitmap.Config.RGBA_F16
+        val scale = imageDecodeScale(bounds.outWidth, bounds.outHeight, maxBytes, if (wide) 8 else 4)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, imageDecodeOptions(scale))?.asImageBitmap()
     }.getOrNull()

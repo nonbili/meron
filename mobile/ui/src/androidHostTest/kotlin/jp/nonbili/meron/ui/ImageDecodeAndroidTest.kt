@@ -5,30 +5,37 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ImageDecodeAndroidTest {
-    @Test
-    fun ordinaryImagesAreDecodedAtFullSize() {
-        assertEquals(1, imageSampleSize(1920, 1080))
-        assertEquals(1, imageSampleSize(4000, 3000))
+    /** The fraction of each side the decoder keeps with these options. */
+    private fun applied(scale: Double): Double {
+        val options = imageDecodeOptions(scale)
+        val sample = maxOf(1, options.inSampleSize)
+        val density = if (options.inDensity > 0) options.inTargetDensity.toDouble() / options.inDensity else 1.0
+        return density / sample
     }
 
     @Test
-    fun oversizedImagesAreShrunkBelowWhatACanvasRefusesToDraw() {
-        // The picture from the crash report: 44 megapixels, 176 MB decoded.
-        val sample = imageSampleSize(7676, 5751)
-        assertEquals(2, sample)
-        assertTrue((7676L / sample) * (5751L / sample) * 4 < 100L * 1024 * 1024)
-        assertEquals(4, imageSampleSize(16000, 12000))
+    fun anImageWithinBudgetIsDecodedUntouched() {
+        val options = imageDecodeOptions(1.0)
+        assertEquals(0, options.inSampleSize)
+        assertEquals(0, options.inDensity)
     }
 
     @Test
-    fun longThinImagesAreBoundedBySideEvenWhenSmallInArea() {
-        assertEquals(4, imageSampleSize(600, 30000))
-        assertEquals(4, imageSampleSize(30000, 600))
+    fun theDecoderIsToldTheScaleThatWasAskedFor() {
+        for (scale in listOf(0.97, 0.61, 0.5, 0.33, 0.25, 0.1, 0.013)) {
+            val got = applied(scale)
+            assertTrue(got <= scale, "scale $scale: decoder would keep $got, over the budget")
+            assertTrue(got > scale * 0.99, "scale $scale: decoder would keep only $got")
+        }
     }
 
     @Test
-    fun unknownDimensionsAreLeftToTheDecoder() {
-        assertEquals(1, imageSampleSize(-1, -1))
-        assertEquals(1, imageSampleSize(0, 500))
+    fun samplingNeverGoesBelowTheTarget() {
+        // The sample step is the cheap one; it must leave the density step
+        // something to scale down from, never up.
+        for (scale in listOf(0.97, 0.61, 0.5, 0.33, 0.25, 0.1)) {
+            val sample = imageDecodeOptions(scale).inSampleSize
+            assertTrue(1.0 / sample >= scale, "scale $scale sampled by $sample")
+        }
     }
 }

@@ -1,6 +1,7 @@
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageBitmapConfig
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -13,10 +14,13 @@ expect suspend fun loadImageBytes(ref: String): ByteArray?
 // Remote actions require a loader that enforces the size limit while reading.
 internal expect val boundedRemoteImageActions: Boolean
 
-internal suspend fun loadImageBitmapRef(ref: String): ImageBitmap? =
+internal suspend fun loadImageBitmapRef(
+    ref: String,
+    maxBytes: Long = MAX_DECODED_IMAGE_BYTES,
+): ImageBitmap? =
     loadCachedImageBitmap(ref) {
         loadImageBytes(ref)?.let { bytes ->
-            withContext(ioDispatcher) { decodeImageBitmap(bytes) }
+            withContext(ioDispatcher) { decodeImageBitmap(bytes, maxBytes) }
         }
     }
 
@@ -48,7 +52,9 @@ internal suspend fun loadCachedImageBitmap(
     }
     val bitmap = load() ?: return null
     imageBitmapCacheMutex.withLock {
-        val size = bitmap.width.toLong() * bitmap.height.toLong() * 4L
+        // Half-float pixels (a 16-bit or wide-gamut source) take twice the room.
+        val bytesPerPixel = if (bitmap.config == ImageBitmapConfig.F16) 8L else 4L
+        val size = bitmap.width.toLong() * bitmap.height.toLong() * bytesPerPixel
         imageBitmapCache[key] = CachedBitmap(bitmap, size)
         imageBitmapCacheBytes += size
         while (imageBitmapCacheBytes > IMAGE_BITMAP_CACHE_MAX_BYTES) {

@@ -893,7 +893,7 @@ internal fun AccountBadgeAvatar(
     LaunchedEffect(avatarUrl) {
         image = null
         if (avatarUrl.isNotBlank()) {
-            image = withContext(ioDispatcher) { loadImageBitmapRef(avatarUrl) }
+            image = withContext(ioDispatcher) { loadImageBitmapRef(avatarUrl, AVATAR_IMAGE_BYTES) }
         }
     }
 

@@ -23,7 +23,7 @@ internal suspend fun loadSenderImage(
                 if (!src.startsWith("data:image/") || !src.contains(";base64,")) {
                     null
                 } else {
-                    decodeImageBitmap(Base64.Default.decode(src.substringAfter(";base64,")))
+                    decodeImageBitmap(Base64.Default.decode(src.substringAfter(";base64,")), AVATAR_IMAGE_BYTES)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
