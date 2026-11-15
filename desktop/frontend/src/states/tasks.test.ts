@@ -397,3 +397,116 @@ describe('openTaskMail', () => {
     expect(compose$.tabs.get().map((tab) => tab.threadId)).toEqual([threadId])
   })
 })
+
+describe('task loading recovery', () => {
+  it('shares concurrent reads and preserves items until a timeout retry succeeds', async () => {
+    ui$.activeTaskList.set('list-1')
+    const previous = task({ id: 'previous' })
+    tasks$.items.set([previous])
+    let attempts = 0
+    let release!: (value: unknown) => void
+    const response = new Promise((resolve) => {
+      release = resolve
+    })
+    ;(window as any).go.main.App.Invoke = async () => {
+      if (++attempts === 1) throw new Error('sidecar tasks.items timeout after 5s')
+      return response
+    }
+    const first = loadTasks()
+    const second = loadTasks()
+    expect(first).toBe(second)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(tasks$.items.peek()[0].id).toBe('previous')
+    expect(tasks$.loading.peek()).toBe(true)
+    release({ tasks: [task({ id: 'recovered' })] })
+    await first
+    expect(attempts).toBe(2)
+    expect(tasks$.items.peek()[0].id).toBe('recovered')
+    expect(tasks$.loading.peek()).toBe(false)
+  })
+
+  it('bounds retries and does not retry core errors', async () => {
+    ui$.activeTaskList.set('list-1')
+    let attempts = 0
+    ;(window as any).go.main.App.Invoke = async () => {
+      attempts++
+      throw new Error('sidecar tasks.items timeout after 5s')
+    }
+    await expect(loadTasks()).rejects.toThrow('timeout')
+    expect(attempts).toBe(2)
+    expect(tasks$.loading.peek()).toBe(false)
+    attempts = 0
+    ;(window as any).go.main.App.Invoke = async () => {
+      attempts++
+      throw new Error('sidecar tasks.items error: missing list')
+    }
+    await expect(loadTasks()).rejects.toThrow('missing list')
+    expect(attempts).toBe(1)
+  })
+
+  it('keeps the selected list loading when an older list finishes', async () => {
+    const releases = new Map<string, (value: unknown) => void>()
+    ;(window as any).go.main.App.Invoke = (_command: string, payload: any) =>
+      new Promise((resolve) => releases.set(payload.list_id, resolve))
+    ui$.activeTaskList.set('list-1')
+    const first = loadTasks()
+    ui$.activeTaskList.set('list-2')
+    const second = loadTasks()
+    releases.get('list-1')!({ tasks: [task()] })
+    await first
+    expect(tasks$.loading.peek()).toBe(true)
+    expect(tasks$.items.peek()).toEqual([])
+    releases.get('list-2')!({ tasks: [task({ list_id: 'list-2' })] })
+    await second
+    expect(tasks$.items.peek()[0].list_id).toBe('list-2')
+    expect(tasks$.loading.peek()).toBe(false)
+  })
+})
+
+it('a fresh read after a mutation supersedes an older in-flight read', async () => {
+  ui$.activeTaskList.set('list-1')
+  const releases: ((value: unknown) => void)[] = []
+  ;(window as any).go.main.App.Invoke = () => new Promise((resolve) => releases.push(resolve))
+  const old = loadTasks()
+  const fresh = loadTasks('list-1', true)
+  releases[1]({ tasks: [task({ id: 'new' })] })
+  await fresh
+  releases[0]({ tasks: [task({ id: 'old' })] })
+  await old
+  expect(tasks$.items.peek()[0].id).toBe('new')
+})
+
+it('retries a timed-out list read before loading the restored panel', async () => {
+  const invoke = (window as any).go.main.App.Invoke
+  let listAttempts = 0
+  ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+    if (command === 'tasks.lists' && ++listAttempts === 1) {
+      throw new Error('sidecar tasks.lists timeout after 5s')
+    }
+    return invoke(command, payload)
+  }
+  await restoreTasksSession({ session_tasks_panel: true, session_task_list: 'list-1' })
+  expect(listAttempts).toBe(2)
+  expect(tasks$.items.peek()[0].id).toBe('task-1')
+})
+
+it('does not resurrect an older snapshot when a post-mutation read fails', async () => {
+  ui$.activeTaskList.set('list-1')
+  tasks$.items.set([task({ id: 'current' })])
+  let release!: (value: unknown) => void
+  const response = new Promise((resolve) => {
+    release = resolve
+  })
+  let requests = 0
+  ;(window as any).go.main.App.Invoke = async () => {
+    if (++requests === 1) return response
+    throw new Error('sidecar tasks.items timeout after 5s')
+  }
+  const old = loadTasks()
+  await expect(loadTasks('list-1', true)).rejects.toThrow('timeout')
+  release({ tasks: [task({ id: 'deleted-by-mutation' })] })
+  await old
+  expect(tasks$.items.peek()[0].id).toBe('current')
+  expect(tasks$.loading.peek()).toBe(false)
+})

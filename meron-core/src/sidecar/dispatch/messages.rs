@@ -24,37 +24,32 @@ pub(crate) async fn dispatch(
                 .and_then(Value::as_str)
                 .and_then(unified::decode_cursor)
                 .unwrap_or_default();
-            let accounts = store::list_accounts(&engine.db.lock().unwrap())?
-                .into_iter()
-                .filter(|account| {
-                    account
-                        .get("included_in_unified")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(true)
-                })
-                .filter_map(|account| {
-                    account
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .filter(|account| cursors.is_empty() || cursors.contains_key(account))
-                .collect::<Vec<_>>();
-            // The unified view switches folders by *role*: each account answers
-            // from its own Sent/Archive/Trash/…, and an account whose server has
-            // no such mailbox drops out of the merge silently. Surfacing that as
-            // a failure would pin a permanent error banner on the view for any
-            // account whose provider simply lacks the folder.
             let role = req_str(p, "folder_role").unwrap_or_else(|_| "inbox".to_string());
-            let mut folders = Vec::with_capacity(accounts.len());
-            {
-                let db = engine.db.lock().unwrap();
-                for account in accounts {
-                    if let Some(folder) = store::folder_for_role(&db, &account, &role)? {
-                        folders.push((account, folder));
+            let folders =
+                crate::sidecar::db::run(&engine.db, "messages.unifiedRecent.folders", move |db| {
+                    let mut folders = Vec::new();
+                    for account in store::list_accounts(db)? {
+                        if !account
+                            .get("included_in_unified")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true)
+                        {
+                            continue;
+                        }
+                        let Some(account) = account.get("id").and_then(Value::as_str) else {
+                            continue;
+                        };
+                        if !cursors.is_empty() && !cursors.contains_key(account) {
+                            continue;
+                        }
+                        if let Some(folder) = store::folder_for_role(db, account, &role)? {
+                            folders.push((account.to_string(), folder));
+                        }
                     }
-                }
-            }
+                    Ok((folders, cursors))
+                })
+                .await?;
+            let (folders, cursors) = folders;
             let limit = u32::from(req_u16(p, "limit").unwrap_or(50));
             let mut pages = Vec::with_capacity(folders.len());
             for (account, folder) in folders {
@@ -227,7 +222,13 @@ pub(crate) async fn dispatch(
         // Fire-and-forget background sync; the result arrives via mail.synced.
         "messages.sync" => {
             let account = req_str(p, "account")?;
-            if is_rss(engine, &account)? {
+            let read_account = account.clone();
+            let rss_account =
+                crate::sidecar::db::run(&engine.db, "messages.sync.account", move |db| {
+                    Ok(store::account_engine(db, &read_account)?.as_deref() == Some("rss"))
+                })
+                .await?;
+            if rss_account {
                 spawn_rss_sync(engine.clone(), out.clone(), account);
                 return Ok(json!({ "ok": true, "queued": true }));
             }
@@ -414,20 +415,68 @@ async fn messages_recent(engine: &Arc<Engine>, p: &Value, out: &Writer) -> anyho
     let account = req_str(p, "account")?;
     let request = thread_list::ThreadListQuery::from_params(p, "folder");
     let refresh = p.get("refresh").and_then(Value::as_bool).unwrap_or(true);
-    if is_rss(engine, &account)? {
-        let page = thread_list::rss_page(&engine.db.lock().unwrap(), &account, &request)?;
+    let read_account = account.clone();
+    let params = p.clone();
+    // Read cached pages and their metadata together, then release the DB before
+    // scheduling refreshes or writing the response.
+    let (cached_page, rss_account, folder_synced_before) =
+        crate::sidecar::db::run(&engine.db, "messages.recent.cache", move |db| {
+            let request = thread_list::ThreadListQuery::from_params(&params, "folder");
+            if store::account_engine(db, &read_account)?.as_deref() == Some("rss") {
+                return Ok((
+                    Some(thread_list::rss_page(db, &read_account, &request)?),
+                    true,
+                    false,
+                ));
+            }
+            let synced = store::get_folder_state(db, &read_account, &request.folder)?.is_some();
+            let page = if let thread_list::MailSource::Recent { filter } = request.source() {
+                let (messages, next_cursor) = store::get_recent_page(
+                    db,
+                    &read_account,
+                    &request.folder,
+                    request.limit,
+                    request.before_cursor,
+                    filter,
+                )?;
+                let mut page = thread_list::mail_page(
+                    db,
+                    &read_account,
+                    &request.folder,
+                    messages,
+                    next_cursor,
+                    params
+                        .get("group")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                )?;
+                page["folder_synced"] = Value::Bool(synced);
+                request.retain_attachment_threads(&mut page);
+                Some(page)
+            } else {
+                None
+            };
+            Ok((page, false, synced))
+        })
+        .await?;
+    if let Some(page) = cached_page {
         if refresh {
-            spawn_rss_sync(engine.clone(), out.clone(), account);
+            if rss_account {
+                spawn_rss_sync(engine.clone(), out.clone(), account);
+            } else if request.wants_background_sync() {
+                spawn_message_sync(
+                    engine.clone(),
+                    out.clone(),
+                    account,
+                    request.folder.clone(),
+                    request.limit,
+                );
+            }
         }
         return Ok(page);
     }
     let folder = request.folder.clone();
     let limit = request.limit;
-    // Capture this before spawning the background refresh. The returned
-    // page was read from the pre-refresh cache, so its empty-state
-    // metadata must describe that same snapshot.
-    let folder_synced_before =
-        store::get_folder_state(&engine.db.lock().unwrap(), &account, &folder)?.is_some();
     // Desktop starred reads are online-first. Search first paints the
     // local index with refresh=false, then repeats with refresh=true;
     // snapshot-backed later pages are local even though they travel
@@ -441,14 +490,7 @@ async fn messages_recent(engine: &Arc<Engine>, p: &Value, out: &Writer) -> anyho
                 None,
             )
         }
-        thread_list::MailSource::Recent { filter } => store::get_recent_page(
-            &engine.db.lock().unwrap(),
-            &account,
-            &folder,
-            limit,
-            request.before_cursor,
-            filter,
-        )?,
+        thread_list::MailSource::Recent { .. } => unreachable!("cached page returned above"),
         thread_list::MailSource::Search => {
             // Chat-view search spans the selected folder plus Sent, so a
             // lookup surfaces both received and self-sent mail (and old

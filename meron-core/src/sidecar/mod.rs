@@ -8,3 +8,5 @@ pub(crate) mod local;
 pub(crate) mod params;
 pub(crate) mod prefs;
 pub(crate) mod spawn;
+
+pub(crate) mod db;

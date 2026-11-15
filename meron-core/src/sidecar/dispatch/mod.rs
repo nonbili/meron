@@ -51,7 +51,12 @@ pub(crate) async fn dispatch(
             Ok(serde_json::to_value(message)?)
         }
         "reminders.list" | "reminders.claim" | "reminders.skipPast" | "reminders.acknowledge" => {
-            meron_core::reminders::dispatch(&engine.db.lock().unwrap(), &req.method, p)
+            let method = req.method.clone();
+            let params = p.clone();
+            crate::sidecar::db::run(&engine.db, "reminders.dispatch", move |db| {
+                meron_core::reminders::dispatch(db, &method, &params)
+            })
+            .await
         }
         "search.parse" | "search.build" => meron_core::search_query::handle_request(&req.method, p)
             .ok_or_else(|| anyhow::anyhow!("bad {} request", req.method)),
@@ -177,5 +182,109 @@ pub(crate) async fn dispatch(
         "watch.start" | "watch.stop" | "system.resumed" => watch::dispatch(engine, req, out).await,
 
         other => Err(anyhow::anyhow!("unknown method: {other}")),
+    }
+}
+
+#[cfg(test)]
+mod contention_tests {
+    use super::*;
+    use meron_core::{engine::EngineHost, imap, secrets, store};
+    use std::time::{Duration, Instant};
+
+    struct Host;
+    impl EngineHost for Host {
+        fn open_db(&self) -> anyhow::Result<rusqlite::Connection> {
+            store::open_at(":memory:")
+        }
+        fn apply_secret(&self, _: &rusqlite::Connection, _: &str, _: &mut imap::Creds) {}
+        fn store_secret(
+            &self,
+            _: &rusqlite::Connection,
+            _: &str,
+            _: &secrets::Secrets,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    // One runtime worker makes any synchronous DB wait observable. The holder
+    // has a fallback deadline so a regression fails rather than deadlocking.
+    #[tokio::test(flavor = "current_thread")]
+    async fn cached_startup_reads_do_not_block_ping_or_responses() {
+        let engine = Arc::new(Engine::new(Box::new(Host)).unwrap());
+        let db = engine.db.clone();
+        let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            let _guard = db.lock().unwrap();
+            locked_tx.send(()).unwrap();
+            let _ = release_rx.recv_timeout(Duration::from_secs(2));
+        });
+        locked_rx.recv().unwrap();
+        let out = Arc::new(tokio::sync::Mutex::new(tokio::io::stdout()));
+        let mut reads = Vec::new();
+        let started = Instant::now();
+        // Refresh scheduling must also return immediately while the DB is held.
+        crate::sidecar::spawn::spawn_message_sync(
+            engine.clone(),
+            out.clone(),
+            "test".into(),
+            "INBOX".into(),
+            50,
+        );
+        crate::sidecar::spawn::spawn_rss_sync(engine.clone(), out.clone(), "test".into());
+        crate::sidecar::spawn::spawn_folder_sync(engine.clone(), out.clone(), "test".into());
+        for (method, params) in [
+            ("tasks.lists", serde_json::json!({})),
+            ("tasks.items", serde_json::json!({"list_id":"test"})),
+            (
+                "folders.list",
+                serde_json::json!({"account":"test", "refresh":true}),
+            ),
+            (
+                "messages.recent",
+                serde_json::json!({"account":"test", "refresh":true}),
+            ),
+            ("account.list", serde_json::json!({})),
+            ("reminders.list", serde_json::json!({})),
+        ] {
+            let engine = engine.clone();
+            let out = out.clone();
+            reads.push(tokio::spawn(async move {
+                dispatch(
+                    &engine,
+                    &Request {
+                        id: 1,
+                        method: method.into(),
+                        params,
+                    },
+                    &out,
+                )
+                .await
+            }));
+        }
+        tokio::task::yield_now().await;
+        let ping = dispatch(
+            &engine,
+            &Request {
+                id: 2,
+                method: "ping".into(),
+                params: serde_json::json!({}),
+            },
+            &out,
+        )
+        .await
+        .unwrap();
+        crate::respond(&out, 2, ping).await;
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "DB waits stalled the runtime"
+        );
+        assert!(reads.iter().all(|read| !read.is_finished()));
+        release_tx.send(()).unwrap();
+        for read in reads {
+            read.await.unwrap().unwrap();
+        }
+        holder.join().unwrap();
     }
 }

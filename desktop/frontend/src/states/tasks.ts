@@ -1,6 +1,6 @@
 import { observable } from '@legendapp/state'
 
-import { invoke } from '../lib/bridge'
+import { invoke, invokeRetryingTimeout } from '../lib/bridge'
 import { t } from '../lib/i18n'
 import { openThreadTabById } from './compose'
 import { showToast, showUndoToast, ui$ } from './ui'
@@ -95,34 +95,50 @@ export function toggleTasksPanel() {
 }
 
 export async function loadTaskLists(): Promise<{ lists: TaskList[]; defaultListId: string }> {
-  const res = await invoke<{ lists?: TaskList[]; default_list_id?: string }>('tasks.lists')
+  const res = await invokeRetryingTimeout<{ lists?: TaskList[]; default_list_id?: string }>('tasks.lists', {}, 2)
   const lists = res?.lists ?? []
   tasks$.lists.set(lists)
   return { lists, defaultListId: res?.default_list_id ?? '' }
 }
 
-/** Re-read one list's items. The core decides the order; we never re-sort. */
-export async function loadTasks(listId = ui$.activeTaskList.peek()) {
-  if (!listId) return
+// Share concurrent reads of the same list (session restore and panel opening
+// can overlap). A later list selection still owns what is displayed.
+const taskLoads = new Map<string, Promise<void>>()
+
+/** Re-read one list's items. Mutations request a fresh read so an older
+ * in-flight snapshot cannot hide the change. */
+export function loadTasks(listId = ui$.activeTaskList.peek(), fresh = false): Promise<void> {
+  if (!listId) return Promise.resolve()
+  const existing = taskLoads.get(listId)
+  if (existing && !fresh) return existing
   tasks$.loading.set(true)
-  try {
-    const res = await invoke<{ tasks?: Task[] }>('tasks.items', {
-      list_id: listId,
-      include_completed: true,
-    })
-    // A list switch that landed while this was in flight owns the panel now.
-    if (ui$.activeTaskList.peek() !== listId) return
-    tasks$.items.set(res?.tasks ?? [])
-  } finally {
-    tasks$.loading.set(false)
-  }
+  let pending!: Promise<void>
+  pending = (async () => {
+    try {
+      const res = await invokeRetryingTimeout<{ tasks?: Task[] }>(
+        'tasks.items',
+        {
+          list_id: listId,
+          include_completed: true,
+        },
+        2,
+      )
+      if (ui$.activeTaskList.peek() !== listId || taskLoads.get(listId) !== pending) return
+      tasks$.items.set(res?.tasks ?? [])
+    } finally {
+      if (taskLoads.get(listId) === pending) taskLoads.delete(listId)
+      tasks$.loading.set(taskLoads.has(ui$.activeTaskList.peek()))
+    }
+  })()
+  taskLoads.set(listId, pending)
+  return pending
 }
 
 export async function addTask(title: string) {
   const listId = ui$.activeTaskList.peek()
   if (!listId || !title.trim()) return
   await invoke('tasks.create', { list_id: listId, title: title.trim() })
-  await loadTasks(listId)
+  await loadTasks(listId, true)
 }
 
 /**
@@ -175,7 +191,7 @@ export async function addTaskFromMessage(input: {
   showToast(t('tasks.addedFromMessage'))
   // The panel is very likely open and showing the list this landed in, so it
   // has to repaint; when it is closed the next open reads fresh anyway.
-  if (ui$.tasksPanelOpen.peek()) await loadTasks()
+  if (ui$.tasksPanelOpen.peek()) await loadTasks(ui$.activeTaskList.peek(), true)
 }
 
 /**
@@ -195,7 +211,7 @@ export async function openTaskMail(threadId: string) {
 
 export async function setTaskDone(taskId: string, done: boolean) {
   await invoke('tasks.setDone', { task_id: taskId, done })
-  await loadTasks()
+  await loadTasks(ui$.activeTaskList.peek(), true)
 }
 
 export async function updateTask(
@@ -209,13 +225,13 @@ export async function updateTask(
   if (patch.dueAt !== undefined) payload.due_at = patch.dueAt
   if (patch.listId !== undefined) payload.list_id = patch.listId
   await invoke('tasks.update', payload)
-  await loadTasks()
+  await loadTasks(ui$.activeTaskList.peek(), true)
 }
 
 export async function deleteTask(taskId: string) {
   const res = await invoke<{ restore?: unknown }>('tasks.delete', { task_id: taskId })
   if (tasks$.editingId.peek() === taskId) tasks$.editingId.set('')
-  await loadTasks()
+  await loadTasks(ui$.activeTaskList.peek(), true)
   offerUndo(t('tasks.taskDeleted'), res?.restore)
 }
 
@@ -237,7 +253,7 @@ function offerUndo(message: string, restore: unknown) {
       void invoke('tasks.restore', { restore })
         .then(async () => {
           await refreshTaskLists()
-          await loadTasks()
+          await loadTasks(ui$.activeTaskList.peek(), true)
         })
         .catch((error) => {
           showToast(error instanceof Error ? error.message : t('notification.undoFailed'), 'error', undefined, 'tasks')
@@ -256,7 +272,7 @@ export async function reorderTasks(orderedIds: string[]) {
   const listId = ui$.activeTaskList.peek()
   if (!listId) return
   await invoke('tasks.reorder', { list_id: listId, task_ids: orderedIds })
-  await loadTasks(listId)
+  await loadTasks(listId, true)
 }
 
 export async function clearCompletedTasks() {
@@ -265,7 +281,7 @@ export async function clearCompletedTasks() {
   const res = await invoke<{ removed?: number; restore?: unknown }>('tasks.clearCompleted', {
     list_id: listId,
   })
-  await loadTasks(listId)
+  await loadTasks(listId, true)
   if (res?.removed) offerUndo(t('tasks.completedCleared'), res.restore)
 }
 
@@ -275,7 +291,7 @@ export async function createTaskList(title: string) {
   const id = res?.list?.id
   if (id) {
     ui$.activeTaskList.set(id)
-    await loadTasks(id)
+    await loadTasks(id, true)
   }
 }
 
@@ -299,7 +315,7 @@ export async function deleteTaskList(listId: string) {
   const remaining = (await loadTaskLists()).lists
   const next = remaining[0]?.id ?? ''
   ui$.activeTaskList.set(next)
-  if (next) await loadTasks(next)
+  if (next) await loadTasks(next, true)
   else tasks$.items.set([])
   offerUndo(t('tasks.listDeleted', { name: list.title }), res?.restore)
 }

@@ -74,7 +74,7 @@ export function TasksPanel({ listId }: { listId: string }) {
     setRenaming(false)
     // A thread window can add mail to this list while the panel stays open.
     const stop = (window as any).runtime?.EventsOn?.('tasks.changed', (detail?: { method?: string }) => {
-      if (detail?.method === 'tasks.create') void loadTasks(listId)
+      if (detail?.method === 'tasks.create') void loadTasks(listId, true)
     })
     return () => stop?.()
   }, [listId])

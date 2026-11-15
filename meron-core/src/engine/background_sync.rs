@@ -157,6 +157,9 @@ where
 
     match tokio::time::timeout_at(deadline, operation()).await {
         Ok(Ok(value)) => Ok(value),
+        // An async pause check can cancel inside the attempt itself. Keep its
+        // type so callers suppress cancellation instead of reporting sync failure.
+        Ok(Err(retry_error)) if retry_error.is::<BackgroundSyncCancelled>() => Err(retry_error),
         Ok(Err(retry_error)) => Err(anyhow::anyhow!(
             "retry failed: {retry_error:#}; first attempt: {first_error:#}"
         )),
@@ -324,6 +327,29 @@ mod tests {
 
         assert_eq!(error.to_string(), "login failed: authentication failed");
         assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn background_sync_preserves_cancellation_from_retry_attempt() {
+        let attempts = AtomicUsize::new(0);
+        let error = retry_background_sync::<(), _, _, _>(
+            "test sync",
+            || true,
+            || {
+                let attempt = attempts.fetch_add(1, Ordering::SeqCst);
+                async move {
+                    if attempt == 0 {
+                        anyhow::bail!("connection reset by peer");
+                    }
+                    Err(anyhow::Error::new(BackgroundSyncCancelled).context("account paused"))
+                }
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(error.is::<BackgroundSyncCancelled>());
+        assert!(!format!("{error:#}").contains("connection reset"));
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]

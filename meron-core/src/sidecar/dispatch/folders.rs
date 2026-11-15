@@ -28,15 +28,23 @@ pub(crate) async fn dispatch(
         // returns raw rows the bridge formats. Routed by the account's engine.
         "folders.list" => {
             let account = req_str(p, "account")?;
-            if is_rss(engine, &account)? {
-                let folders = rss::folders(&engine.db.lock().unwrap(), &account)?;
-                return Ok(json!({ "folders": folders }));
-            }
-            let folders = store::get_folders(&engine.db.lock().unwrap(), &account)?;
-            if p.get("refresh").and_then(Value::as_bool).unwrap_or(true) {
+            let read_account = account.clone();
+            let (folders, rss_account) =
+                crate::sidecar::db::run(&engine.db, "folders.list", move |db| {
+                    let rss_account =
+                        store::account_engine(db, &read_account)?.as_deref() == Some("rss");
+                    let folders = if rss_account {
+                        serde_json::to_value(rss::folders(db, &read_account)?)?
+                    } else {
+                        serde_json::to_value(store::get_folders(db, &read_account)?)?
+                    };
+                    Ok((folders, rss_account))
+                })
+                .await?;
+            if !rss_account && p.get("refresh").and_then(Value::as_bool).unwrap_or(true) {
                 spawn_folder_sync(engine.clone(), out.clone(), account);
             }
-            Ok(json!({ "folders": serde_json::to_value(folders)? }))
+            Ok(json!({ "folders": folders }))
         }
 
         "folders.create" => {

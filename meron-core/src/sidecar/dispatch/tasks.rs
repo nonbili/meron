@@ -8,18 +8,31 @@ use meron_core::tasks;
 use crate::sidecar::params::*;
 use crate::{Writer, emit};
 
-/// Handle the optional Tasks surface: `tasks.*`.
-///
-/// Every call is local SQLite, so unlike the mail and feed handlers nothing
-/// here goes to the blocking pool — there is no socket to wait on.
+/// SQLite and lock waits run in the blocking pool; events are emitted only
+/// after the database guard has been released.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
     req: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
-    let result = match req.method.as_str() {
-        "tasks.lists" => return tasks::lists_payload(&engine.db.lock().unwrap()),
+    let method = req.method.clone();
+    let params = req.params.clone();
+    let result = crate::sidecar::db::run(&engine.db, "tasks.dispatch", move |db| {
+        execute(db, &method, &params)
+    })
+    .await?;
+    if !matches!(
+        req.method.as_str(),
+        "tasks.lists" | "tasks.items" | "tasks.forThread"
+    ) {
+        emit(out, "tasks.changed", json!({ "method": req.method })).await;
+    }
+    Ok(result)
+}
+
+fn execute(db: &mut rusqlite::Connection, method: &str, p: &Value) -> anyhow::Result<Value> {
+    let result = match method {
+        "tasks.lists" => return tasks::lists_payload(db),
 
         "tasks.items" => {
             let list_id = req_str(p, "list_id")?;
@@ -27,35 +40,35 @@ pub(crate) async fn dispatch(
                 .get("include_completed")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            return tasks::tasks_payload(&engine.db.lock().unwrap(), &list_id, include_completed);
+            return tasks::tasks_payload(db, &list_id, include_completed);
         }
 
         // Which tasks point at a thread, for the "already in Tasks" affordance
         // in the mail surfaces.
         "tasks.forThread" => {
             let thread_id = req_str(p, "thread_id")?;
-            return tasks::thread_tasks_payload(&engine.db.lock().unwrap(), &thread_id);
+            return tasks::thread_tasks_payload(db, &thread_id);
         }
 
         "tasks.listCreate" => {
             let title = req_str(p, "title").unwrap_or_default();
-            tasks::create_list(&engine.db.lock().unwrap(), &title)?
+            tasks::create_list(db, &title)?
         }
 
         "tasks.listRename" => {
             let list_id = req_str(p, "list_id")?;
             let title = req_str(p, "title")?;
-            tasks::rename_list(&engine.db.lock().unwrap(), &list_id, &title)?
+            tasks::rename_list(db, &list_id, &title)?
         }
 
         "tasks.listDelete" => {
             let list_id = req_str(p, "list_id")?;
-            tasks::delete_list(&mut engine.db.lock().unwrap(), &list_id)?
+            tasks::delete_list(db, &list_id)?
         }
 
         "tasks.listReorder" => {
             let list_ids = req_str_array(p, "list_ids")?;
-            tasks::reorder_lists(&mut engine.db.lock().unwrap(), &list_ids)?
+            tasks::reorder_lists(db, &list_ids)?
         }
 
         "tasks.create" => {
@@ -66,7 +79,7 @@ pub(crate) async fn dispatch(
             let account = req_str(p, "account").unwrap_or_default();
             let thread_id = req_str(p, "thread_id").unwrap_or_default();
             let message_id = req_str(p, "message_id").unwrap_or_default();
-            tasks::mutate_with_due_time(&engine.db.lock().unwrap(), p, |conn| {
+            tasks::mutate_with_due_time(db, p, |conn| {
                 tasks::create_task(
                     conn,
                     &list_id,
@@ -88,7 +101,7 @@ pub(crate) async fn dispatch(
             let notes = p.get("notes").and_then(Value::as_str);
             let due_at = p.get("due_at").and_then(Value::as_i64);
             let list_id = p.get("list_id").and_then(Value::as_str);
-            tasks::mutate_with_due_time(&engine.db.lock().unwrap(), p, |conn| {
+            tasks::mutate_with_due_time(db, p, |conn| {
                 tasks::update_task(conn, &task_id, title, notes, due_at, list_id)
             })?
         }
@@ -96,37 +109,33 @@ pub(crate) async fn dispatch(
         "tasks.setDone" => {
             let task_id = req_str(p, "task_id")?;
             let done = req_bool(p, "done")?;
-            tasks::set_done(&engine.db.lock().unwrap(), &task_id, done)?
+            tasks::set_done(db, &task_id, done)?
         }
 
         "tasks.delete" => {
             let task_id = req_str(p, "task_id")?;
-            tasks::delete_task(&engine.db.lock().unwrap(), &task_id)?
+            tasks::delete_task(db, &task_id)?
         }
 
         "tasks.reorder" => {
             let list_id = req_str(p, "list_id")?;
             let task_ids = req_str_array(p, "task_ids")?;
-            tasks::reorder_tasks(&mut engine.db.lock().unwrap(), &list_id, &task_ids)?
+            tasks::reorder_tasks(db, &list_id, &task_ids)?
         }
 
         // Undo: hands back the `restore` blob a delete returned.
         "tasks.restore" => {
             let payload = p.get("restore").cloned().unwrap_or(Value::Null);
-            tasks::restore(&engine.db.lock().unwrap(), &payload)?
+            tasks::restore(db, &payload)?
         }
 
         "tasks.clearCompleted" => {
             let list_id = req_str(p, "list_id")?;
-            tasks::clear_completed(&engine.db.lock().unwrap(), &list_id)?
+            tasks::clear_completed(db, &list_id)?
         }
 
         other => return Err(anyhow::anyhow!("unknown method: {other}")),
     };
 
-    // Only mutations reach here. One event for all of them: a second surface
-    // showing tasks (the thread pane's badge, another window) re-reads rather
-    // than trying to replay the specific change.
-    emit(out, "tasks.changed", json!({ "method": req.method })).await;
     Ok(result)
 }

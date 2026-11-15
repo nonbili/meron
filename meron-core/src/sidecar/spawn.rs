@@ -105,9 +105,7 @@ pub(crate) fn spawn_message_sync(
     folder: String,
     limit: u32,
 ) {
-    if engine.is_paused(&account) {
-        return;
-    }
+    // sync_background_messages checks pause state in its blocking DB phase.
     let key = format!("msg:{account}/{folder}");
     if !engine.syncing.lock().unwrap().insert(key.clone()) {
         return;
@@ -175,14 +173,15 @@ pub(crate) fn spawn_message_sync(
 /// Re-fetch an RSS account's feeds in the background (deduped, blocking pool),
 /// then emit `mail.synced` so the UI re-reads the refreshed store.
 pub(crate) fn spawn_rss_sync(engine: Arc<Engine>, out: Writer, account: String) {
-    if engine.is_paused(&account) {
-        return;
-    }
     let key = format!("rss:{account}");
     if !engine.syncing.lock().unwrap().insert(key.clone()) {
         return;
     }
     tokio::spawn(async move {
+        if crate::sidecar::db::account_paused(&engine.db, &account).await {
+            engine.syncing.lock().unwrap().remove(&key);
+            return;
+        }
         let blocking = {
             let engine = engine.clone();
             let account = account.clone();
@@ -235,9 +234,6 @@ pub(crate) fn spawn_rss_sync(engine: Arc<Engine>, out: Writer, account: String) 
 }
 
 pub(crate) fn spawn_folder_sync(engine: Arc<Engine>, out: Writer, account: String) {
-    if engine.is_paused(&account) {
-        return;
-    }
     let key = format!("folders:{account}");
     if !engine.syncing.lock().unwrap().insert(key.clone()) {
         return;
@@ -245,8 +241,14 @@ pub(crate) fn spawn_folder_sync(engine: Arc<Engine>, out: Writer, account: Strin
     tokio::spawn(async move {
         let result = retry_background_sync(
             &format!("folders sync for {account}"),
-            || !engine.is_paused(&account),
-            || sync_folders(&engine, &account),
+            || true,
+            || async {
+                // Check before every attempt without blocking the runtime.
+                if crate::sidecar::db::account_paused(&engine.db, &account).await {
+                    return Err(anyhow::Error::new(BackgroundSyncCancelled));
+                }
+                sync_folders(&engine, &account).await
+            },
         )
         .await;
         engine.syncing.lock().unwrap().remove(&key);

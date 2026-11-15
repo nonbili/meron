@@ -9,14 +9,14 @@ use std::sync::RwLock;
 
 /// Diagnostic guard for selected database operations. Release the mutex before
 /// logging so a slow log sink does not extend the database critical section.
-pub(crate) struct TimedDbGuard<'a> {
+pub struct TimedDbGuard<'a> {
     guard: Option<std::sync::MutexGuard<'a, rusqlite::Connection>>,
     acquired: std::time::Instant,
     wait: std::time::Duration,
     operation: &'static str,
 }
 
-pub(crate) fn timed_db_lock<'a>(
+pub fn timed_db_lock<'a>(
     db: &'a std::sync::Mutex<rusqlite::Connection>,
     operation: &'static str,
 ) -> TimedDbGuard<'a> {
@@ -35,6 +35,12 @@ impl std::ops::Deref for TimedDbGuard<'_> {
 
     fn deref(&self) -> &Self::Target {
         self.guard.as_deref().unwrap()
+    }
+}
+
+impl std::ops::DerefMut for TimedDbGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.guard.as_deref_mut().unwrap()
     }
 }
 

@@ -21,7 +21,9 @@ pub(crate) async fn dispatch(
     match req.method.as_str() {
         // All accounts (mail + rss) as bridge-shaped JSON, from the one DB.
         "account.list" => {
-            let mut accounts = store::list_accounts(&engine.db.lock().unwrap())?;
+            let mut accounts =
+                crate::sidecar::db::run(&engine.db, "account.list", |db| store::list_accounts(db))
+                    .await?;
             let live_accounts = engine.accounts.lock().await;
             for account in &mut accounts {
                 if account
