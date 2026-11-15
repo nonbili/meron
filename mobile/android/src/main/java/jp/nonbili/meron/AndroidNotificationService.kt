@@ -242,15 +242,17 @@ object AndroidNotificationService {
             // buttons rather than buttons that quietly do nothing.
             .apply {
                 // First, ahead of the buttons that file the mail away: a code is
-                // what the user opened the shade for. Android shows three
-                // buttons at most, so with all three others enabled it is the
-                // destructive one that gives way.
+                // what the user opened the shade for.
                 if (item.code.isNotEmpty()) {
                     addAction(copyCodeAction(context, item.code, newMailNotificationId(batch.accountId, item)))
                 }
                 if (batch.accountId.isNotBlank() && batch.folder.isNotBlank() && item.threadKey.isNotBlank()) {
                     val id = newMailNotificationId(batch.accountId, item)
-                    val actions = newMailActions(batch.accountId, loadNotificationActions(context))
+                    val actions =
+                        newMailActionsBesideCode(
+                            newMailActions(batch.accountId, loadNotificationActions(context)),
+                            hasCode = item.code.isNotEmpty(),
+                        )
                     if (NOTIFICATION_ACTION_ARCHIVE in actions) {
                         addAction(
                             archiveAction(
@@ -863,6 +865,16 @@ fun newMailActions(
     } else {
         enabled - setOf(NOTIFICATION_ACTION_ARCHIVE, NOTIFICATION_ACTION_DELETE)
     }
+
+/** Android shows three buttons at most, and "Copy code" takes one. With all
+ *  three of the user's own enabled, one has to go, and which is decided here
+ *  rather than left to the system dropping whatever comes last: mark-as-read,
+ *  since copying the code is as good as having read the mail, while archive and
+ *  delete are how the user gets rid of it. */
+fun newMailActionsBesideCode(
+    actions: Set<String>,
+    hasCode: Boolean,
+): Set<String> = if (hasCode && actions.size > 2) actions - NOTIFICATION_ACTION_MARK_READ else actions
 
 /** One summary row: who wrote, and about what. */
 fun newMailInboxLine(

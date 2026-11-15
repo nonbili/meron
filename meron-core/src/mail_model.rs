@@ -43,19 +43,22 @@ pub fn new_messages_detail(
         .iter()
         .take(NEW_MESSAGES_DETAIL_MAX)
         .map(|header| {
-            // Without a cached body the subject alone is searched, which is
-            // where "482913 is your code" mails put it anyway.
+            // One read serves the snippet and the code search. Without a
+            // cached body the subject alone is searched, which is where
+            // "482913 is your code" mails put it anyway.
             let body = store::get_cached_message(conn, account_id, folder, header.uid)
                 .ok()
                 .flatten()
                 .map(|message| message.body)
                 .unwrap_or_default();
+            let preview = crate::parse::preview_of(&body);
             json!({
                 "uid": header.uid,
                 "from": display_from(header),
                 "subject": header.subject,
-                "preview": store::cached_body_preview(conn, account_id, folder, header.uid)
-                    .unwrap_or_default(),
+                // Blank when there is nothing to show, as
+                // [`store::cached_body_preview`] has it.
+                "preview": if preview.trim().is_empty() { "" } else { preview.as_str() },
                 // A one-time code the mail carries, for a "copy code" action;
                 // null for every other mail.
                 "code": crate::verification_code::detect(&header.subject, &body),

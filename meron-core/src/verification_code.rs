@@ -16,15 +16,17 @@ const BODY_LIMIT: usize = 4000;
 const BEFORE_WINDOW: usize = 90;
 /// "123456 is your verification code": the same, after the candidate.
 const AFTER_WINDOW: usize = 60;
-/// "code is ", "code: ", "код — ": close enough that the word can only mean
-/// the number next to it, in bytes.
-const ADJACENT: usize = 10;
 /// A word that disowns a candidate has to be this close in front of it.
 const DISOWN_WINDOW: usize = 28;
 
 /// Words that mean "this mail carries a one-time code". Lowercase; matched as
 /// whole words where the script has word boundaries. Each is unambiguous on its
 /// own, unlike the bare "code" handled by [`GENERIC`].
+///
+/// A trailing `*` marks a stem: the word may carry an ending. Turkish, Estonian
+/// and Latvian attach "your", case and number to the noun ("doğrulama
+/// kodunuz", "kinnituskoodi"), so the dictionary form alone would miss the
+/// most common wordings.
 const STRONG: &[&str] = &[
     // English
     "verification code",
@@ -52,6 +54,7 @@ const STRONG: &[&str] = &[
     "single-use code",
     "temporary code",
     "passcode",
+    "guard code",
     "otp",
     "2fa code",
     "two-factor code",
@@ -116,15 +119,20 @@ const STRONG: &[&str] = &[
     "verifieringskod",
     "säkerhetskod",
     "engångskod",
-    "kod weryfikacyjny",
-    "kod potwierdzający",
+    "kod weryfikacyjn*",
+    "kodu weryfikacyjn*",
+    "kodem weryfikacyjn*",
+    "kod potwierdzając*",
+    "kodu potwierdzając*",
     "kod bezpieczeństwa",
     "kod logowania",
     "hasło jednorazowe",
-    "doğrulama kodu",
-    "güvenlik kodu",
-    "onay kodu",
-    "kode verifikasi",
+    "doğrulama kodu*",
+    "güvenlik kodu*",
+    "onay kodu*",
+    "giriş kodu*",
+    "tek kullanımlık*",
+    "kode verifikasi*",
     "kode keamanan",
     "kode otp",
     "mã xác minh",
@@ -155,12 +163,14 @@ const STRONG: &[&str] = &[
     "κωδικός επαλήθευσης",
     "κωδικός επιβεβαίωσης",
     "κωδικός ασφαλείας",
-    "kinnituskood",
-    "turvakood",
-    "verifitseerimiskood",
-    "apstiprinājuma kods",
-    "verifikācijas kods",
-    "drošības kods",
+    "kinnituskood*",
+    "turvakood*",
+    "verifitseerimiskood*",
+    "ühekordne kood*",
+    "ühekordse kood*",
+    "apstiprinājuma kod*",
+    "verifikācijas kod*",
+    "drošības kod*",
 ];
 
 /// The bare word for "code". It only counts when the mail is about signing in
@@ -176,13 +186,13 @@ const GENERIC: &[&str] = &[
     "codice",
     "kod",
     "kode",
-    "kodu",
+    "kodu*",
     "mã",
     "コード",
     "코드",
     "κωδικός",
-    "kood",
-    "kods",
+    "kood*",
+    "kod*",
     "رمز",
 ];
 
@@ -288,6 +298,7 @@ const OTHER_CODES: &[&str] = &[
     "sort",
     "swift",
     "bank",
+    "card",
     "tax",
     "color",
     "colour",
@@ -308,6 +319,33 @@ const OTHER_CODES: &[&str] = &[
     "gutschein",
     "kortings",
     "rabatowy",
+    "indirim",
+];
+
+/// Words right after a candidate that make it a code to spend, not to sign in
+/// with: "Use code 482913 at checkout for 25% off".
+const SPENT_AFTER: &[&str] = &[
+    "at checkout",
+    "at the checkout",
+    "checkout",
+    "discount",
+    "% off",
+    "off your",
+    "coupon",
+    "promo",
+    "voucher",
+    "при оформлении",
+    "скидк",
+    "промокод",
+    "знижк",
+    "descuento",
+    "desconto",
+    "réduction",
+    "rabatt",
+    "sconto",
+    "korting",
+    "zniżk",
+    "rabat",
     "indirim",
 ];
 
@@ -450,12 +488,9 @@ const DISOWN: &[&str] = &[
 /// 456", "123-456") comes back without it, ready to paste.
 pub fn detect(subject: &str, body: &str) -> Option<String> {
     let text = searched_text(subject, body);
-    let lower = text.to_lowercase();
-    // `to_lowercase` can change a character's byte length, which would shift
-    // every offset; such mail is rare enough to simply not be searched.
-    if lower.len() != text.len() {
-        return None;
-    }
+    // One character in, one out, so the n-th character of `lower` is the n-th
+    // of `text` and a candidate found in one can be read from the other.
+    let lower: String = text.chars().map(lowercase_char).collect();
     let chars: Vec<(usize, char)> = lower.char_indices().collect();
     let mail_is_about_codes = contains_any(&lower, TOPIC) || has_keyword(&lower, STRONG);
 
@@ -471,6 +506,23 @@ pub fn detect(subject: &str, body: &str) -> Option<String> {
         }
     }
     best.map(|(_, _, code)| code)
+}
+
+/// Lowercases a single character. `str::to_lowercase` may turn one character
+/// into two (Turkish `İ` becomes `i` plus a combining dot), which would put
+/// every later character at a different index; a character whose lowercase is
+/// not a single character is kept as it is. `İ` is mapped to `i` by hand, since
+/// Turkish mail is full of it ("GİRİŞ", "İşlem") and the keywords are spelled
+/// with a plain `i`.
+fn lowercase_char(c: char) -> char {
+    if c == 'İ' {
+        return 'i';
+    }
+    let mut lower = c.to_lowercase();
+    match (lower.next(), lower.next()) {
+        (Some(single), None) => single,
+        _ => c,
+    }
 }
 
 /// Subject and the top of the body, as one text. The subject goes first: "Your
@@ -588,7 +640,8 @@ fn score(
     let byte = |index: usize| chars.get(index).map_or(lower.len(), |(offset, _)| *offset);
     let before = &lower[byte(candidate.start.saturating_sub(BEFORE_WINDOW))..byte(candidate.start)];
     let after = &lower[byte(candidate.end)..byte((candidate.end + AFTER_WINDOW).min(chars.len()))];
-    // A sentence does not vouch for a number in the next paragraph.
+    // A code is usually set off from its sentence by a blank line, so one
+    // blank line does not break the link. Two do: that is another section.
     let before = before.rsplit("\n\n\n").next().unwrap_or(before);
     let after_line = after.split('\n').next().unwrap_or(after);
 
@@ -598,24 +651,27 @@ fn score(
 
     let strong_before = last_keyword(before, STRONG);
     let strong_after = first_keyword(after_line, STRONG);
-    // The bare word needs the mail to be about signing in or confirming,
-    // unless it stands right against the number: "Your code is 482913".
-    let generic_before =
-        last_generic(before).filter(|at| mail_is_about_codes || before.len() - at <= ADJACENT);
-    let generic_after =
-        first_generic(after_line).filter(|at| mail_is_about_codes || *at <= ADJACENT);
+    // The bare word counts only in a mail about signing in or confirming.
+    // "Use code SAVE2024 at checkout" has the word right against the code and
+    // is still not a one-time code.
+    let generic_before = last_generic(before).filter(|_| mail_is_about_codes);
+    let generic_after = first_generic(after_line).filter(|_| mail_is_about_codes);
+    // And even there, not when the code is one to spend.
+    if contains_any(after_line, SPENT_AFTER) {
+        return None;
+    }
 
     // Distance from the vouching word to the candidate; smaller is better.
     let vouched = [
-        strong_before.map(|at| (before.len() - at, 40)),
-        strong_after.map(|at| (at, 36)),
-        generic_before.map(|at| (before.len() - at, 24)),
-        generic_after.map(|at| (at, 20)),
+        strong_before.map(|at| (before.len() - at, 40, true)),
+        strong_after.map(|at| (at, 36, true)),
+        generic_before.map(|at| (before.len() - at, 24, false)),
+        generic_after.map(|at| (at, 20, false)),
     ]
     .into_iter()
     .flatten()
-    .min_by_key(|(distance, _)| *distance);
-    let (distance, weight) = vouched?;
+    .min_by_key(|(distance, _, _)| *distance);
+    let (distance, weight, strong) = vouched?;
 
     // A disowning word between the "code" word and the number wins. One that
     // comes before the "code" word was talking about something earlier.
@@ -632,9 +688,10 @@ fn score(
         score += 12;
     }
     if candidate.mixed {
-        // "ABC123" is as likely a product or a reference. Only take it when it
-        // is set apart or sits right after the word.
-        if !stands_alone(chars, candidate) && distance > 24 {
+        // "ABC123" is as likely a promo code, a product or a reference. Only
+        // an unambiguous phrase vouches for one, and only when it is set apart
+        // or sits right after the phrase.
+        if !strong || (!stands_alone(chars, candidate) && distance > 24) {
             return None;
         }
         score -= 6;
@@ -770,41 +827,39 @@ fn has_keyword(text: &str, words: &[&str]) -> bool {
     first_keyword(text, words).is_some()
 }
 
-/// Byte offset of the earliest whole-word match of any of `words`.
+/// Byte offset of the earliest match of any of `words`.
 fn first_keyword(text: &str, words: &[&str]) -> Option<usize> {
     words
         .iter()
-        .filter_map(|word| whole_word_matches(text, word).next())
+        .filter_map(|word| keyword_matches(text, word).next())
+        .map(|(start, _)| start)
         .min()
 }
 
-/// Byte offset just past the latest whole-word match of any of `words`.
+/// Byte offset just past the latest match of any of `words`.
 fn last_keyword(text: &str, words: &[&str]) -> Option<usize> {
     words
         .iter()
-        .filter_map(|word| {
-            whole_word_matches(text, word)
-                .last()
-                .map(|at| at + word.len())
-        })
+        .filter_map(|word| keyword_matches(text, word).last())
+        .map(|(_, end)| end)
         .max()
 }
 
 fn first_generic(text: &str) -> Option<usize> {
     GENERIC
         .iter()
-        .flat_map(|word| whole_word_matches(text, word).filter(|at| !names_another_code(text, *at)))
+        .flat_map(|word| keyword_matches(text, word))
+        .filter(|(start, _)| !names_another_code(text, *start))
+        .map(|(start, _)| start)
         .min()
 }
 
 fn last_generic(text: &str) -> Option<usize> {
     GENERIC
         .iter()
-        .flat_map(|word| {
-            whole_word_matches(text, word)
-                .filter(|at| !names_another_code(text, *at))
-                .map(|at| at + word.len())
-        })
+        .flat_map(|word| keyword_matches(text, word))
+        .filter(|(start, _)| !names_another_code(text, *start))
+        .map(|(_, end)| end)
         .max()
 }
 
@@ -824,18 +879,34 @@ fn names_another_code(text: &str, at: usize) -> bool {
             .any(|other| word == *other || word.strip_suffix('-') == Some(other))
 }
 
-/// Offsets where `word` occurs with no letter or digit against either end.
-/// Scripts without spaces between words (CJK) match anywhere.
-fn whole_word_matches<'a>(text: &'a str, word: &'a str) -> impl Iterator<Item = usize> + 'a {
+/// Where `word` occurs as a word of its own, as byte ranges. A letter or digit
+/// against its start disqualifies a match, and so does one against its end
+/// unless the word is a stem (a trailing `*`), whose range then runs to the end
+/// of the ending. Scripts without spaces between words (CJK) match anywhere.
+fn keyword_matches<'a>(text: &'a str, word: &'a str) -> impl Iterator<Item = (usize, usize)> + 'a {
+    let (word, stem) = match word.strip_suffix('*') {
+        Some(stem) => (stem, true),
+        None => (word, false),
+    };
     let spaced = !word.chars().any(is_unspaced_script);
     text.match_indices(word).filter_map(move |(at, _)| {
+        let end = at + word.len();
         if !spaced {
-            return Some(at);
+            return Some((at, end));
         }
-        let before = text[..at].chars().next_back();
-        let after = text[at + word.len()..].chars().next();
-        let inside_word = |c: Option<char>| c.is_some_and(char::is_alphanumeric);
-        (!inside_word(before) && !inside_word(after)).then_some(at)
+        if text[..at]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_alphanumeric)
+        {
+            return None;
+        }
+        let ending: usize = text[end..]
+            .chars()
+            .take_while(|c| c.is_alphanumeric())
+            .map(char::len_utf8)
+            .sum();
+        (stem || ending == 0).then_some((at, end + ending))
     })
 }
 
@@ -974,7 +1045,9 @@ mod tests {
     #[test]
     fn tells_the_code_from_the_numbers_around_it() {
         let cases = [
-            ("Your code", "Your code is 123456", Some("123456")),
+            ("Sign in to Acme", "Your code is 123456", Some("123456")),
+            // The bare word is not enough when the mail is not about signing in.
+            ("Your code", "Your code is 123456", None),
             (
                 "Confirm sign-in",
                 "Your code: 123456. Order #99887766 is unaffected.",
@@ -987,7 +1060,7 @@ mod tests {
             ),
             (
                 "Покупка",
-                "Покупка 1290 ₽ в магазине. Код: 4821",
+                "Покупка 1290 ₽ в магазине. Код: 4821. Никому не сообщайте его.",
                 Some("4821"),
             ),
             (
@@ -1034,6 +1107,103 @@ mod tests {
         for (subject, body, want) in cases {
             assert_eq!(code(subject, body).as_deref(), want, "{subject} / {body}");
         }
+    }
+
+    #[test]
+    fn codes_to_spend_are_not_codes_to_sign_in_with() {
+        let cases = [
+            (
+                "Summer sale",
+                "Use the code SUMMER25 at checkout for 25% off.",
+            ),
+            ("Save today", "Use code SAVE2024 at checkout."),
+            ("Your gift", "Your gift card code is 4821 9930"),
+            (
+                "Confirm your subscription",
+                "Thanks for confirming! Use code 482913 at checkout for 10% off.",
+            ),
+            (
+                "Verify your email",
+                "You are verified. Your code WELCOME10 gives a discount on the first order.",
+            ),
+            (
+                "Подтверждение подписки",
+                "Спасибо за подписку! Код 482913 даёт скидку 10% на первый заказ.",
+            ),
+        ];
+        for (subject, body) in cases {
+            assert_eq!(code(subject, body), None, "{subject} / {body}");
+        }
+    }
+
+    #[test]
+    fn a_letters_and_digits_code_needs_an_unambiguous_phrase() {
+        // "code" alone, in a mail about signing in: not enough for a mixed one.
+        assert_eq!(
+            code("Sign in", "Enter the code AB12CD to continue signing in."),
+            None
+        );
+        assert_eq!(
+            code("Sign in", "Your verification code is AB12CD.").as_deref(),
+            Some("AB12CD")
+        );
+    }
+
+    #[test]
+    fn turkish_capital_i_does_not_switch_detection_off() {
+        assert_eq!(
+            code("Sign in", "Your verification code is 482913.\n\nİyi günler").as_deref(),
+            Some("482913")
+        );
+        assert_eq!(
+            code("GİRİŞ KODU", "GİRİŞ KODUNUZ: 482913").as_deref(),
+            Some("482913")
+        );
+    }
+
+    #[test]
+    fn nouns_with_endings_are_recognised() {
+        let cases = [
+            ("Doğrulama", "Doğrulama kodunuz: 482913", "482913"),
+            (
+                "Hesabınız",
+                "Güvenlik kodunuzu kimseyle paylaşmayın: 771203",
+                "771203",
+            ),
+            (
+                "Kinnitus",
+                "Teie kinnituskoodi väärtus on 558201.",
+                "558201",
+            ),
+            (
+                "Apstiprinājums",
+                "Jūsu apstiprinājuma kodu: 104882",
+                "104882",
+            ),
+            (
+                "Weryfikacja",
+                "Wpisz 660142 jako kod weryfikacyjny.",
+                "660142",
+            ),
+            (
+                "Weryfikacja",
+                "Twojego kodu weryfikacyjnego 918273 nie udostępniaj nikomu.",
+                "918273",
+            ),
+        ];
+        for (subject, body, want) in cases {
+            assert_eq!(
+                code(subject, body).as_deref(),
+                Some(want),
+                "{subject} / {body}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_stem_does_not_match_in_the_middle_of_a_word() {
+        // "kod*" must start a word: "metodkod" is not a code word.
+        assert_eq!(code("Rapor", "Yeni metodkodu 482913 yayında."), None);
     }
 
     #[test]
