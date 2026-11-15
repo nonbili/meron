@@ -1320,6 +1320,7 @@
   "settings.appearance.appIconHint": "Shown in the Dock while Meron is running. Finder keeps the original icon.",
   "settings.appearance.appIconHintLinux": "Used for the launcher and the dock. Your desktop may take a moment to show it.",
   "settings.appearance.appIconHintWindows": "Shown on the taskbar while Meron is running. The Start menu keeps the original icon.",
+  "settings.appearance.appIconNotSaved": "The icon color is applied but could not be saved. It will reset when Meron restarts.",
   "settings.appearance.monochromeTrayIcon": "Monochrome tray icon",
   "settings.appearance.monochromeTrayIconHint": "Matches the other icons in the bar, in black or white.",
   "settings.appearance.readerBottomActions": "Message actions at the bottom",

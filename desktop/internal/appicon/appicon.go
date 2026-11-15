@@ -66,29 +66,88 @@ func ramp(c Colour) []stop {
 }
 
 // Render returns the PNG of the icon in source redrawn in shades of colour.
-func Render(source []byte, colour Colour) ([]byte, error) {
+// With maxSize above zero, the result is halved until no side exceeds it:
+// desktop icons are drawn at a few hundred pixels at most, and a quarter of the
+// pixels takes a quarter of the time.
+func Render(source []byte, colour Colour, maxSize int) ([]byte, error) {
 	decoded, err := png.Decode(bytes.NewReader(source))
 	if err != nil {
 		return nil, fmt.Errorf("appicon: decode: %w", err)
 	}
-	stops := ramp(colour)
-	bounds := decoded.Bounds()
-	out := image.NewNRGBA(bounds)
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			pixel := color.NRGBAModel.Convert(decoded.At(x, y)).(color.NRGBA)
-			if pixel.A == 0 {
-				continue
-			}
-			shade := at(stops, Position(pixel))
-			out.SetNRGBA(x, y, color.NRGBA{R: channel(shade[0]), G: channel(shade[1]), B: channel(shade[2]), A: pixel.A})
-		}
+	img := toNRGBA(decoded)
+	for maxSize > 0 && (img.Rect.Dx() > maxSize || img.Rect.Dy() > maxSize) && img.Rect.Dx() > 1 && img.Rect.Dy() > 1 {
+		img = halve(img)
 	}
+	stops := ramp(colour)
+	for i := 0; i+3 < len(img.Pix); i += 4 {
+		pixel := color.NRGBA{R: img.Pix[i], G: img.Pix[i+1], B: img.Pix[i+2], A: img.Pix[i+3]}
+		if pixel.A == 0 {
+			continue
+		}
+		shade := at(stops, Position(pixel))
+		img.Pix[i], img.Pix[i+1], img.Pix[i+2] = channel(shade[0]), channel(shade[1]), channel(shade[2])
+	}
+	// Most of the time otherwise goes to compression, and the PNG is only
+	// handed to the system.
 	var encoded bytes.Buffer
-	if err := png.Encode(&encoded, out); err != nil {
+	encoder := png.Encoder{CompressionLevel: png.BestSpeed}
+	if err := encoder.Encode(&encoded, img); err != nil {
 		return nil, fmt.Errorf("appicon: encode: %w", err)
 	}
 	return encoded.Bytes(), nil
+}
+
+// toNRGBA returns a copy of img as NRGBA at the origin, which Render then
+// edits in place. PNGs with an alpha channel decode as NRGBA already and are
+// copied row by row; anything else goes through the colour model.
+func toNRGBA(img image.Image) *image.NRGBA {
+	bounds := img.Bounds()
+	out := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	if src, ok := img.(*image.NRGBA); ok {
+		for y := 0; y < bounds.Dy(); y++ {
+			from := src.PixOffset(bounds.Min.X, bounds.Min.Y+y)
+			copy(out.Pix[y*out.Stride:y*out.Stride+4*bounds.Dx()], src.Pix[from:from+4*bounds.Dx()])
+		}
+		return out
+	}
+	for y := 0; y < bounds.Dy(); y++ {
+		for x := 0; x < bounds.Dx(); x++ {
+			out.SetNRGBA(x, y, color.NRGBAModel.Convert(img.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.NRGBA))
+		}
+	}
+	return out
+}
+
+// halve averages each 2×2 block into one pixel (an odd last row or column is
+// dropped). Colours are weighted by alpha so transparent pixels do not darken
+// the edges.
+func halve(src *image.NRGBA) *image.NRGBA {
+	width, height := src.Rect.Dx()/2, src.Rect.Dy()/2
+	out := image.NewNRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			var r, g, b, a int
+			for _, offset := range [4]int{
+				src.PixOffset(2*x, 2*y), src.PixOffset(2*x+1, 2*y),
+				src.PixOffset(2*x, 2*y+1), src.PixOffset(2*x+1, 2*y+1),
+			} {
+				alpha := int(src.Pix[offset+3])
+				r += int(src.Pix[offset]) * alpha
+				g += int(src.Pix[offset+1]) * alpha
+				b += int(src.Pix[offset+2]) * alpha
+				a += alpha
+			}
+			if a == 0 {
+				continue
+			}
+			i := out.PixOffset(x, y)
+			out.Pix[i] = uint8((r + a/2) / a)
+			out.Pix[i+1] = uint8((g + a/2) / a)
+			out.Pix[i+2] = uint8((b + a/2) / a)
+			out.Pix[i+3] = uint8((a + 2) / 4)
+		}
+	}
+	return out
 }
 
 // Position is where a pixel of the artwork sits between its darkest fold (0)

@@ -1320,6 +1320,7 @@
   "settings.appearance.appIconHint": "Kuvatakse Dockis, kuni Meron töötab. Finder jätab alles algse ikooni.",
   "settings.appearance.appIconHintLinux": "Kasutatakse käivitajas ja dokis. Töölaual võib selle ilmumine hetke aega võtta.",
   "settings.appearance.appIconHintWindows": "Kuvatakse tegumiribal, kuni Meron töötab. Menüü Start jätab alles algse ikooni.",
+  "settings.appearance.appIconNotSaved": "Ikooni värv rakendati, kuid seda ei õnnestunud salvestada. See lähtestatakse Meroni taaskäivitamisel.",
   "settings.appearance.monochromeTrayIcon": "Ühevärviline salve ikoon",
   "settings.appearance.monochromeTrayIconHint": "Sobib riba teiste ikoonidega, mustas või valges.",
   "settings.appearance.readerBottomActions": "Kirja toimingud all",

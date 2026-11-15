@@ -59,7 +59,7 @@ func luminance(c color.NRGBA) float64 {
 
 func TestRenderKeepsTheDrawingAndChangesTheColour(t *testing.T) {
 	blue, _ := ParseColour("#1d6fe0")
-	rendered, err := Render(artwork(t), blue)
+	rendered, err := Render(artwork(t), blue, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestRenderKeepsTheDrawingAndChangesTheColour(t *testing.T) {
 
 func TestRenderKeepsTransparency(t *testing.T) {
 	red, _ := ParseColour("#d0342c")
-	rendered, err := Render(artwork(t), red)
+	rendered, err := Render(artwork(t), red, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestRenderKeepsTransparency(t *testing.T) {
 func TestRenderWorksForGreysAndExtremes(t *testing.T) {
 	for _, hex := range []string{"#808080", "#000000", "#ffffff"} {
 		colour, _ := ParseColour(hex)
-		rendered, err := Render(artwork(t), colour)
+		rendered, err := Render(artwork(t), colour, 0)
 		if err != nil {
 			t.Fatalf("%s: %v", hex, err)
 		}
@@ -110,7 +110,56 @@ func TestRenderWorksForGreysAndExtremes(t *testing.T) {
 }
 
 func TestRenderRejectsBadSource(t *testing.T) {
-	if _, err := Render([]byte("not a png"), Colour{}); err == nil {
+	if _, err := Render([]byte("not a png"), Colour{}, 0); err == nil {
 		t.Fatal("garbage should not render")
 	}
+}
+
+func TestRenderShrinksToMaxSize(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 8, 6))
+	// The left half is opaque, the right half empty: shrinking must not let
+	// the empty pixels darken or thin out the opaque ones.
+	for y := 0; y < 6; y++ {
+		for x := 0; x < 4; x++ {
+			img.SetNRGBA(x, y, color.NRGBA{R: 150, G: 215, B: 90, A: 255})
+		}
+	}
+	img.SetNRGBA(4, 0, color.NRGBA{R: 150, G: 215, B: 90, A: 255})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	blue, _ := ParseColour("#1d6fe0")
+	full, err := Render(buf.Bytes(), blue, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	small, err := Render(buf.Bytes(), blue, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size := pixelsOf(t, full).Bounds().Size(); size != image.Pt(8, 6) {
+		t.Fatalf("maxSize 0 resized to %v", size)
+	}
+	got := pixelsOf(t, small)
+	if size := got.Bounds().Size(); size != image.Pt(2, 1) {
+		t.Fatalf("size = %v, want 2x1", size)
+	}
+	reference := pixelsOf(t, full).NRGBAAt(0, 0)
+	if left := got.NRGBAAt(0, 0); left != reference {
+		t.Errorf("opaque block = %v, want %v", left, reference)
+	}
+	// One opaque pixel in sixteen keeps its colour and a sixteenth of the alpha.
+	if right := got.NRGBAAt(1, 0); right.A != 16 || right.R != reference.R || right.G != reference.G || right.B != reference.B {
+		t.Errorf("edge block = %v, want %v at alpha 16", right, reference)
+	}
+}
+
+func pixelsOf(t *testing.T, data []byte) *image.NRGBA {
+	t.Helper()
+	decoded, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return toNRGBA(decoded)
 }

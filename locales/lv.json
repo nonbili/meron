@@ -1320,6 +1320,7 @@
   "settings.appearance.appIconHint": "Redzama Dock joslā, kamēr Meron darbojas. Finder saglabā sākotnējo ikonu.",
   "settings.appearance.appIconHintLinux": "Tiek izmantota palaidējā un dokā. Var paiet brīdis, līdz darbvirsma to parāda.",
   "settings.appearance.appIconHintWindows": "Redzama uzdevumjoslā, kamēr Meron darbojas. Izvēlne Sākt saglabā sākotnējo ikonu.",
+  "settings.appearance.appIconNotSaved": "Ikonas krāsa ir lietota, taču to neizdevās saglabāt. Tā tiks atiestatīta, kad Meron tiks restartēts.",
   "settings.appearance.monochromeTrayIcon": "Vienkrāsaina paziņojumu joslas ikona",
   "settings.appearance.monochromeTrayIconHint": "Atbilst pārējām joslas ikonām, melnā vai baltā krāsā.",
   "settings.appearance.readerBottomActions": "Ziņojuma darbības apakšā",

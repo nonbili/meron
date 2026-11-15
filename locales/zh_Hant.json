@@ -1320,6 +1320,7 @@
   "settings.appearance.appIconHint": "Meron 執行時顯示在 Dock 中。Finder 仍顯示原始圖像。",
   "settings.appearance.appIconHintLinux": "用於啟動器和 Dock。桌面可能需要片刻才會顯示。",
   "settings.appearance.appIconHintWindows": "Meron 執行時顯示在工作列中。「開始」功能表仍顯示原始圖示。",
+  "settings.appearance.appIconNotSaved": "圖示顏色已套用，但無法儲存。Meron 重新啟動後將恢復原狀。",
   "settings.appearance.monochromeTrayIcon": "單色系統匣圖示",
   "settings.appearance.monochromeTrayIconHint": "與列上的其他圖示一致，顯示為黑色或白色。",
   "settings.appearance.readerBottomActions": "郵件動作置於底部",

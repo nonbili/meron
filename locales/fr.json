@@ -1320,6 +1320,7 @@
   "settings.appearance.appIconHint": "Affichée dans le Dock tant que Meron est ouvert. Le Finder garde l’icône d’origine.",
   "settings.appearance.appIconHintLinux": "Utilisée dans le lanceur et le dock. Le bureau peut mettre un instant à l’afficher.",
   "settings.appearance.appIconHintWindows": "Affichée dans la barre des tâches tant que Meron est ouvert. Le menu Démarrer garde l’icône d’origine.",
+  "settings.appearance.appIconNotSaved": "La couleur de l'icône est appliquée mais n'a pas pu être enregistrée. Elle sera réinitialisée au prochain démarrage de Meron.",
   "settings.appearance.monochromeTrayIcon": "Icône monochrome dans la zone de notification",
   "settings.appearance.monochromeTrayIconHint": "S'accorde aux autres icônes de la barre, en noir ou en blanc.",
   "settings.appearance.readerBottomActions": "Actions du message en bas",

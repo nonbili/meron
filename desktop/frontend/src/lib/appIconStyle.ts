@@ -1,5 +1,7 @@
 import { invoke } from './bridge'
+import { t } from './i18n'
 import { createLatestValueUpdater } from './latestValueUpdater'
+import { showToast } from '../states/ui'
 
 /**
  * The app icon: the shipped one, or the same drawing in a colour of the user's
@@ -30,10 +32,23 @@ export function appIconHintKey(platform: string) {
  * Dragging through the colour picker produces a stream of colours; only the
  * one it ends on has to reach the backend, which redraws the icon each time.
  */
-export function createAppIconUpdater(send = (icon: AppIcon) => invoke('appIcon.set', icon)) {
+export function createAppIconUpdater(send: (icon: AppIcon) => Promise<unknown> = sendAppIcon) {
   // Keyed by a string so two equal choices compare equal.
   const update = createLatestValueUpdater((key: string) => send(JSON.parse(key) as AppIcon))
   return (icon: AppIcon) => update(JSON.stringify({ custom: icon.custom, colour: icon.colour }))
+}
+
+/**
+ * The backend applies the icon even when it cannot save the choice; the user
+ * is told, since the icon would go back to the shipped one on the next start.
+ */
+export async function sendAppIcon(
+  icon: AppIcon,
+  apply = (value: AppIcon) => invoke<{ persisted?: boolean }>('appIcon.set', value),
+  notify = () => showToast(t('settings.appearance.appIconNotSaved'), 'error'),
+) {
+  const result = await apply(icon)
+  if (result?.persisted === false) notify()
 }
 
 export const setAppIcon = createAppIconUpdater()

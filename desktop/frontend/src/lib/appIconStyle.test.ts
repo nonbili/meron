@@ -4,6 +4,7 @@ import {
   createAppIconUpdater,
   DEFAULT_APP_ICON_COLOUR,
   parseAppIconColour,
+  sendAppIcon,
   type AppIcon,
 } from './appIconStyle'
 
@@ -56,4 +57,15 @@ test('the same choice is not sent twice', async () => {
   update({ custom: true, colour: '#111111' })
   await tick()
   expect(sent).toHaveLength(1)
+})
+
+test('an icon that is applied but not saved is reported', async () => {
+  let notified = 0
+  const notify = () => {
+    notified += 1
+  }
+  await sendAppIcon({ custom: true, colour: '#111111' }, async () => ({ ok: true, persisted: true }), notify)
+  expect(notified).toBe(0)
+  await sendAppIcon({ custom: true, colour: '#111111' }, async () => ({ ok: true, persisted: false }), notify)
+  expect(notified).toBe(1)
 })

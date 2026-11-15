@@ -153,8 +153,6 @@ func (a *App) Startup(ctx context.Context) {
 		a.logf("startup: secure media dir: %v", err)
 	}
 	a.startTray()
-	// Recolouring the icon takes a moment; startup does not wait for it.
-	go a.applyAppIcon()
 	a.logf("startup: core path=%s", coreBinaryPath())
 	a.sidecar = NewSidecar(coreBinaryPath(), a.coreLogWriter())
 	a.sidecar.onEvent = a.handleSidecarEvent

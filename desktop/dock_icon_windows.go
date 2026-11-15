@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/wailsapp/wails/v3/pkg/w32"
@@ -27,12 +28,25 @@ type iconPair struct{ small, big w32.HICON }
 // windowIcons holds the icons every Meron window should carry. Windows opened
 // later (a composer, an .eml reader) get Wails' default at creation, so the
 // current pair is kept and handed out again by refreshWindowIcons.
-//
-// A replaced pair is not destroyed at once, since a window may still be
-// drawing it: it is kept as previous and freed when the next one replaces it.
 var windowIcons struct {
-	mu                sync.Mutex
-	current, previous iconPair
+	mu      sync.Mutex
+	current iconPair
+}
+
+// retiredIconLifetime is how long a replaced pair outlives its replacement.
+// The icons reach windows as posted messages, so a window may still be about
+// to take the old pair, or still be drawing it, when the new one is handed
+// out. Every window has been sent the new pair by then, and a posted message
+// is handled within milliseconds unless the window is hung.
+const retiredIconLifetime = 10 * time.Second
+
+func (p iconPair) destroy() {
+	if p.small != 0 {
+		w32.DestroyIcon(p.small)
+	}
+	if p.big != 0 {
+		w32.DestroyIcon(p.big)
+	}
 }
 
 // platformSetAppIcon draws a PNG as the icon of every Meron window; nil
@@ -44,26 +58,17 @@ func platformSetAppIcon(_ string, png []byte) {
 	small, smallErr := w32.CreateSmallHIconFromImage(png)
 	big, bigErr := w32.CreateLargeHIconFromImage(png)
 	if smallErr != nil || bigErr != nil || small == 0 || big == 0 {
-		if small != 0 {
-			w32.DestroyIcon(small)
-		}
-		if big != 0 {
-			w32.DestroyIcon(big)
-		}
+		iconPair{small, big}.destroy()
 		return
 	}
 	windowIcons.mu.Lock()
-	stale := windowIcons.previous
-	windowIcons.previous = windowIcons.current
+	retired := windowIcons.current
 	windowIcons.current = iconPair{small, big}
 	windowIcons.mu.Unlock()
-	if stale.small != 0 {
-		w32.DestroyIcon(stale.small)
-	}
-	if stale.big != 0 {
-		w32.DestroyIcon(stale.big)
-	}
 	refreshWindowIcons()
+	if retired.big != 0 || retired.small != 0 {
+		time.AfterFunc(retiredIconLifetime, retired.destroy)
+	}
 }
 
 // refreshWindowIcons gives the chosen icon to every window this process owns.

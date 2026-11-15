@@ -1320,6 +1320,7 @@
   "settings.appearance.appIconHint": "Видно в Dock, поки Meron запущено. У Finder лишається початковий значок.",
   "settings.appearance.appIconHintLinux": "Використовується в меню програм і в доку. Робочий стіл може показати його не одразу.",
   "settings.appearance.appIconHintWindows": "Видно на панелі завдань, поки Meron запущено. У меню «Пуск» лишається початковий значок.",
+  "settings.appearance.appIconNotSaved": "Колір значка застосовано, але зберегти його не вдалося. Після перезапуску Meron його буде скинуто.",
   "settings.appearance.monochromeTrayIcon": "Монохромна піктограма в треї",
   "settings.appearance.monochromeTrayIconHint": "Використовувати чорно-білу піктограму в області сповіщень",
   "settings.appearance.readerBottomActions": "Нижня панель дій читача",

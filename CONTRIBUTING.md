@@ -58,6 +58,18 @@ Building universal needs both Rust targets, so run it inside `nix-shell`
 (which provides `rustup`); `MAS_ARCHS=arm64` opts out at the cost of Intel
 support.
 
+### App icon artwork
+
+The mobile apps ship extra icon images that the system restyles: Android's
+monochrome layer for themed icons, and the dark and tinted iOS icons. They are
+derived from the shipped artwork and committed. After changing
+`desktop/build/appicon.png`, the Android launcher foreground, or the iOS
+`AppIcon.png`, regenerate them with:
+
+```sh
+bun run generate:mobile-icons
+```
+
 ### Linux packaging
 
 Package-managed builds should launch Meron with

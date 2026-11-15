@@ -78,10 +78,11 @@ func installDesktopEntry(name string, alternative []byte) {
 	}
 }
 
-// desktopEntry renders the .desktop file launching target.
 // alternativeIconPrefix starts the file name of a recoloured launcher icon.
 const alternativeIconPrefix = "meron-icon-"
 
+// desktopEntry renders the .desktop file launching target with icon, an icon
+// theme name or an absolute path.
 func desktopEntry(target, icon string) string {
 	return fmt.Sprintf(`[Desktop Entry]
 Type=Application

@@ -76,6 +76,13 @@ func main() {
 		OnShutdown: func() { app.Shutdown(app.ctx) },
 	})
 	desktopruntime.App = native
+	// The chosen app icon is drawn once the app has started: Wails sets
+	// Options.Icon after the services start, which on macOS would replace a
+	// custom Dock icon drawn any earlier. Recolouring takes a moment, so it runs
+	// off the event loop.
+	native.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		go app.applyAppIcon()
+	})
 	native.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(event *application.ApplicationEvent) {
 		app.openMailtoURL(event.Context().URL())
 	})

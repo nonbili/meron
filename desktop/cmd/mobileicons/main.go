@@ -4,10 +4,12 @@
 // iOS icon. They are image files in the package, so they are generated ahead of
 // time and committed.
 //
-// Run from the desktop directory after the shipped artwork changes; the
-// argument is the repository root and defaults to the parent directory:
+// Run after the shipped artwork changes, from the repository root:
 //
-//	go run ./cmd/mobileicons
+//	bun run generate:mobile-icons
+//
+// or from the desktop directory as `go run ./cmd/mobileicons [repo root]`; the
+// root defaults to the parent directory.
 package main
 
 import (
@@ -78,11 +80,14 @@ func silhouette(artwork *image.NRGBA) *image.NRGBA {
 			if pixel.A == 0 {
 				continue
 			}
-			// The envelope is strongly coloured and the paper nearly white, so
+			// The envelope is strongly coloured and the paper pale, so
 			// saturation tells them apart where brightness cannot: the flaps
-			// carry highlights as bright as the paper. Fading between the two
-			// keeps the paper's edge smooth.
-			alpha := float64(pixel.A) * smoothstep(0.18, 0.30, saturation(pixel))
+			// carry highlights as bright as the paper. The paper's shadow under
+			// the top flap is still fairly saturated, which sets the cut-off;
+			// the flap highlights that are just as pale are greener than the
+			// yellowish paper, which hue catches. Fading keeps the edges smooth.
+			paper := (1 - smoothstep(0.38, 0.46, saturation(pixel))) * (1 - smoothstep(0.29, 0.32, hue(pixel)))
+			alpha := float64(pixel.A) * (1 - paper)
 			out.SetNRGBA(x, y, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: uint8(math.Round(alpha))})
 		}
 	}
@@ -96,6 +101,29 @@ func saturation(pixel color.NRGBA) float64 {
 		return 0
 	}
 	return (high - low) / high
+}
+
+// hue is the pixel's hue as a fraction of the colour wheel: 0 red, 1/6
+// yellow, 1/3 green.
+func hue(pixel color.NRGBA) float64 {
+	r, g, b := float64(pixel.R), float64(pixel.G), float64(pixel.B)
+	high, low := math.Max(r, math.Max(g, b)), math.Min(r, math.Min(g, b))
+	if high == low {
+		return 0
+	}
+	var h float64
+	switch high {
+	case r:
+		h = math.Mod((g-b)/(high-low), 6)
+	case g:
+		h = (b-r)/(high-low) + 2
+	default:
+		h = (r-g)/(high-low) + 4
+	}
+	if h < 0 {
+		h += 6
+	}
+	return h / 6
 }
 
 func smoothstep(from, to, value float64) float64 {
@@ -141,7 +169,7 @@ func ios(assets, artwork string) error {
 		return err
 	}
 	grey, _ := appicon.ParseColour(tintedGrey)
-	rendered, err := appicon.Render(source, grey)
+	rendered, err := appicon.Render(source, grey, 0)
 	if err != nil {
 		return err
 	}

@@ -62,12 +62,21 @@ func saveAppIconChoice(path string, choice appIconChoice) error {
 // appIconState is the choice plus what is currently drawn, so repeated
 // requests for the same icon do nothing.
 type appIconState struct {
+	// mu guards path and choice. It is never held while an icon is drawn, so
+	// reading the choice (the frontend does at boot) never waits on a redraw.
 	mu     sync.Mutex
 	path   string
 	choice appIconChoice
+	// applyMu runs one redraw at a time and guards drawn.
+	applyMu sync.Mutex
 	// The colour of the icon on screen, as hex; empty for the shipped icon.
 	drawn string
 }
+
+// appIconRenderSize caps the side of a recoloured icon. The Dock, the taskbar
+// and launchers draw app icons at 256 pixels at most, 512 on a large HiDPI
+// Dock; the shipped artwork is 1024.
+const appIconRenderSize = 512
 
 func (a *App) appIconGet() map[string]any {
 	a.appIcon.mu.Lock()
@@ -125,9 +134,13 @@ func (a *App) applyAppIcon() {
 	if !appIconStyleSupported() {
 		return
 	}
+	a.appIcon.applyMu.Lock()
+	defer a.appIcon.applyMu.Unlock()
+	// A change made while this redraw runs calls applyAppIcon again, which
+	// waits on applyMu and then reads the newer choice.
 	a.appIcon.mu.Lock()
-	defer a.appIcon.mu.Unlock()
 	colour, custom := a.appIcon.choice.colour()
+	a.appIcon.mu.Unlock()
 	if !custom {
 		if a.appIcon.drawn == "" {
 			return
@@ -142,7 +155,7 @@ func (a *App) applyAppIcon() {
 	if colour.Hex() == a.appIcon.drawn {
 		return
 	}
-	rendered, err := appicon.Render(appIconPNG, colour)
+	rendered, err := appicon.Render(appIconPNG, colour, appIconRenderSize)
 	if err != nil {
 		a.logf("app icon: %v", err)
 		return
