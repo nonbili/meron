@@ -38,6 +38,7 @@ import {
 import type { Account, ChatWallpaper } from '../types'
 import { normalizeI18nLanguage, resolveI18nLanguageFromWebLocale, type SupportedI18nLanguage } from '../lib/i18n'
 import { setTrayStyle } from '../lib/trayStyle'
+import { DEFAULT_APP_ICON_COLOUR, parseAppIconColour, setAppIcon } from '../lib/appIconStyle'
 import {
   ALERT_MINUTES,
   ALL_DAY_ALERT_DAYS,
@@ -197,6 +198,11 @@ export type Settings = {
    */
   closeToTray: boolean
   monochromeTrayIcon: boolean
+  /** Whether the app icon is drawn in `appIconColour` instead of as shipped
+   * (see lib/appIconStyle.ts). */
+  appIconCustom: boolean
+  /** "#rrggbb"; kept while the shipped icon is in use. */
+  appIconColour: string
   /** Whether to poll for new releases in the background (see states/update.ts). */
   autoUpdateCheck: boolean
   /** Version whose update banner the user dismissed, so it doesn't nag. */
@@ -259,7 +265,7 @@ const DB_KEY = {
   language: 'language',
   shortcutOverrides: 'shortcut_overrides',
   proxy: 'proxy',
-} satisfies Record<Exclude<keyof Settings, 'monochromeTrayIcon'>, string>
+} satisfies Record<Exclude<keyof Settings, 'monochromeTrayIcon' | 'appIconCustom' | 'appIconColour'>, string>
 
 /** Keys to request from `app.prefsGet` on boot. */
 export const SETTINGS_DB_KEYS = Object.values(DB_KEY)
@@ -473,6 +479,8 @@ export const settings$ = observable<Settings>({
   closeToTray: true,
   // Boot gets the native saved choice/default before hydrating settings.
   monochromeTrayIcon: false,
+  appIconCustom: false,
+  appIconColour: DEFAULT_APP_ICON_COLOUR,
   autoUpdateCheck: true,
   dismissedUpdateVersion: null,
   language: null,
@@ -492,6 +500,19 @@ settings$.closeToTray.onChange(({ value }) => {
 settings$.monochromeTrayIcon.onChange(({ value }) => {
   if (!hydrating) setTrayStyle(value)
 })
+
+// Native storage owns the app icon too. Either field changing sends both.
+const sendAppIcon = () => {
+  if (!hydrating) setAppIcon({ custom: settings$.appIconCustom.peek(), colour: settings$.appIconColour.peek() })
+}
+settings$.appIconCustom.onChange(sendAppIcon)
+settings$.appIconColour.onChange(sendAppIcon)
+
+/** Whether this platform lets the app replace its icon; set at boot. */
+export const appIconSupported$ = observable(false)
+
+/** The backend's platform ("darwin", "linux", "windows"), for the setting's hint. */
+export const appIconPlatform$ = observable('')
 
 // lib/shortcuts resolves chords from a local mirror, so keep it in step with the
 // persisted overrides (hydration included — onChange fires for those too).
@@ -1117,6 +1138,22 @@ export function hydrateTrayStyle(monochrome: boolean) {
   hydrating = true
   try {
     settings$.monochromeTrayIcon.set(monochrome)
+  } finally {
+    hydrating = previous
+  }
+}
+
+// Native storage owns this setting too; see hydrateTrayStyle.
+export function hydrateAppIcon(
+  saved: { custom?: unknown; colour?: unknown; supported?: unknown; platform?: unknown } | null,
+) {
+  const previous = hydrating
+  hydrating = true
+  try {
+    appIconSupported$.set(saved?.supported === true)
+    appIconPlatform$.set(typeof saved?.platform === 'string' ? saved.platform : '')
+    settings$.appIconCustom.set(saved?.custom === true)
+    settings$.appIconColour.set(parseAppIconColour(saved?.colour))
   } finally {
     hydrating = previous
   }

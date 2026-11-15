@@ -40,6 +40,7 @@ import {
   PanelBottom,
   SquarePen,
   Contrast,
+  AppWindow,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -49,6 +50,8 @@ import { showToast, ui$, type SetupMode } from '../../states/ui'
 import { accounts$, addLocalAccount, deleteAccount, isLocalAccountId, LOCAL_ACCOUNT_ID } from '../../states/accounts'
 import {
   settings$,
+  appIconSupported$,
+  appIconPlatform$,
   clampKanbanColumnWidth,
   KANBAN_COLUMN_MAX_WIDTH,
   KANBAN_COLUMN_MIN_WIDTH,
@@ -87,6 +90,7 @@ import { pickImageFile } from '../../lib/nativeFilePicker'
 import { invoke } from '../../lib/bridge'
 import { isMac } from '../../lib/shortcuts'
 import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
+import { appIconHintKey, parseAppIconColour } from '../../lib/appIconStyle'
 import { ALERT_MINUTES, ALL_DAY_ALERT_DAYS, NO_ALERT, alertLabel } from '../../lib/eventAlerts'
 import { McpSettingsPanel } from './McpSettingsPanel'
 import { AccountEncryptionCard } from '../crypto/AccountEncryptionCard'
@@ -459,6 +463,7 @@ function GeneralSection() {
           checked={showRealAvatars}
           onChange={() => settings$.showRealAvatars.set(!showRealAvatars)}
         />
+        <AppIconRows />
         <TrayIconRow />
       </SettingsGroup>
 
@@ -830,6 +835,45 @@ function BackupRow() {
           />,
           document.body,
         )}
+    </>
+  )
+}
+
+// Offered where the backend can replace the app's icon: the running app's on
+// macOS and Windows, the desktop entry's on Linux. The icon keeps its drawing
+// and takes the picked colour.
+function AppIconRows() {
+  const { t } = useTranslation()
+  const supported = useValue(appIconSupported$)
+  const platform = useValue(appIconPlatform$)
+  const custom = useValue(settings$.appIconCustom)
+  const colour = useValue(settings$.appIconColour)
+
+  if (!supported) return null
+
+  return (
+    <>
+      <ToggleRow
+        icon={<AppWindow size={15} />}
+        title={t('settings.appearance.appIconCustom')}
+        hint={t(appIconHintKey(platform))}
+        checked={custom}
+        onChange={() => settings$.appIconCustom.set(!custom)}
+      />
+      {custom && (
+        <SettingRow
+          title={t('settings.appearance.appIconColour')}
+          control={
+            <input
+              type="color"
+              value={colour}
+              onChange={(event) => settings$.appIconColour.set(parseAppIconColour(event.target.value))}
+              title={t('settings.appearance.appIconColour')}
+              className="h-7 w-10 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
+            />
+          }
+        />
+      )}
     </>
   )
 }

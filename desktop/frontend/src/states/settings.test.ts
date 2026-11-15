@@ -5,6 +5,8 @@ import {
   EMPTY_PROXY,
   hydrateSettings,
   hydrateTrayStyle,
+  hydrateAppIcon,
+  appIconSupported$,
   SETTINGS_DB_KEYS,
   isProxyUsable,
   normalizeSenderAddr,
@@ -383,6 +385,25 @@ describe('chat full messages setting', () => {
     settings$.chatFullMessages.set(true)
     hydrateSettings({ chat_full_messages: 'false' })
     expect(settings$.chatFullMessages.get()).toBe(true)
+  })
+})
+
+describe('app icon', () => {
+  afterEach(() => hydrateAppIcon(null))
+
+  it('hydrates the native choice and falls back to the shipped icon', () => {
+    hydrateAppIcon({ custom: true, colour: '#D0342C', supported: true, platform: 'linux' })
+    expect(settings$.appIconCustom.get()).toBe(true)
+    expect(settings$.appIconColour.get()).toBe('#d0342c')
+    expect(appIconSupported$.get()).toBe(true)
+    hydrateAppIcon({ custom: 'yes', colour: 'neon', supported: false })
+    expect(settings$.appIconCustom.get()).toBe(false)
+    expect(settings$.appIconColour.get()).toBe('#1d6fe0')
+    expect(appIconSupported$.get()).toBe(false)
+    hydrateAppIcon(null)
+    expect(settings$.appIconCustom.get()).toBe(false)
+    expect(SETTINGS_DB_KEYS).not.toContain('app_icon_custom')
+    expect(SETTINGS_DB_KEYS).not.toContain('app_icon_colour')
   })
 })
 

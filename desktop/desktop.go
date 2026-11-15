@@ -18,7 +18,10 @@ import (
 // XDG data dir so GNOME/KDE/etc. show the app's logo in the dock and
 // switcher, and registers Meron as the user's mailto: handler. Safe to
 // call on every startup: it only rewrites files when their content has changed.
-func installDesktopEntry() {
+//
+// alternative is the app icon the user chose in place of the shipped one, as
+// PNG data filed under name; nil keeps the shipped icon.
+func installDesktopEntry(name string, alternative []byte) {
 	if runtime.GOOS != "linux" {
 		return
 	}
@@ -46,7 +49,25 @@ func installDesktopEntry() {
 
 	writeIfChanged(iconPath, appIconPNG)
 
-	desktop := desktopEntry(desktopLaunchTarget(exe, os.Getenv))
+	// An alternative is referenced by path under a name of its own. Shells
+	// cache icons by name, so swapping the bytes behind "meron" would keep
+	// showing the old one until the next login.
+	icon := "meron"
+	iconsDir := filepath.Join(dataHome, "icons")
+	if len(alternative) > 0 {
+		icon = filepath.Join(iconsDir, alternativeIconPrefix+strings.TrimPrefix(name, "#")+".png")
+		writeIfChanged(icon, alternative)
+	}
+	// Each colour tried leaves a file behind; only the one in use is kept.
+	if stale, err := filepath.Glob(filepath.Join(iconsDir, alternativeIconPrefix+"*.png")); err == nil {
+		for _, path := range stale {
+			if path != icon {
+				_ = os.Remove(path)
+			}
+		}
+	}
+
+	desktop := desktopEntry(desktopLaunchTarget(exe, os.Getenv), icon)
 	writeIfChanged(desktopPath, []byte(desktop))
 
 	// Refresh the MIME associations database so the mailto: handler takes
@@ -58,18 +79,21 @@ func installDesktopEntry() {
 }
 
 // desktopEntry renders the .desktop file launching target.
-func desktopEntry(target string) string {
+// alternativeIconPrefix starts the file name of a recoloured launcher icon.
+const alternativeIconPrefix = "meron-icon-"
+
+func desktopEntry(target, icon string) string {
 	return fmt.Sprintf(`[Desktop Entry]
 Type=Application
 Name=Meron
 Comment=Messages that spark joy
 Exec=%s %%U
-Icon=meron
+Icon=%s
 Terminal=false
 Categories=Office;Network;Email;
 StartupWMClass=%s
 MimeType=x-scheme-handler/mailto;message/rfc822;
-`, desktopExecArg(target), desktopProgramName)
+`, desktopExecArg(target), icon, desktopProgramName)
 }
 
 func writeIfChanged(path string, data []byte) {
