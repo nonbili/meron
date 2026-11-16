@@ -31,6 +31,25 @@ func TestAwaitCoreOutlastsTimeoutWhileMigrating(t *testing.T) {
 	}
 }
 
+func TestAwaitCoreOutlastsTimeoutWhileAwaitingKeychain(t *testing.T) {
+	s := startingSidecar()
+	s.awaitingKeychain = true
+	done := make(chan error, 1)
+	go func() { done <- s.awaitCore("account.list", 10*time.Millisecond) }()
+	select {
+	case err := <-done:
+		t.Fatalf("awaitCore returned while the keychain was being waited on: %v", err)
+	case <-time.After(60 * time.Millisecond):
+	}
+	s.finishStarting(nil)
+	if err := <-done; err != nil {
+		t.Fatalf("awaitCore after the keychain answered: %v", err)
+	}
+	if s.awaitingKeychainUnlock() {
+		t.Fatal("still awaiting the keychain after finishStarting")
+	}
+}
+
 func TestAwaitCoreTimesOutOnOtherStalls(t *testing.T) {
 	s := startingSidecar()
 	err := s.awaitCore("account.list", 10*time.Millisecond)

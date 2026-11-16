@@ -212,7 +212,7 @@ fn backend_store(account: &str, blob: &str) -> Result<()> {
     let owned_blob = blob.to_owned();
     with_service_fallback(
         move || {
-            service_call("write", move || {
+            service_call("write", SERVICE_TIMEOUT, move || {
                 Entry::new(SERVICE, &owned_account)?.set_password(&owned_blob)
             })
         },
@@ -297,10 +297,17 @@ fn sweep_chunks(account: &str) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 fn backend_load(account: &str) -> Result<Option<String>> {
+    backend_load_within(account, SERVICE_TIMEOUT)
+}
+
+/// [`backend_load`], allowing the keychain `timeout` to answer instead of the
+/// usual [`SERVICE_TIMEOUT`].
+#[cfg(target_os = "linux")]
+fn backend_load_within(account: &str, timeout: std::time::Duration) -> Result<Option<String>> {
     let owned_account = account.to_owned();
     with_service_fallback(
         move || {
-            service_call("read", move || {
+            service_call("read", timeout, move || {
                 match Entry::new(SERVICE, &owned_account)?.get_password() {
                     Ok(blob) => Ok(Some(blob)),
                     Err(keyring::Error::NoEntry) => Ok(None),
@@ -309,7 +316,7 @@ fn backend_load(account: &str) -> Result<Option<String>> {
             })
         },
         || {
-            crate::secrets_portal::load(account)
+            crate::secrets_portal::load_within(account, timeout)
                 .with_context(|| format!("read keyring entry for {account}"))
         },
     )
@@ -352,7 +359,7 @@ fn backend_delete(account: &str) -> Result<()> {
     let owned_account = account.to_owned();
     with_service_fallback(
         move || {
-            service_call("delete", move || {
+            service_call("delete", SERVICE_TIMEOUT, move || {
                 match Entry::new(SERVICE, &owned_account)?.delete_credential() {
                     Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
                     Err(error) => Err(error),
@@ -423,13 +430,15 @@ impl ServiceFailure {
     }
 }
 
-/// Run one blocking Secret Service call on a throwaway thread, bounded by
-/// [`SERVICE_TIMEOUT`]. The thread is abandoned on timeout rather than joined:
-/// a wedged D-Bus call never returns, and the sticky demotion means we stop
-/// issuing these calls after the first one gives up.
+/// How long one Secret Service call may take before the service counts as
+/// unavailable.
 #[cfg(target_os = "linux")]
 const SERVICE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// Run one blocking Secret Service call on a throwaway thread, bounded by
+/// `timeout` (normally [`SERVICE_TIMEOUT`]). The thread is abandoned on timeout
+/// rather than joined: a wedged D-Bus call never returns, and the sticky
+/// demotion means we stop issuing these calls after the first one gives up.
 ///
 /// A platform failure is tried once more before it counts: the service
 /// encrypts each reply for a per-call session, and that exchange fails now and
@@ -438,15 +447,16 @@ const SERVICE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 #[cfg(target_os = "linux")]
 fn service_call<T: Send + 'static>(
     what: &str,
+    timeout: std::time::Duration,
     call: impl Fn() -> std::result::Result<T, keyring::Error> + Send + Sync + 'static,
 ) -> std::result::Result<T, ServiceFailure> {
     let call = std::sync::Arc::new(call);
     let first = {
         let call = call.clone();
-        service_call_once(what, move || call())
+        service_call_once(what, timeout, move || call())
     };
     match first {
-        Err(failure) if failure.transient => service_call_once(what, move || call()),
+        Err(failure) if failure.transient => service_call_once(what, timeout, move || call()),
         other => other,
     }
 }
@@ -454,6 +464,7 @@ fn service_call<T: Send + 'static>(
 #[cfg(target_os = "linux")]
 fn service_call_once<T: Send + 'static>(
     what: &str,
+    timeout: std::time::Duration,
     call: impl FnOnce() -> std::result::Result<T, keyring::Error> + Send + 'static,
 ) -> std::result::Result<T, ServiceFailure> {
     let (sender, receiver) = std::sync::mpsc::channel();
@@ -463,12 +474,12 @@ fn service_call_once<T: Send + 'static>(
             let _ = sender.send(call());
         })
         .map_err(|error| ServiceFailure::unavailable(format!("spawn keychain thread: {error}")))?;
-    match receiver.recv_timeout(SERVICE_TIMEOUT) {
+    match receiver.recv_timeout(timeout) {
         Ok(Ok(value)) => Ok(value),
         Ok(Err(error)) => Err(ServiceFailure::from_keyring(what, error)),
         Err(_) => Err(ServiceFailure::unavailable(format!(
             "Secret Service {what} timed out after {}s",
-            SERVICE_TIMEOUT.as_secs()
+            timeout.as_secs()
         ))),
     }
 }
@@ -509,12 +520,21 @@ pub fn db_key(store_exists: bool) -> Result<Option<String>> {
     if keyring_disabled() {
         return Ok(None);
     }
-    match backend_load(DB_KEY_ACCOUNT).context("read db key from keychain")? {
+    let read = if store_exists && fallback_cannot_hold_db_key() {
+        // Giving up on the keychain now would only fail the store, so wait
+        // out the unlock prompt a locked keychain raises — the user may be
+        // typing their password. Seen after a fingerprint login, which leaves
+        // the login keyring locked.
+        read_db_key_patiently()
+    } else {
+        backend_load(DB_KEY_ACCOUNT)
+    };
+    match read.context("read db key from keychain")? {
         Some(key) if is_hex_key(&key) => Ok(Some(key)),
         // Missing (first run) or a malformed entry.
         Some(_) | None => {
             #[cfg(target_os = "linux")]
-            if let Some(key) = shadowed_db_key() {
+            if let Some(key) = shadowed_db_key(store_exists) {
                 crate::secrets_portal::prefer_service();
                 return Ok(Some(key));
             }
@@ -531,6 +551,56 @@ pub fn db_key(store_exists: bool) -> Result<Option<String>> {
     }
 }
 
+/// How long to wait for the keychain when giving up would only fail the store:
+/// long enough to notice an unlock prompt and type a password into it.
+#[cfg(target_os = "linux")]
+const UNLOCK_PATIENCE: std::time::Duration = std::time::Duration::from_secs(180);
+
+static KEYCHAIN_WAIT_HOOK: std::sync::OnceLock<fn()> = std::sync::OnceLock::new();
+
+/// Register `hook` to run when the store key read starts waiting on the
+/// keychain for longer than usual, so the host can hold its own timeouts.
+pub fn on_keychain_wait(hook: fn()) {
+    let _ = KEYCHAIN_WAIT_HOOK.set(hook);
+}
+
+/// Whether the store key could only ever come from the real keychain: the
+/// local file keyring a timeout would demote to is not this profile's, so it
+/// cannot hold the key, and falling back to it is a guaranteed failure.
+#[cfg(target_os = "linux")]
+fn fallback_cannot_hold_db_key() -> bool {
+    !keyring_forced_to("file")
+        && !crate::secrets_portal::local_forced()
+        && !crate::secrets_portal::local_keyring_exists()
+}
+
+/// macOS and Windows keychain calls are not bounded, so they already wait out
+/// any prompt.
+#[cfg(not(target_os = "linux"))]
+fn fallback_cannot_hold_db_key() -> bool {
+    false
+}
+
+/// Start a store key read worth waiting out an unlock prompt for: tell the host
+/// to hold its timeouts, and return how long the keychain may take.
+#[cfg(target_os = "linux")]
+fn unlock_patience() -> std::time::Duration {
+    if let Some(hook) = KEYCHAIN_WAIT_HOOK.get() {
+        hook();
+    }
+    UNLOCK_PATIENCE
+}
+
+#[cfg(target_os = "linux")]
+fn read_db_key_patiently() -> Result<Option<String>> {
+    backend_load_within(DB_KEY_ACCOUNT, unlock_patience())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn read_db_key_patiently() -> Result<Option<String>> {
+    backend_load(DB_KEY_ACCOUNT)
+}
+
 /// The store key held by the keyring that the local file keyring is shadowing:
 /// the Secret portal under Flatpak, the Secret Service natively. `None` when no
 /// local keyring is shadowing anything, or the other keyring has no key.
@@ -540,18 +610,27 @@ pub fn db_key(store_exists: bool) -> Result<Option<String>> {
 /// keyring stopped answering is demoted to it mid-life, and that leaves a local
 /// keyring holding no store key — or, from builds that minted one there, the
 /// wrong one. Either way the real key is still in the keyring it shadows.
+///
+/// `patient` when an encrypted store depends on the answer: nothing else can
+/// supply its key, so the read waits out an unlock prompt (see
+/// [`UNLOCK_PATIENCE`]) instead of failing the store after the usual timeout.
 #[cfg(target_os = "linux")]
-fn shadowed_db_key() -> Option<String> {
+fn shadowed_db_key(patient: bool) -> Option<String> {
     let shadowed = !keyring_forced_to("file")
         && !crate::secrets_portal::local_forced()
         && crate::secrets_portal::local_keyring_exists();
     if !shadowed {
         return None;
     }
-    let key = if use_portal_keyring() {
-        crate::secrets_portal::load_from_portal(DB_KEY_ACCOUNT)
+    let timeout = if patient {
+        unlock_patience()
     } else {
-        service_call("read", || {
+        SERVICE_TIMEOUT
+    };
+    let key = if use_portal_keyring() {
+        crate::secrets_portal::load_from_portal(DB_KEY_ACCOUNT, timeout)
+    } else {
+        service_call("read", timeout, || {
             match Entry::new(SERVICE, DB_KEY_ACCOUNT)?.get_password() {
                 Ok(key) => Ok(Some(key)),
                 Err(keyring::Error::NoEntry) => Ok(None),
@@ -565,7 +644,7 @@ fn shadowed_db_key() -> Option<String> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn shadowed_db_key() -> Option<String> {
+fn shadowed_db_key(_patient: bool) -> Option<String> {
     None
 }
 
@@ -577,7 +656,8 @@ pub fn recover_shadowed_db_key(opens: impl Fn(&str) -> bool) -> Option<String> {
     if keyring_disabled() {
         return None;
     }
-    let key = shadowed_db_key().filter(|key| opens(key))?;
+    // Only called for an existing store the current key does not open.
+    let key = shadowed_db_key(true).filter(|key| opens(key))?;
     #[cfg(target_os = "linux")]
     crate::secrets_portal::retire_local_keyring();
     Some(key)

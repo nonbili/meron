@@ -37,6 +37,9 @@ type Sidecar struct {
 	releaseCore func()
 	// migrating is true while the core reports upgrading its store.
 	migrating bool
+	// awaitingKeychain is true while the core waits on the keychain for its
+	// store key, which may mean an unlock prompt is up.
+	awaitingKeychain bool
 }
 
 type sidecarResponse struct {
@@ -111,6 +114,14 @@ func (s *Sidecar) Migrating() bool {
 	return s.migrating
 }
 
+// awaitingKeychainUnlock reports whether the core is waiting on the keychain
+// for its store key. The core bounds that wait itself.
+func (s *Sidecar) awaitingKeychainUnlock() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.awaitingKeychain
+}
+
 // finishStarting lets waiting calls through: the core is ready, has reported it
 // cannot start (and now answers every call with the reason), or has exited.
 func (s *Sidecar) finishStarting(ctx context.Context) {
@@ -125,6 +136,7 @@ func (s *Sidecar) finishStarting(ctx context.Context) {
 	s.mu.Lock()
 	wasMigrating := s.migrating
 	s.migrating = false
+	s.awaitingKeychain = false
 	s.mu.Unlock()
 	if wasMigrating && ctx != nil {
 		wailsRuntime.EventsEmit(ctx, "core.migrationDone")
@@ -134,8 +146,10 @@ func (s *Sidecar) finishStarting(ctx context.Context) {
 // awaitCore holds a call until the core reads its stdin, so that a request's
 // timeout measures the request and not the startup in front of it. A store
 // upgrade is waited out however long it takes, because the UI says what is
-// happening. Any other stall (a keychain that never answers) still fails after
-// the call's own timeout, with the same error a late response would give.
+// happening; so is a store key read waiting on the keychain, which may be
+// showing an unlock prompt and which the core bounds itself. Any other stall
+// still fails after the call's own timeout, with the same error a late
+// response would give.
 func (s *Sidecar) awaitCore(method string, timeout time.Duration) error {
 	s.mu.Lock()
 	coreUp := s.coreUp
@@ -151,7 +165,7 @@ func (s *Sidecar) awaitCore(method string, timeout time.Duration) error {
 		case <-coreUp:
 			return nil
 		case <-ticker.C:
-			if s.Migrating() {
+			if s.Migrating() || s.awaitingKeychainUnlock() {
 				continue
 			}
 			select {
@@ -255,6 +269,10 @@ func (s *Sidecar) readLoop(ctx context.Context, stdout io.Reader) {
 			case "core.migrating":
 				s.mu.Lock()
 				s.migrating = true
+				s.mu.Unlock()
+			case "core.keychainWait":
+				s.mu.Lock()
+				s.awaitingKeychain = true
 				s.mu.Unlock()
 			case "ready", "core.fatal":
 				s.finishStarting(ctx)

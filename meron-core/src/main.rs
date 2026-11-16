@@ -88,12 +88,24 @@ fn announce_store_upgrade() {
     let _ = stdout.flush();
 }
 
+/// Tell the bridge the store key read is waiting on the keychain, which may be
+/// showing an unlock prompt, so it holds request timeouts until the core is up.
+/// Like [`announce_store_upgrade`], this runs before the stdout writer exists.
+fn announce_keychain_wait() {
+    use std::io::Write;
+    let line = json!({ "event": "core.keychainWait", "detail": {} });
+    let mut stdout = std::io::stdout().lock();
+    let _ = writeln!(stdout, "{line}");
+    let _ = stdout.flush();
+}
+
 #[tokio::main]
 async fn main() {
     // Tag panics consistently on stderr, which the desktop bridge copies into
     // meron.log; a panic in a worker task would otherwise be easy to miss.
     meron_core::log::install_panic_hook();
     let out: Writer = Arc::new(Mutex::new(tokio::io::stdout()));
+    secrets::on_keychain_wait(announce_keychain_wait);
     let engine = match Engine::new(Box::new(DesktopHost)) {
         Ok(engine) => {
             let writer = out.clone();

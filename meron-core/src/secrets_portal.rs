@@ -31,9 +31,11 @@ use crate::log::Level;
 
 const SERVICE: &str = "meron";
 
-/// How long any single keyring operation may take before the backend counts as
-/// unavailable. Generous enough for a real portal round trip that shows an
-/// unlock prompt, short enough that a wedged portal doesn't look like a hang.
+/// How long a keyring operation may take before the backend counts as
+/// unavailable: enough for a real portal round trip, short enough that a wedged
+/// portal doesn't look like a hang. Too short for a person to answer an unlock
+/// prompt, so the store key read, which nothing else can stand in for, gets
+/// longer (see `secrets::db_key`).
 const OP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Caller-side backstop, always longer than [`OP_TIMEOUT`], so a worker busy
@@ -101,9 +103,9 @@ pub fn retire_local_keyring() {
 
 /// Read one entry straight from the Secret portal, bypassing the worker and
 /// whichever backend it has settled on. Used to look behind a local keyring
-/// that may be shadowing the portal. Bounded by [`OP_TIMEOUT`]; any failure is
+/// that may be shadowing the portal. Bounded by `timeout`; any failure is
 /// `None` and, unlike the worker, demotes nothing.
-pub fn load_from_portal(account: &str) -> Option<String> {
+pub fn load_from_portal(account: &str, timeout: Duration) -> Option<String> {
     let account = account.to_owned();
     // Own thread and runtime: callers may already be inside a Tokio runtime,
     // where block_on would panic.
@@ -118,7 +120,7 @@ pub fn load_from_portal(account: &str) -> Option<String> {
                 let keyring = oo7::Keyring::new().await?;
                 load_async(&Backend::Portal(keyring), &account).await
             };
-            match runtime.block_on(async { tokio::time::timeout(OP_TIMEOUT, probe).await }) {
+            match runtime.block_on(async { tokio::time::timeout(timeout, probe).await }) {
                 Ok(Ok(value)) => value,
                 Ok(Err(error)) => {
                     crate::mlog!(Level::Warn, "keyring", "portal probe failed: {error:#}");
@@ -173,6 +175,8 @@ enum Request {
     },
     Load {
         account: String,
+        /// How long the backend may take to open and answer; see [`load_within`].
+        timeout: Duration,
         reply: mpsc::Sender<Result<Option<String>, String>>,
     },
     Delete {
@@ -182,6 +186,13 @@ enum Request {
 }
 
 impl Request {
+    fn timeout(&self) -> Duration {
+        match self {
+            Self::Load { timeout, .. } => *timeout,
+            Self::Store { .. } | Self::Delete { .. } => OP_TIMEOUT,
+        }
+    }
+
     fn fail(self, error: String) {
         match self {
             Self::Store { reply, .. } | Self::Delete { reply, .. } => {
@@ -232,7 +243,7 @@ fn worker(receiver: mpsc::Receiver<Request>) {
             backend = None;
         }
         if backend.is_none() {
-            match runtime.block_on(open_backend()) {
+            match runtime.block_on(open_backend(request.timeout())) {
                 Ok(opened) => backend = Some(opened),
                 Err(error) => {
                     request.fail(format!("{error:#}"));
@@ -250,7 +261,7 @@ fn worker(receiver: mpsc::Receiver<Request>) {
                 let mut result =
                     block_with_timeout(&runtime, "store", store_async(active, &account, &value));
                 if result.is_err() && local_forced() && matches!(active, Backend::Portal(_)) {
-                    match runtime.block_on(open_backend()) {
+                    match runtime.block_on(open_backend(OP_TIMEOUT)) {
                         Ok(opened) => {
                             backend = Some(opened);
                             let active =
@@ -266,11 +277,16 @@ fn worker(receiver: mpsc::Receiver<Request>) {
                 }
                 let _ = reply.send(result);
             }
-            Request::Load { account, reply } => {
+            Request::Load {
+                account,
+                timeout,
+                reply,
+            } => {
                 let active = backend.as_ref().expect("keyring backend initialized");
-                let mut result = block_with_timeout(&runtime, "load", load_async(active, &account));
+                let mut result =
+                    block_with_deadline(&runtime, "load", timeout, load_async(active, &account));
                 if result.is_err() && local_forced() && matches!(active, Backend::Portal(_)) {
-                    match runtime.block_on(open_backend()) {
+                    match runtime.block_on(open_backend(OP_TIMEOUT)) {
                         Ok(opened) => {
                             backend = Some(opened);
                             let active =
@@ -288,7 +304,7 @@ fn worker(receiver: mpsc::Receiver<Request>) {
                 let mut result =
                     block_with_timeout(&runtime, "delete", delete_async(active, &account));
                 if result.is_err() && local_forced() && matches!(active, Backend::Portal(_)) {
-                    match runtime.block_on(open_backend()) {
+                    match runtime.block_on(open_backend(OP_TIMEOUT)) {
                         Ok(opened) => {
                             backend = Some(opened);
                             let active =
@@ -337,10 +353,12 @@ fn block_with_deadline<T>(
     }
 }
 
-async fn open_backend() -> Result<Backend> {
+/// Open the portal keyring, or the local one once demoted. `timeout` bounds the
+/// portal, whose answer waits on any unlock prompt the host keyring raises.
+async fn open_backend(timeout: Duration) -> Result<Backend> {
     if !local_only() {
         let started = Instant::now();
-        match tokio::time::timeout(OP_TIMEOUT, oo7::Keyring::new()).await {
+        match tokio::time::timeout(timeout, oo7::Keyring::new()).await {
             Ok(Ok(keyring)) => {
                 crate::mlog!(
                     Level::Warn,
@@ -354,7 +372,7 @@ async fn open_backend() -> Result<Backend> {
             Err(_) => force_local(&format!(
                 "the Secret portal did not answer within {}s \
                  (no org.freedesktop.portal.Secret backend installed?)",
-                OP_TIMEOUT.as_secs()
+                timeout.as_secs()
             )),
         }
     }
@@ -495,15 +513,16 @@ async fn delete_async(backend: &Backend, account: &str) -> Result<()> {
 /// Wait for the worker's reply, bounded so a wedged backend surfaces as an
 /// error to the caller rather than as a hung sidecar.
 fn response<T>(receiver: mpsc::Receiver<Result<T, String>>) -> Result<T> {
+    response_within(receiver, REPLY_TIMEOUT)
+}
+
+fn response_within<T>(receiver: mpsc::Receiver<Result<T, String>>, wait: Duration) -> Result<T> {
     receiver
-        .recv_timeout(REPLY_TIMEOUT)
+        .recv_timeout(wait)
         .map_err(|error| match error {
             mpsc::RecvTimeoutError::Timeout => {
                 force_local("keyring worker did not reply in time");
-                anyhow!(
-                    "keyring worker timed out after {}s",
-                    REPLY_TIMEOUT.as_secs()
-                )
+                anyhow!("keyring worker timed out after {}s", wait.as_secs())
             }
             mpsc::RecvTimeoutError::Disconnected => anyhow!("keyring worker stopped"),
         })?
@@ -523,16 +542,20 @@ pub fn store(account: &str, value: &str) -> Result<()> {
     response(receiver)
 }
 
-pub fn load(account: &str) -> Result<Option<String>> {
+/// Read an entry, giving the backend `timeout` to open and answer: normally
+/// [`OP_TIMEOUT`]-ish, longer for a read worth waiting out an unlock prompt for.
+pub fn load_within(account: &str, timeout: Duration) -> Result<Option<String>> {
     let (reply, receiver) = mpsc::channel();
     portal_keyring()
         .requests
         .send(Request::Load {
             account: account.to_owned(),
+            timeout,
             reply,
         })
         .map_err(|_| anyhow!("portal keyring worker stopped"))?;
-    response(receiver)
+    // The backstop keeps its margin over the operation's own deadline.
+    response_within(receiver, REPLY_TIMEOUT + timeout.saturating_sub(OP_TIMEOUT))
 }
 
 pub fn delete(account: &str) -> Result<()> {
