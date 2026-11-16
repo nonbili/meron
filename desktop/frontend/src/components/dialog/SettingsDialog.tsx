@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from '../../lib/i18n'
 import { Dialog } from './Dialog'
@@ -173,6 +173,8 @@ export function SettingsDialog() {
   const mailAccounts = accounts.filter((acc) => !isRssAccount(acc) && !isLocalAccountId(acc.id))
   const feedAccounts = accounts.filter(isRssAccount)
   const localAccounts = accounts.filter((acc) => isLocalAccountId(acc.id))
+  const contentRef = useRef<HTMLDivElement>(null)
+  useRevealSettingRow(contentRef, activeKey)
 
   const onClose = () => {
     ui$.accountSettingsId.set('')
@@ -255,7 +257,7 @@ export function SettingsDialog() {
         </nav>
 
         {/* Content */}
-        <div className="flex-1 min-w-0 overflow-y-auto bg-chats p-6">
+        <div ref={contentRef} className="flex-1 min-w-0 overflow-y-auto bg-chats p-6">
           {selectedAccount ? (
             <AccountPanel account={selectedAccount} />
           ) : selectedBoard ? (
@@ -277,6 +279,40 @@ export function SettingsDialog() {
       </div>
     </Dialog>
   )
+}
+
+// Brings the row asked for by openSettingsAt (e.g. from the command palette)
+// into view once its page is showing: scrolls to it, flashes it, and focuses
+// its control so Space or Enter works it straight away. A row the page doesn't
+// show right now (say, a platform-only one) leaves just the page open.
+function useRevealSettingRow(contentRef: RefObject<HTMLDivElement | null>, activeKey: string) {
+  const reveal = useValue(ui$.settingsReveal)
+
+  useEffect(() => {
+    if (!reveal) return
+    // After the page and the dialog's own initial focus have settled.
+    const frame = requestAnimationFrame(() => {
+      ui$.settingsReveal.set('')
+      const row = contentRef.current?.querySelector<HTMLElement>(`[data-setting-title="${CSS.escape(reveal)}"]`)
+      if (!row) return
+      row.scrollIntoView({ block: 'center' })
+      // Removed when the flash ends, so the next reveal of this row replays it.
+      row.classList.add('setting-reveal')
+      row.addEventListener('animationend', () => row.classList.remove('setting-reveal'), { once: true })
+      // The row's own control, not its info tip: a field before any button
+      // beside it (a number row's Reset), then a switch or segment. A group
+      // whose content isn't all SettingRows falls back to its editor (the
+      // signature's, past its toolbar), else its first real control.
+      const control = [
+        '[data-setting-control] :is(input, select, textarea)',
+        '[data-setting-control] :is(button, [tabindex]:not([tabindex="-1"]))',
+        '[contenteditable="true"]',
+        'button, input, select, textarea',
+      ].reduce<HTMLElement | null>((found, selector) => found ?? row.querySelector<HTMLElement>(selector), null)
+      control?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [reveal, activeKey, contentRef])
 }
 
 function NavItem({

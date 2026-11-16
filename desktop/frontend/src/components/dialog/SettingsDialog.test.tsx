@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
 import type { Account } from '../../types'
-import { AccountPanel } from './SettingsDialog'
+import { ui$, openSettingsAt } from '../../states/ui'
+import { settings$ } from '../../states/settings'
+import { AccountPanel, SettingsDialog } from './SettingsDialog'
 
 const account = (avatar_url: string): Account =>
   ({
@@ -58,5 +60,58 @@ describe('AccountPanel avatar', () => {
     accounts$.set([account('')])
     const view = render(<AccountPanel account={accounts$.peek()[0]} />)
     expect(view.queryByRole('button', { name: 'Remove avatar' })).toBeNull()
+  })
+})
+
+describe('SettingsDialog reveal', () => {
+  afterEach(() => {
+    cleanup()
+    ui$.settingsOpen.set(false)
+    ui$.accountSettingsId.set('')
+  })
+
+  it('opens the asked-for page and focuses the revealed row', async () => {
+    ;(window as any).go = { main: { App: { Invoke: async () => ({}) } } }
+    openSettingsAt('composer', 'Spell check')
+    const view = render(<SettingsDialog />)
+    const toggle = view.getByRole('switch', { name: 'Spell check' })
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))))
+    expect(document.activeElement).toBe(toggle)
+    expect(toggle.closest('[data-setting-title]')?.classList.contains('setting-reveal')).toBe(true)
+    expect(ui$.settingsReveal.peek()).toBe('')
+  })
+
+  it('focuses the editor of a group made of more than setting rows', async () => {
+    ;(window as any).go = { main: { App: { Invoke: async () => ({}) } } }
+    openSettingsAt('composer', 'Signature')
+    render(<SettingsDialog />)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))))
+    const editor = document.querySelector('[data-setting-title="Signature"] [contenteditable="true"]')
+    expect(editor).not.toBeNull()
+    expect(document.activeElement).toBe(editor)
+  })
+
+  it("focuses a number row's field rather than its Reset button", async () => {
+    ;(window as any).go = { main: { App: { Invoke: async () => ({}) } } }
+    const previousScale = settings$.fontScale.peek()
+    settings$.fontScale.set(1.2)
+    openSettingsAt('general', 'Text size')
+    const view = render(<SettingsDialog />)
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))))
+    const row = view.container.ownerDocument.querySelector('[data-setting-title="Text size"]')!
+    expect(row.querySelector('[data-setting-control] button')).not.toBeNull()
+    expect(document.activeElement).toBe(row.querySelector('[data-setting-control] input'))
+    settings$.fontScale.set(previousScale)
+  })
+
+  it("reveals a row on an account's own page", async () => {
+    ;(window as any).go = { main: { App: { Invoke: async () => ({}) } } }
+    accounts$.set([account('')])
+    openSettingsAt('a1', 'Load remote images')
+    const view = render(<SettingsDialog />)
+    const toggle = view.getByRole('switch', { name: 'Load remote images' })
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))))
+    expect(document.activeElement).toBe(toggle)
   })
 })

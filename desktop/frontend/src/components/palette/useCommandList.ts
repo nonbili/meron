@@ -19,6 +19,7 @@ import {
   Search,
   SearchCheck,
   Settings,
+  SlidersHorizontal,
   Paperclip,
   Star,
   Sun,
@@ -30,8 +31,17 @@ import { createElement } from 'react'
 import { openEmlFile } from '../../lib/eml'
 import { useTranslation } from '../../lib/i18n'
 import { useValue } from '@legendapp/state/react'
-import { ui$, closeCommandPalette, focusGlobalSearch, focusQuickReply, showToast } from '../../states/ui'
-import { selectTheme, settings$ } from '../../states/settings'
+import {
+  ui$,
+  closeCommandPalette,
+  focusGlobalSearch,
+  focusQuickReply,
+  openSettingsAt,
+  showToast,
+} from '../../states/ui'
+import { appIconSupported$, selectTheme, settings$ } from '../../states/settings'
+import { update$ } from '../../states/update'
+import { windowChrome$ } from '../../lib/windowChrome'
 import { useChosenThemeIds } from '../../lib/useThemeChoice'
 import { accounts$ } from '../../states/accounts'
 import { leaveNarrowContacts } from '../../states/contacts'
@@ -56,6 +66,7 @@ import { compose$ } from '../../states/composeState'
 import { canReplyAllToThread } from '../../states/composeReply'
 import { RAIL_SHORTCUT_IDS, type ShortcutId } from '../../lib/shortcuts'
 import type { Command } from './paletteCommands'
+import { ACCOUNT_SETTINGS_INDEX, BOARD_SETTINGS_INDEX, SETTINGS_INDEX, accountKind } from './settingsIndex'
 
 // Builds the full, ordered command list from current app state. Each entry's
 // `run` closes the palette first, then performs its action. Returns a memoized
@@ -77,6 +88,13 @@ export function useCommandList(): Command[] {
   const folders = useValue(mail$.folders)
   const activeTab = useValue(compose$.activeTab)
   const replyAll = useValue(canReplyAllToThread)
+  // Which settings rows the dialog shows depends on these; read here so the
+  // list follows them.
+  const calendarEnabled = useValue(settings$.calendarEnabled)
+  const conversationLayout = useValue(settings$.conversationLayout)
+  const appIconSupported = useValue(appIconSupported$)
+  const titlebarSupported = useValue(windowChrome$.supported)
+  const updateSupported = useValue(() => update$.status.get().supported)
 
   return useMemo<Command[]>(() => {
     const run = (fn: () => void) => () => {
@@ -354,6 +372,71 @@ export function useCommandList(): Command[] {
       })
     }
 
+    // Individual settings: typed-for only, each opening Settings at its row.
+    for (const entry of SETTINGS_INDEX) {
+      if (entry.available && !entry.available()) continue
+      const title = t(entry.titleKey)
+      list.push({
+        id: `setting.${entry.titleKey}`,
+        label: `${t('settings.label')}: ${title}`,
+        icon: icon(SlidersHorizontal),
+        keywords: `preferences ${entry.keywords ?? ''}`,
+        searchOnly: true,
+        run: run(() => openSettingsAt(entry.page, title)),
+      })
+    }
+
+    // Each account's and board's own settings page, then its rows. Listed after
+    // the app-wide ones, so "signature" shows the global one first and then
+    // where each account overrides it.
+    const settingsLabel = t('settings.label')
+    for (const account of accounts) {
+      const name = account.display_name || account.email
+      const kind = accountKind(account)
+      const accountWords = `account ${account.email} ${account.display_name ?? ''}`
+      list.push({
+        id: `setting.account.${account.id}`,
+        label: `${settingsLabel}: ${name}`,
+        icon: icon(SlidersHorizontal),
+        keywords: `preferences ${accountWords}`,
+        searchOnly: true,
+        run: run(() => openSettingsAt(account.id, '')),
+      })
+      for (const entry of ACCOUNT_SETTINGS_INDEX) {
+        if (!entry.kinds.includes(kind) || (entry.available && !entry.available(account))) continue
+        const title = t(entry.titleKey)
+        list.push({
+          id: `setting.account.${account.id}.${entry.titleKey}`,
+          label: `${settingsLabel}: ${name} › ${title}`,
+          icon: icon(SlidersHorizontal),
+          keywords: `preferences ${accountWords} ${entry.keywords ?? ''}`,
+          searchOnly: true,
+          run: run(() => openSettingsAt(account.id, title)),
+        })
+      }
+    }
+    for (const board of boards) {
+      list.push({
+        id: `setting.board.${board.id}`,
+        label: `${settingsLabel}: ${board.name}`,
+        icon: icon(SlidersHorizontal),
+        keywords: 'preferences kanban board',
+        searchOnly: true,
+        run: run(() => openSettingsAt(board.id, '')),
+      })
+      for (const entry of BOARD_SETTINGS_INDEX) {
+        const title = t(entry.titleKey)
+        list.push({
+          id: `setting.board.${board.id}.${entry.titleKey}`,
+          label: `${settingsLabel}: ${board.name} › ${title}`,
+          icon: icon(SlidersHorizontal),
+          keywords: `preferences kanban board ${entry.keywords ?? ''}`,
+          searchOnly: true,
+          run: run(() => openSettingsAt(board.id, title)),
+        })
+      }
+    }
+
     return list
   }, [
     t,
@@ -372,5 +455,10 @@ export function useCommandList(): Command[] {
     folders,
     activeTab,
     replyAll,
+    calendarEnabled,
+    conversationLayout,
+    appIconSupported,
+    titlebarSupported,
+    updateSupported,
   ])
 }

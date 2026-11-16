@@ -33,4 +33,13 @@ describe('command palette search', () => {
     expect(filterCommands(commands, '  ')).toEqual(commands)
     expect(labels('zzzzzz')).toEqual([])
   })
+
+  test('search-only commands stay off the blank list but match a query', () => {
+    const withSetting = [
+      ...commands,
+      { id: 'setting', label: 'Settings: Spell check', icon: null, searchOnly: true, run: () => {} },
+    ]
+    expect(filterCommands(withSetting, '')).toEqual(commands)
+    expect(filterCommands(withSetting, 'spell').map((command) => command.label)).toEqual(['Settings: Spell check'])
+  })
 })

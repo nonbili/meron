@@ -1099,6 +1099,21 @@ html:not(.native-scrollbars) [data-thread-list]::-webkit-scrollbar-thumb:hover {
   animation: fadeIn 0.18s ease-out forwards;
 }
 
+/* A settings row revealed from the command palette: a brief accent wash that
+   fades out. */
+@keyframes settingReveal {
+  from {
+    background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.setting-reveal {
+  animation: settingReveal 1.6s ease-out;
+}
+
 @keyframes slideInRight {
   from {
     opacity: 0;

@@ -40,7 +40,7 @@ export function SettingsGroup({
   children: ReactNode
 }) {
   return (
-    <section>
+    <section data-setting-title={title}>
       <h3 className="mb-2 px-1 text-[0.75rem] font-semibold text-secondary">{title}</h3>
       <div
         className={`rounded-2xl bg-raised/80 border border-border/60 divide-y divide-border/40 shadow-sm shadow-black/[0.03] dark:shadow-black/30 ${
@@ -66,12 +66,14 @@ export function SettingRow({
   control: ReactNode
 }) {
   return (
-    <div className="flex min-h-11 items-center justify-between gap-4 px-3.5 py-2">
+    <div data-setting-title={title} className="flex min-h-11 items-center justify-between gap-4 px-3.5 py-2">
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="truncate text-xs font-normal text-primary">{title}</span>
         <InfoTip hint={hint} />
       </div>
-      <div className="flex shrink-0 items-center">{control}</div>
+      <div data-setting-control="" className="flex shrink-0 items-center">
+        {control}
+      </div>
     </div>
   )
 }

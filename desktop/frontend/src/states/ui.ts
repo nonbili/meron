@@ -74,6 +74,10 @@ export const ui$ = observable({
   changelogOpen: false,
   // Account id whose per-account settings panel is open ("" = closed).
   accountSettingsId: '',
+  // Title of a settings row to scroll to, highlight, and focus once the
+  // Settings dialog shows its page ("" = none). Set by openSettingsAt; the
+  // dialog clears it after revealing the row.
+  settingsReveal: '',
   addFeedAccount: '',
   editFeed: null as EditFeed | null,
   tagThreadId: '',
@@ -149,6 +153,14 @@ export function openCommandPalette() {
 
 export function closeCommandPalette() {
   ui$.paletteOpen.set(false)
+}
+
+// Open Settings on a page ("general" or a page id) and reveal the row titled
+// `rowTitle` there, as rendered (already translated).
+export function openSettingsAt(page: string, rowTitle: string) {
+  ui$.accountSettingsId.set(page === 'general' ? '' : page)
+  ui$.settingsReveal.set(rowTitle)
+  ui$.settingsOpen.set(true)
 }
 
 // Ask the open search box (thread list or kanban board) to focus and select.

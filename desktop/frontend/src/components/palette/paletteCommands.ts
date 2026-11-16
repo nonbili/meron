@@ -10,6 +10,8 @@ export type Command = {
   shortcut?: ShortcutId
   /** Marks the command that reflects the current state (shows a check). */
   active?: boolean
+  /** Listed only once something is typed, so a blank palette stays short. */
+  searchOnly?: boolean
   run: () => void
 }
 
@@ -49,6 +51,7 @@ function isSubsequence(text: string, query: string): boolean {
 }
 
 export function filterCommands(commands: Command[], query: string): Command[] {
+  if (!query.trim()) return commands.filter((command) => !command.searchOnly)
   const matches = commands
     .map((command) => ({ command, score: commandMatchScore(command, query) }))
     .filter(({ score }) => Number.isFinite(score))
