@@ -597,7 +597,7 @@ internal fun AccountAvatarEditor(
     LaunchedEffect(url) {
         image = null
         if (url.isNotBlank()) {
-            image = withContext(ioDispatcher) { loadImageBitmapRef(url) }
+            image = withContext(ioDispatcher) { loadImageBitmapRef(url, AVATAR_IMAGE_BYTES) }
         }
     }
     Box(
