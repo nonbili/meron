@@ -8,7 +8,7 @@ import (
 )
 
 func TestDesktopEntry(t *testing.T) {
-	entry := desktopEntry("/home/u/My Apps/meron.appimage")
+	entry := desktopEntry("/home/u/My Apps/meron.appimage", "meron")
 	for _, line := range []string{
 		`Exec="/home/u/My Apps/meron.appimage" %U`,
 		"StartupWMClass=" + desktopProgramName,

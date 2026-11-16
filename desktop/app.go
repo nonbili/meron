@@ -34,6 +34,7 @@ type App struct {
 	trayStylePath string
 	trayStyleMu   sync.Mutex
 	trayStop      func()
+	appIcon       appIconState
 	trayStopOnce  sync.Once
 	// closeToTray is pushed by the frontend. Tray style is restored from
 	// native storage before publication.
@@ -126,6 +127,8 @@ func NewApp() *App {
 	app.closeToTray.Store(true)
 	app.trayStylePath = filepath.Join(appConfigDir(), "tray.json")
 	app.tray.desired.monochrome = loadTrayStyle(app.trayStylePath)
+	app.appIcon.path = filepath.Join(appConfigDir(), "appicon.json")
+	app.appIcon.choice = loadAppIconChoice(app.appIcon.path)
 	return app
 }
 
@@ -134,8 +137,11 @@ func (a *App) Startup(ctx context.Context) {
 	a.armStartupWindowFallback(startupWindowRevealDelay)
 	a.quitOnSignal()
 	a.queueStartupMailtoURLs(os.Args[1:])
-	if wailsRuntime.Environment(ctx).BuildType != "dev" {
-		installDesktopEntry()
+	// With an icon colour of the user's own the entry is written by
+	// applyAppIcon, once the icon is rendered; writing the shipped one first
+	// would make the launcher flash it on every start.
+	if wailsRuntime.Environment(ctx).BuildType != "dev" && !a.launcherIconPending() {
+		installDesktopEntry("", nil)
 	}
 	// A staged update either landed on the last quit or was abandoned; either
 	// way it is re-downloadable, so start clean.
@@ -308,6 +314,10 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.trayGetStyle(), nil
 	case "tray.setStyle":
 		return a.traySetStyle(payload)
+	case "appIcon.get":
+		return a.appIconGet(), nil
+	case "appIcon.set":
+		return a.appIconSet(payload)
 	case "window.resized":
 		return a.windowResized()
 	case "window.ready":

@@ -58,6 +58,25 @@ Building universal needs both Rust targets, so run it inside `nix-shell`
 (which provides `rustup`); `MAS_ARCHS=arm64` opts out at the cost of Intel
 support.
 
+### App icon artwork
+
+Every single-colour icon (the Linux and macOS tray icons, the Android
+notification icon and themed launcher icon) is one vector glyph, the app icon's
+envelope reduced to its outline. `scripts/icons/glyph.py` holds its geometry
+and writes all of them; it needs Pillow:
+
+```sh
+bun run generate:glyph-icons
+```
+
+The dark and tinted iOS icons are derived from the full-colour artwork. After
+changing `desktop/build/appicon.png` or the iOS `AppIcon.png`, regenerate them
+with:
+
+```sh
+bun run generate:ios-icons
+```
+
 ### Linux packaging
 
 Package-managed builds should launch Meron with
