@@ -548,6 +548,15 @@ internal class MeronMobileState(
     var reminderAllDayDays by mutableStateOf(DEFAULT_ALL_DAY_ALERT_DAYS)
     var reminderLeadLoadGeneration = 0
 
+    // Whether the core looks for one-time codes in mail, from the core
+    // `settings` row desktop shares. Off until the user switches it on.
+    var detectOneTimeCodes by mutableStateOf(false)
+    var detectOneTimeCodesLoadGeneration = 0
+
+    // Two quick toggles must reach the core in the order they were made, or
+    // the stored choice could end up the earlier one: each save takes this.
+    val detectOneTimeCodesWrites = Mutex()
+
     // `app.prefsSet` applies writes in arrival order, so two quick picks must
     // reach the core in the order they were made: each save takes this first.
     val alertDefaultWrites = Mutex()

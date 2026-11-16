@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Notifications
@@ -198,6 +199,8 @@ internal fun SettingsScreen(
     appSignatureHtml: String,
     onSaveAppSignature: (String) -> Unit,
     remoteImageSenders: List<String>,
+    detectOneTimeCodes: Boolean,
+    onToggleDetectOneTimeCodes: () -> Unit,
     onRemoveRemoteImageSender: (String) -> Unit,
     onSaveAccountSignature: (AccountSummary, SignatureSpec) -> Unit,
     onSaveAccountProxy: (AccountSummary, ProxySpec) -> Unit,
@@ -432,6 +435,8 @@ internal fun SettingsScreen(
                     onToggleReaderBottomActions = onToggleReaderBottomActions,
                     remoteImageSenderCount = remoteImageSenders.size,
                     onOpenRemoteSenders = { settingsNavController.navigate(SettingsRoutes.RemoteSenders) },
+                    detectOneTimeCodes = detectOneTimeCodes,
+                    onToggleDetectOneTimeCodes = onToggleDetectOneTimeCodes,
                     onOpenTags = onOpenTags,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1181,6 +1186,8 @@ internal fun SettingsMessagesPage(
     onToggleReaderBottomActions: () -> Unit,
     remoteImageSenderCount: Int,
     onOpenRemoteSenders: () -> Unit,
+    detectOneTimeCodes: Boolean,
+    onToggleDetectOneTimeCodes: () -> Unit,
     onOpenTags: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1277,6 +1284,15 @@ internal fun SettingsMessagesPage(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
+            )
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.Key,
+                title = tr("settings.privacy.detectCodes"),
+                hint = tr("settings.privacy.detectCodesHint"),
+                checked = detectOneTimeCodes,
+                onToggle = onToggleDetectOneTimeCodes,
             )
         }
     }

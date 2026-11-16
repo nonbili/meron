@@ -418,12 +418,13 @@ pub async fn read_thread_page(
         }
     }
 
-    let (mine, ours, remote_policy) = {
+    let (mine, ours, remote_policy, detect_codes) = {
         let db = engine.db.lock().unwrap();
         (
             store::self_addrs(&db, account),
             store::all_self_addrs(&db),
             store::remote_image_policy(&db, account).unwrap_or_default(),
+            crate::verification_code::enabled(&db),
         )
     };
     let mut seen_message_ids = HashSet::new();
@@ -456,6 +457,16 @@ pub async fn read_thread_page(
             &mine,
             &ours,
         );
+        // The one-time code of a received verification mail, which clients
+        // offer for copying. Only looked for when the user switched it on.
+        if detect_codes && message["outgoing"] != json!(true) {
+            if let Some(cached) = cached.as_ref() {
+                message["verification_code"] = json!(crate::verification_code::detect(
+                    &cached.subject,
+                    &cached.body
+                ));
+            }
+        }
         message["tags"] = json!(store::message_tags(
             &engine.db.lock().unwrap(),
             account,
@@ -927,10 +938,6 @@ pub fn thread_message_json(
         // or is still filling in the background — not that the message is
         // empty. Clients offer a retry / re-read for these.
         "body_missing": cached.is_none(),
-        // The one-time code of a verification mail, which clients offer for
-        // copying; null for every other message.
-        "verification_code": cached
-            .and_then(|message| crate::verification_code::detect(&message.subject, &message.body)),
         "date": cached.map(|message| message.date).unwrap_or(header.date),
         "unread": !header.seen,
         "starred": header.starred,

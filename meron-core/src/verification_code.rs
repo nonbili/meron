@@ -8,7 +8,19 @@
 //! nothing closer says it is an order, a receipt, an amount, a date or a phone
 //! number. Deciding in the core keeps every client in agreement.
 
-/// How much of the body is searched. The code of a real verification mail is
+/// Settings row that turns detection on. Off unless the user switches it on:
+/// the code then shows in notifications, which some would rather it did not.
+pub const SETTING_KEY: &str = "detect_one_time_codes";
+
+/// Whether the user has switched detection on.
+pub fn enabled(conn: &rusqlite::Connection) -> bool {
+    crate::store::settings_get(conn, &[SETTING_KEY.to_string()])
+        .ok()
+        .and_then(|stored| stored.get(SETTING_KEY).and_then(serde_json::Value::as_bool))
+        .unwrap_or(false)
+}
+
+/// How much of the body is searched, in characters. The code of a real verification mail is
 /// near the top; anything further down is footer, legal text or a quoted reply.
 const BODY_LIMIT: usize = 4000;
 
@@ -58,10 +70,6 @@ const STRONG: &[&str] = &[
     "otp",
     "2fa code",
     "two-factor code",
-    "two-step verification",
-    "2-step verification",
-    "verify your email",
-    "verify your identity",
     "magic code",
     "reset code",
     "recovery code",
@@ -222,6 +230,12 @@ const TOPIC: &[&str] = &[
     "never share",
     "password reset",
     "reset your password",
+    // These name the topic, not a code: most such mails carry a link, and a
+    // number near them is as likely an address or a date.
+    "verify your email",
+    "verify your identity",
+    "two-step verification",
+    "2-step verification",
     "подтвержд",
     "вход",
     "войти",
@@ -528,10 +542,10 @@ fn lowercase_char(c: char) -> char {
 /// Subject and the top of the body, as one text. The subject goes first: "Your
 /// code is 123456" is often all there is.
 fn searched_text(subject: &str, body: &str) -> String {
-    let mut end = body.len().min(BODY_LIMIT);
-    while !body.is_char_boundary(end) {
-        end -= 1;
-    }
+    let end = body
+        .char_indices()
+        .nth(BODY_LIMIT)
+        .map_or(body.len(), |(index, _)| index);
     format!("{}\n\n{}", subject.trim(), &body[..end])
 }
 
@@ -554,12 +568,12 @@ fn candidates(text: &str, chars: &[(usize, char)]) -> Vec<Candidate> {
     let mut found = Vec::new();
     let mut at = 0;
     while at < original.len() {
-        if !original[at].is_alphanumeric() {
+        if !in_run(original[at]) {
             at += 1;
             continue;
         }
         let mut end = at;
-        while end < original.len() && original[end].is_alphanumeric() {
+        while end < original.len() && in_run(original[end]) {
             end += 1;
         }
         let run = &original[at..end];
@@ -577,25 +591,46 @@ fn candidates(text: &str, chars: &[(usize, char)]) -> Vec<Candidate> {
                     group_end += 1;
                 }
                 let size = group_end - (next + 1);
-                let touches_word =
-                    group_end < original.len() && original[group_end].is_alphanumeric();
+                let touches_word = group_end < original.len() && in_run(original[group_end]);
                 if size != end - at || !(2..=4).contains(&size) || touches_word {
                     break;
                 }
                 groups.push((next + 1, group_end));
                 next = group_end;
             }
+            // More digits right after the groups: the run is part of a longer
+            // number ("800 555 1234", "1234 5678 9012"), so no prefix of it
+            // is a code. All of it is skipped, trailing groups included.
+            let continues = |at: usize| {
+                at + 1 < original.len()
+                    && (original[at] == ' ' || original[at] == '-')
+                    && original[at + 1].is_ascii_digit()
+            };
+            if groups.len() > 1 && continues(next) {
+                while continues(next) {
+                    next += 1;
+                    while next < original.len() && original[next].is_ascii_digit() {
+                        next += 1;
+                    }
+                }
+                at = next;
+                continue;
+            }
             let grouped: String = groups
                 .iter()
                 .flat_map(|(from, to)| original[*from..*to].iter())
                 .collect();
-            if groups.len() > 1 && (4..=9).contains(&grouped.len()) {
-                found.push(Candidate {
-                    start: at,
-                    end: next,
-                    code: grouped,
-                    mixed: false,
-                });
+            if groups.len() > 1 {
+                // Too long or too short once joined: not a code, and neither
+                // is its first group alone.
+                if (4..=9).contains(&grouped.len()) {
+                    found.push(Candidate {
+                        start: at,
+                        end: next,
+                        code: grouped,
+                        mixed: false,
+                    });
+                }
                 at = next;
                 continue;
             }
@@ -624,6 +659,13 @@ fn candidates(text: &str, chars: &[(usize, char)]) -> Vec<Candidate> {
         at = end;
     }
     found
+}
+
+/// Whether `c` continues a word. Chinese, Japanese and Korean put no space
+/// between a code and the words around it ("验证码是558201，"), so their letters
+/// end a run the way a space does.
+fn in_run(c: char) -> bool {
+    c.is_alphanumeric() && !is_unspaced_script(c)
 }
 
 /// How convincingly the surrounding text says the candidate is a one-time
@@ -661,12 +703,14 @@ fn score(
         return None;
     }
 
-    // Distance from the vouching word to the candidate; smaller is better.
+    // Distance from the vouching word to the candidate, in characters so
+    // every script is measured alike; smaller is better.
+    let chars_in = |text: &str| text.chars().count();
     let vouched = [
-        strong_before.map(|at| (before.len() - at, 40, true)),
-        strong_after.map(|at| (at, 36, true)),
-        generic_before.map(|at| (before.len() - at, 24, false)),
-        generic_after.map(|at| (at, 20, false)),
+        strong_before.map(|at| (chars_in(&before[at..]), 40, true)),
+        strong_after.map(|at| (chars_in(&after_line[..at]), 36, true)),
+        generic_before.map(|at| (chars_in(&before[at..]), 24, false)),
+        generic_after.map(|at| (chars_in(&after_line[..at]), 20, false)),
     ]
     .into_iter()
     .flatten()
@@ -674,11 +718,22 @@ fn score(
     let (distance, weight, strong) = vouched?;
 
     // A disowning word between the "code" word and the number wins. One that
-    // comes before the "code" word was talking about something earlier.
+    // comes before the "code" word was talking about something earlier, and
+    // one ending where a vouching phrase ends is that phrase's own last word
+    // ("verification number").
     if let Some(at) = disowned {
-        let disown_distance = near.len() - at;
-        let vouched_before = strong_before.is_some() || generic_before.is_some();
-        if !vouched_before || disown_distance <= distance {
+        let disown_distance = chars_in(&near[at..]);
+        let before_distances = [strong_before, generic_before]
+            .into_iter()
+            .flatten()
+            .map(|at| chars_in(&before[at..]));
+        let mut vouched_before = false;
+        let mut part_of_phrase = false;
+        for before_distance in before_distances {
+            vouched_before = true;
+            part_of_phrase |= before_distance == disown_distance;
+        }
+        if !part_of_phrase && (!vouched_before || disown_distance <= distance) {
             return None;
         }
     }
@@ -1227,6 +1282,73 @@ mod tests {
         let body =
             format!("Your verification code is on its way.\n\n{filler}\n\n482913 people use Acme.");
         assert_eq!(code("Welcome", &body), None);
+    }
+
+    #[test]
+    fn mails_that_verify_by_link_carry_no_code() {
+        let cases = [
+            (
+                "Verify your email",
+                "Click the link to verify your email.\n\nAcme Inc, Suite 4500",
+            ),
+            (
+                "Verify your email",
+                "Click the link below to verify your email address.\n\nhttps://acme.example/v\n\nAcme, 2100 Main St",
+            ),
+            (
+                "2-Step Verification turned on",
+                "2-Step Verification is now on for your account.\n\nAcme, 1600 Main St",
+            ),
+        ];
+        for (subject, body) in cases {
+            assert_eq!(code(subject, body), None, "{subject} / {body}");
+        }
+    }
+
+    #[test]
+    fn part_of_a_longer_number_is_not_a_code() {
+        let cases = [
+            "Your login code was sent by SMS. Support: 800 555 1234",
+            "Ваш код подтверждения: 1234 5678 9012",
+            "Your verification code is 123 456 789 0",
+        ];
+        for body in cases {
+            assert_eq!(code("Sign in", body), None, "{body}");
+        }
+    }
+
+    #[test]
+    fn codes_written_against_cjk_text_are_found() {
+        let cases = [
+            ("验证码", "您的验证码是558201，请勿泄露。", "558201"),
+            ("認証コード", "認証コードは104882です。", "104882"),
+            ("인증번호", "인증번호는660142입니다.", "660142"),
+        ];
+        for (subject, body, want) in cases {
+            assert_eq!(
+                code(subject, body).as_deref(),
+                Some(want),
+                "{subject} / {body}"
+            );
+        }
+        // A Latin word is still one run: no code inside "Model482913".
+        assert_eq!(code("验证码", "设备Model482913已登录"), None);
+    }
+
+    #[test]
+    fn a_phrase_ending_in_a_disowning_word_still_vouches() {
+        assert_eq!(
+            code("Sign in", "Your verification number is 482913.").as_deref(),
+            Some("482913")
+        );
+        // A separate order number after the phrase is still disowned.
+        assert_eq!(
+            code(
+                "Confirm",
+                "Your verification number is in the app. Order number 482913."
+            ),
+            None
+        );
     }
 
     #[test]

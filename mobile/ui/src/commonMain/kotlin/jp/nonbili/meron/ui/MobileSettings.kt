@@ -119,6 +119,15 @@ internal const val REMOTE_IMAGE_SENDERS_SETTING_KEY = "remote_image_senders"
  */
 internal const val REMINDER_LEAD_SETTING_KEY = "reminder_lead_minutes"
 
+/**
+ * Core `settings` row switching one-time code detection on (off by default).
+ *
+ * Shared with desktop and read by the core itself (it decides whether a
+ * message or a notification carries a code), so like the allowlist it is
+ * neither namespaced under `mobile.` nor a registry entry.
+ */
+internal const val DETECT_ONE_TIME_CODES_SETTING_KEY = "detect_one_time_codes"
+
 /** Core `settings` row holding the default all-day event alert, in days before
  *  the event or [NO_ALERT]; shared with desktop like [REMINDER_LEAD_SETTING_KEY]. */
 internal const val REMINDER_ALL_DAY_SETTING_KEY = "reminder_all_day_days"

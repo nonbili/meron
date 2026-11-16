@@ -196,6 +196,10 @@ export type Settings = {
    * quitting (Linux and Windows; macOS keeps its own close/quit split).
    */
   closeToTray: boolean
+  /** Whether the core finds one-time codes in verification mail and offers
+   * them for copying, in the message and its notification. Off by default:
+   * the code then shows in notification text. Read by the core. */
+  detectOneTimeCodes: boolean
   monochromeTrayIcon: boolean
   /** Whether to poll for new releases in the background (see states/update.ts). */
   autoUpdateCheck: boolean
@@ -254,6 +258,7 @@ const DB_KEY = {
   reminderLeadMinutes: 'reminder_lead_minutes',
   reminderAllDayDays: 'reminder_all_day_days',
   closeToTray: 'close_to_tray',
+  detectOneTimeCodes: 'detect_one_time_codes',
   autoUpdateCheck: 'auto_update_check',
   dismissedUpdateVersion: 'dismissed_update_version',
   language: 'language',
@@ -471,6 +476,7 @@ export const settings$ = observable<Settings>({
   reminderLeadMinutes: DEFAULT_ALERT_MINUTES,
   reminderAllDayDays: DEFAULT_ALL_DAY_ALERT_DAYS,
   closeToTray: true,
+  detectOneTimeCodes: false,
   // Boot gets the native saved choice/default before hydrating settings.
   monochromeTrayIcon: false,
   autoUpdateCheck: true,
@@ -1083,6 +1089,10 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
 
     if (typeof prefs[DB_KEY.closeToTray] === 'boolean') {
       settings$.closeToTray.set(prefs[DB_KEY.closeToTray] as boolean)
+    }
+
+    if (typeof prefs[DB_KEY.detectOneTimeCodes] === 'boolean') {
+      settings$.detectOneTimeCodes.set(prefs[DB_KEY.detectOneTimeCodes] as boolean)
     }
 
     if (typeof prefs[DB_KEY.autoUpdateCheck] === 'boolean') {

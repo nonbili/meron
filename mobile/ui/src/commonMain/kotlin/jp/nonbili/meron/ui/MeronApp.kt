@@ -935,6 +935,7 @@ private fun MeronMobileScreenContent(
                 loadAppSignature()
                 loadRemoteImageSenders()
                 loadAlertDefaults()
+                loadDetectOneTimeCodes()
             }
 
             // Once accounts are known, surface whatever the local store already holds so
@@ -1358,6 +1359,8 @@ private fun MeronMobileScreenContent(
                             appSignatureHtml = appSignatureHtml,
                             onSaveAppSignature = ::saveAppSignature,
                             remoteImageSenders = remoteImageSenders,
+                            detectOneTimeCodes = detectOneTimeCodes,
+                            onToggleDetectOneTimeCodes = { saveDetectOneTimeCodes(!detectOneTimeCodes) },
                             onRemoveRemoteImageSender = { addr -> setRemoteImageSender(addr, false) },
                             onSaveAccountSignature = ::saveAccountSignature,
                             onSaveAccountProxy = ::saveAccountProxy,

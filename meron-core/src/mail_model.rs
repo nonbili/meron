@@ -28,7 +28,8 @@ pub const NEW_MESSAGES_DETAIL_MAX: usize = 8;
 /// notification per mail. Snippets come from cached bodies, so a message whose
 /// body hasn't been fetched yet contributes an empty `preview` rather than
 /// holding up the event. `code` is the one-time code of a verification mail
-/// (see [`crate::verification_code`]), which clients offer for copying.
+/// (see [`crate::verification_code`]), which clients offer for copying; null
+/// unless the user switched detection on.
 pub fn new_messages_detail(
     conn: &Connection,
     account_id: &str,
@@ -39,6 +40,7 @@ pub fn new_messages_detail(
 ) -> Option<Value> {
     let latest = headers.first()?;
     let is_inbox = folder.eq_ignore_ascii_case("INBOX");
+    let detect_codes = crate::verification_code::enabled(conn);
     let messages: Vec<Value> = headers
         .iter()
         .take(NEW_MESSAGES_DETAIL_MAX)
@@ -61,7 +63,9 @@ pub fn new_messages_detail(
                 "preview": if preview.trim().is_empty() { "" } else { preview.as_str() },
                 // A one-time code the mail carries, for a "copy code" action;
                 // null for every other mail.
-                "code": crate::verification_code::detect(&header.subject, &body),
+                "code": detect_codes
+                    .then(|| crate::verification_code::detect(&header.subject, &body))
+                    .flatten(),
                 "threadKey": store::card_thread_key(header),
                 "date": header.date,
             })
