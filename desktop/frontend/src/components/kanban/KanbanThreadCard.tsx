@@ -156,7 +156,12 @@ export const KanbanThreadCard = memo(function KanbanThreadCard({
         badgeAccount={column.accountId === 'unified' ? account : undefined}
         // The margin reaches past the column's own padding and border to the
         // board's gutter, so scrolling to a card shows its whole column.
-        className="scroll-mx-[13px] rounded-lg border border-border bg-chats shadow-sm overflow-hidden"
+        // Off-screen cards skip style and layout: every layout read (opening a
+        // conversation, positioning a menu) otherwise lays out the whole board,
+        // ~170ms at 300 cards in WebKitGTK. Containment clips nothing extra, as
+        // the card already hides its overflow; `auto` keeps a card's real height
+        // once it has rendered.
+        className="scroll-mx-[13px] rounded-lg border border-border bg-chats shadow-sm overflow-hidden [content-visibility:auto] [contain-intrinsic-size:auto_68px]"
         bulkSelectable={bulkSelectable}
         bulkSelected={bulkSelected}
         onSelect={(event) => {

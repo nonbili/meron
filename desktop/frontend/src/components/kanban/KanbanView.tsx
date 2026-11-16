@@ -50,6 +50,13 @@ import {
 import { boardWallpaper, wallpaperCss } from '../../lib/wallpapers'
 import { useKanbanBoardSync, useKanbanDnd } from './useKanbanBoard'
 
+// Module constants, not inline objects: useSensor memoizes on the options'
+// identity, and fresh sensors on every board render change dnd-kit's context,
+// which re-renders every card on the board (each is a useDraggable consumer)
+// on any click or right-click.
+const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 6 } }
+const KEYBOARD_SENSOR_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates }
+
 /**
  * `aside`: the board's conversation pane (App builds it). It opens beside the
  * columns, *under* the board's header, so the header stays a toolbar across
@@ -75,8 +82,8 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
   const visibleColumns = useMemo(() => getKanbanColumns(boardId), [boards, boardId])
   // The keyboard sensor is for column headers only; cards drop its listener.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
+    useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
   )
   // The dialog picks folders; saved searches are not among its options, so they
   // stay out of what it can add or remove.

@@ -289,8 +289,10 @@ export function selectedBulkItems(): BulkSelectionItem[] {
   return Object.values(ui$.bulkSelection.peek())
 }
 
+// Every plain card or row click calls this. Writing a fresh {} over an empty
+// selection still notifies, which re-rendered every Kanban column per click.
 export function clearBulkSelection() {
-  ui$.bulkSelection.set({})
+  if (Object.keys(ui$.bulkSelection.peek()).length > 0) ui$.bulkSelection.set({})
   ui$.bulkAnchorKey.set('')
 }
 

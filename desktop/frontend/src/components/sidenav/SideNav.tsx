@@ -43,6 +43,10 @@ import type { Account } from '../../types'
 // which lines up with the 48px header borders and so sits 6px under the button.
 const railDivider = 'h-px w-8 shrink-0 bg-sidenav-ink/10'
 
+// Stable, so a re-render doesn't hand dnd-kit new sensors (see KanbanView).
+const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 5 } }
+const KEYBOARD_SENSOR_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates }
+
 export function SideNav() {
   const { t } = useTranslation()
   const accounts = useValue(accounts$)
@@ -132,8 +136,8 @@ export function SideNav() {
   }
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
+    useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
   )
 
   function handleDragEnd(event: DragEndEvent) {
