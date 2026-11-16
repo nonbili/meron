@@ -60,14 +60,21 @@ support.
 
 ### App icon artwork
 
-The mobile apps ship extra icon images that the system restyles: Android's
-monochrome layer for themed icons, and the dark and tinted iOS icons. They are
-derived from the shipped artwork and committed. After changing
-`desktop/build/appicon.png`, the Android launcher foreground, or the iOS
-`AppIcon.png`, regenerate them with:
+Every single-colour icon (the Linux and macOS tray icons, the Android
+notification icon and themed launcher icon) is one vector glyph, the app icon's
+envelope reduced to its outline. `scripts/icons/glyph.py` holds its geometry
+and writes all of them; it needs Pillow:
 
 ```sh
-bun run generate:mobile-icons
+bun run generate:glyph-icons
+```
+
+The dark and tinted iOS icons are derived from the full-colour artwork. After
+changing `desktop/build/appicon.png` or the iOS `AppIcon.png`, regenerate them
+with:
+
+```sh
+bun run generate:ios-icons
 ```
 
 ### Linux packaging

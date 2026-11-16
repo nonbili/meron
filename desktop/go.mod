@@ -3,7 +3,7 @@ module meron
 go 1.26.0
 
 // Fork adds atomic Linux icon updates and native macOS unread badges.
-replace fyne.io/systray => github.com/nonbili/systray v0.0.0-20261105102030-4c08ec2d9a93
+replace fyne.io/systray => github.com/nonbili/systray v0.0.0-20261116024739-f28f7c67a13b
 
 require (
 	fyne.io/systray v1.12.3-0.20260913152509-528cad23fade

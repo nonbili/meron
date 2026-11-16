@@ -1,14 +1,13 @@
-// Command mobileicons derives the extra launcher artwork the mobile systems
-// ask for from the shipped icon, so the system can restyle it: Android's
-// monochrome layer for themed icons, and the dark and tinted variants of the
-// iOS icon. They are image files in the package, so they are generated ahead of
-// time and committed.
+// Command iosicons derives the dark and tinted variants of the iOS app icon
+// from the shipped artwork, so iOS 18 can restyle the icon with the home
+// screen. They are image files in the app, so they are generated ahead of time
+// and committed. (Android's themed icon is a vector: scripts/icons/glyph.py.)
 //
 // Run after the shipped artwork changes, from the repository root:
 //
-//	bun run generate:mobile-icons
+//	bun run generate:ios-icons
 //
-// or from the desktop directory as `go run ./cmd/mobileicons [repo root]`; the
+// or from the desktop directory as `go run ./cmd/iosicons [repo root]`; the
 // root defaults to the parent directory.
 package main
 
@@ -31,104 +30,13 @@ func main() {
 		root = os.Args[1]
 	}
 	if err := run(root); err != nil {
-		fmt.Fprintln(os.Stderr, "mobileicons:", err)
+		fmt.Fprintln(os.Stderr, "iosicons:", err)
 		os.Exit(1)
 	}
 }
 
 func run(root string) error {
-	if err := android(filepath.Join(root, "mobile", "android", "src", "main", "res")); err != nil {
-		return err
-	}
 	return ios(filepath.Join(root, "mobile", "ios", "Meron", "Assets.xcassets"), filepath.Join(root, "desktop", "build", "appicon.png"))
-}
-
-// android writes the monochrome layer of the adaptive icon next to each
-// density's foreground. Android draws a themed icon from that layer's alpha
-// alone, in a colour taken from the wallpaper, on a plate that follows the
-// light or dark theme.
-func android(res string) error {
-	foregrounds, err := filepath.Glob(filepath.Join(res, "mipmap-*", "ic_launcher_foreground.png"))
-	if err != nil {
-		return err
-	}
-	if len(foregrounds) == 0 {
-		return fmt.Errorf("no launcher foregrounds under %s", res)
-	}
-	for _, path := range foregrounds {
-		foreground, err := load(path)
-		if err != nil {
-			return err
-		}
-		if err := save(filepath.Join(filepath.Dir(path), "ic_launcher_monochrome.png"), silhouette(foreground)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// silhouette reduces the artwork to the shape a single colour can carry: the
-// envelope's flaps and folds stay, the pale sheet of paper inside becomes a
-// hole. Filling the whole outline would leave a rounded square with no letter
-// in it.
-func silhouette(artwork *image.NRGBA) *image.NRGBA {
-	out := image.NewNRGBA(artwork.Bounds())
-	bounds := artwork.Bounds()
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			pixel := artwork.NRGBAAt(x, y)
-			if pixel.A == 0 {
-				continue
-			}
-			// The envelope is strongly coloured and the paper pale, so
-			// saturation tells them apart where brightness cannot: the flaps
-			// carry highlights as bright as the paper. The paper's shadow under
-			// the top flap is still fairly saturated, which sets the cut-off;
-			// the flap highlights that are just as pale are greener than the
-			// yellowish paper, which hue catches. Fading keeps the edges smooth.
-			paper := (1 - smoothstep(0.38, 0.46, saturation(pixel))) * (1 - smoothstep(0.29, 0.32, hue(pixel)))
-			alpha := float64(pixel.A) * (1 - paper)
-			out.SetNRGBA(x, y, color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: uint8(math.Round(alpha))})
-		}
-	}
-	return out
-}
-
-func saturation(pixel color.NRGBA) float64 {
-	high := math.Max(float64(pixel.R), math.Max(float64(pixel.G), float64(pixel.B)))
-	low := math.Min(float64(pixel.R), math.Min(float64(pixel.G), float64(pixel.B)))
-	if high == 0 {
-		return 0
-	}
-	return (high - low) / high
-}
-
-// hue is the pixel's hue as a fraction of the colour wheel: 0 red, 1/6
-// yellow, 1/3 green.
-func hue(pixel color.NRGBA) float64 {
-	r, g, b := float64(pixel.R), float64(pixel.G), float64(pixel.B)
-	high, low := math.Max(r, math.Max(g, b)), math.Min(r, math.Min(g, b))
-	if high == low {
-		return 0
-	}
-	var h float64
-	switch high {
-	case r:
-		h = math.Mod((g-b)/(high-low), 6)
-	case g:
-		h = (b-r)/(high-low) + 2
-	default:
-		h = (r-g)/(high-low) + 4
-	}
-	if h < 0 {
-		h += 6
-	}
-	return h / 6
-}
-
-func smoothstep(from, to, value float64) float64 {
-	t := math.Min(1, math.Max(0, (value-from)/(to-from)))
-	return t * t * (3 - 2*t)
 }
 
 // tintedGrey is the colour the tinted variant is drawn in. iOS takes the
