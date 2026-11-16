@@ -223,6 +223,9 @@ data class MessageBody(
     val outgoing: Boolean = false,
     val starred: Boolean = false,
     val hasAttachments: Boolean = false,
+    // The one-time code of a verification mail, found by the core; empty for
+    // every other message.
+    val verificationCode: String = "",
     // True when the core has no cached body for this message (the on-demand
     // fetch failed), as opposed to a message whose body is genuinely empty.
     val bodyMissing: Boolean = false,

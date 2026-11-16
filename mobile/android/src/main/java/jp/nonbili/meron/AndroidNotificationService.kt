@@ -27,6 +27,9 @@ data class NewMailItem(
     val preview: String,
     val threadKey: String,
     val date: Long,
+    /** A verification mail's one-time code, found by the core; empty for any
+     *  other mail. Offered as a "copy code" button. */
+    val code: String = "",
     /** A feed entry's stable key, empty for mail (which has a uid instead).
      *  A feed is one thread, so this is all that tells its entries apart. */
     val itemKey: String = "",
@@ -238,9 +241,18 @@ object AndroidNotificationService {
             // the thread by id, so a payload missing any part of it gets no
             // buttons rather than buttons that quietly do nothing.
             .apply {
+                // First, ahead of the buttons that file the mail away: a code is
+                // what the user opened the shade for.
+                if (item.code.isNotEmpty()) {
+                    addAction(copyCodeAction(context, item.code, newMailNotificationId(batch.accountId, item)))
+                }
                 if (batch.accountId.isNotBlank() && batch.folder.isNotBlank() && item.threadKey.isNotBlank()) {
                     val id = newMailNotificationId(batch.accountId, item)
-                    val actions = newMailActions(batch.accountId, loadNotificationActions(context))
+                    val actions =
+                        newMailActionsBesideCode(
+                            newMailActions(batch.accountId, loadNotificationActions(context)),
+                            hasCode = item.code.isNotEmpty(),
+                        )
                     if (NOTIFICATION_ACTION_ARCHIVE in actions) {
                         addAction(
                             archiveAction(
@@ -730,6 +742,8 @@ fun parseNewMailBatch(detail: JSONObject): NewMailBatch {
                         preview = entry.optString("preview"),
                         threadKey = entry.optString("threadKey"),
                         date = entry.optLong("date"),
+                        // optString turns a JSON null into the text "null".
+                        code = if (entry.isNull("code")) "" else entry.optString("code"),
                     )
                 }
             }
@@ -742,6 +756,7 @@ fun parseNewMailBatch(detail: JSONObject): NewMailBatch {
                     preview = detail.optString("preview"),
                     threadKey = detail.optString("threadKey"),
                     date = 0,
+                    code = if (detail.isNull("code")) "" else detail.optString("code"),
                 ),
             )
         }
@@ -850,6 +865,16 @@ fun newMailActions(
     } else {
         enabled - setOf(NOTIFICATION_ACTION_ARCHIVE, NOTIFICATION_ACTION_DELETE)
     }
+
+/** Android shows three buttons at most, and "Copy code" takes one. With all
+ *  three of the user's own enabled, one has to go, and which is decided here
+ *  rather than left to the system dropping whatever comes last: mark-as-read,
+ *  since copying the code is as good as having read the mail, while archive and
+ *  delete are how the user gets rid of it. */
+fun newMailActionsBesideCode(
+    actions: Set<String>,
+    hasCode: Boolean,
+): Set<String> = if (hasCode && actions.size > 2) actions - NOTIFICATION_ACTION_MARK_READ else actions
 
 /** One summary row: who wrote, and about what. */
 fun newMailInboxLine(

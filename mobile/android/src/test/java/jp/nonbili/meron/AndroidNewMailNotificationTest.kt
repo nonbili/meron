@@ -164,4 +164,17 @@ class AndroidNewMailNotificationTest {
     fun groupKeySeparatesAccounts() {
         assertNotEquals(newMailGroupKey("me@example.com"), newMailGroupKey("work@example.com"))
     }
+
+    @Test
+    fun copyCodeTakesTheSlotOfMarkAsReadWhenAllThreeAreEnabled() {
+        // Three buttons at most: with a code, mark-as-read gives way.
+        assertEquals(
+            setOf(NOTIFICATION_ACTION_ARCHIVE, NOTIFICATION_ACTION_DELETE),
+            newMailActionsBesideCode(allNotificationActions, hasCode = true),
+        )
+        // Two fit next to the copy button, and without a code nothing changes.
+        val two = setOf(NOTIFICATION_ACTION_ARCHIVE, NOTIFICATION_ACTION_MARK_READ)
+        assertEquals(two, newMailActionsBesideCode(two, hasCode = true))
+        assertEquals(allNotificationActions, newMailActionsBesideCode(allNotificationActions, hasCode = false))
+    }
 }

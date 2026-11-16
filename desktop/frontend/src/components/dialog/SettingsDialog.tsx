@@ -599,6 +599,7 @@ function MessagesSection() {
   const darkMessageBodies = useValue(settings$.darkMessageBodies)
   const autoFitMessages = useValue(settings$.autoFitMessages)
   const readerBottomActions = useValue(settings$.readerBottomActions)
+  const detectOneTimeCodes = useValue(settings$.detectOneTimeCodes)
 
   return (
     <div className="flex flex-col gap-4">
@@ -663,6 +664,13 @@ function MessagesSection() {
                 : t('settings.privacy.remoteSendersNone')}
             </button>
           }
+        />
+        <ToggleRow
+          icon={<KeyRound size={15} />}
+          title={t('settings.privacy.detectCodes')}
+          hint={t('settings.privacy.detectCodesHint')}
+          checked={detectOneTimeCodes}
+          onChange={() => settings$.detectOneTimeCodes.set(!detectOneTimeCodes)}
         />
       </SettingsGroup>
       {remoteSendersOpen && <RemoteSendersDialog onClose={() => setRemoteSendersOpen(false)} />}

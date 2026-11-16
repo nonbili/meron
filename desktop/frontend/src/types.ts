@@ -194,6 +194,9 @@ export type Message = {
   /** UTF-16 offset where the plain body's quoted tail starts, so it can be
    * folded; null/absent when there is none. HTML bodies mark theirs inline. */
   body_quote_start?: number | null
+  /** The one-time code of a verification mail, found by the core (see
+   * meron-core's verification_code); null/absent for every other message. */
+  verification_code?: string | null
   /** True when the body isn't cached yet — the on-demand fetch failed or is
    * still filling in the background (a `mail.synced` re-read delivers it). */
   body_missing?: boolean

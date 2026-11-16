@@ -289,6 +289,55 @@ internal fun MeronMobileState.loadAlertDefaults(): Job? {
     }
 }
 
+/** Read whether one-time code detection is on from the core store. */
+internal fun MeronMobileState.loadDetectOneTimeCodes(): Job? {
+    if (!coreLoaded) return null
+    val generation = ++detectOneTimeCodesLoadGeneration
+    return scope.launch {
+        runCatching {
+            withContext(ioDispatcher) {
+                val response =
+                    requireCoreOk(
+                        MobileMailCommandClient(core).getPrefs(AppPrefsGetParams(listOf(DETECT_ONE_TIME_CODES_SETTING_KEY))),
+                    )
+                parseAppPrefsResponse(response)
+            }
+        }.onSuccess { stored ->
+            if (generation != detectOneTimeCodesLoadGeneration) return@onSuccess
+            detectOneTimeCodes = stored[DETECT_ONE_TIME_CODES_SETTING_KEY] == true
+        }
+    }
+}
+
+/** Switch one-time code detection on or off. The core reads the row itself,
+ *  so the next notification and the next thread read follow it. */
+internal fun MeronMobileState.saveDetectOneTimeCodes(enabled: Boolean) {
+    if (!coreLoaded) {
+        status = coreUnavailableMessage
+        return
+    }
+    val previous = detectOneTimeCodes
+    // Retire any read still in flight so it cannot take the edit back.
+    ++detectOneTimeCodesLoadGeneration
+    detectOneTimeCodes = enabled
+    scope.launch {
+        detectOneTimeCodesWrites.withLock {
+            runCatching {
+                withContext(ioDispatcher) {
+                    requireCoreOk(
+                        MobileMailCommandClient(core).setPref(
+                            AppPrefsSetParams(DETECT_ONE_TIME_CODES_SETTING_KEY, encodeAppPrefValue(enabled)),
+                        ),
+                    )
+                }
+            }.onFailure {
+                if (detectOneTimeCodes == enabled) detectOneTimeCodes = previous
+                status = trsError("mobile.status.detectCodesUpdateFailed", it)
+            }
+        }
+    }
+}
+
 /** Persist a default event alert; the core then has hosts reschedule. */
 internal fun MeronMobileState.saveAlertDefault(
     allDay: Boolean,
@@ -392,6 +441,7 @@ internal fun MeronMobileState.invalidateBackupReloads() {
     ++appSignatureLoadGeneration
     ++remoteImageSendersLoadGeneration
     ++reminderLeadLoadGeneration
+    ++detectOneTimeCodesLoadGeneration
     accountsLoading = false
     appSignatureLoaded = false
     appSignatureLoadCompletion.complete(Unit)

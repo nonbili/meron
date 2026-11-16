@@ -205,6 +205,7 @@ export function useAppEffects() {
       tasks: t('tasks.title'),
       noSubject: t('notify.noSubject'),
       unknownSender: t('notify.unknownSender'),
+      copyCode: t('notification.actionCopyCode'),
     }).catch(() => {})
     // Reflect the resolved locale to <html lang>/dir, driving :lang() CJK glyph
     // selection (see index.css) and RTL. Synced to a paint-time cache in settings.

@@ -27,7 +27,9 @@ pub const NEW_MESSAGES_DETAIL_MAX: usize = 8;
 /// fields per arrival plus a body snippet, for clients that post one
 /// notification per mail. Snippets come from cached bodies, so a message whose
 /// body hasn't been fetched yet contributes an empty `preview` rather than
-/// holding up the event.
+/// holding up the event. `code` is the one-time code of a verification mail
+/// (see [`crate::verification_code`]), which clients offer for copying; null
+/// unless the user switched detection on.
 pub fn new_messages_detail(
     conn: &Connection,
     account_id: &str,
@@ -38,16 +40,32 @@ pub fn new_messages_detail(
 ) -> Option<Value> {
     let latest = headers.first()?;
     let is_inbox = folder.eq_ignore_ascii_case("INBOX");
+    let detect_codes = crate::verification_code::enabled(conn);
     let messages: Vec<Value> = headers
         .iter()
         .take(NEW_MESSAGES_DETAIL_MAX)
         .map(|header| {
+            // One read serves the snippet and the code search. Without a
+            // cached body the subject alone is searched, which is where
+            // "482913 is your code" mails put it anyway.
+            let body = store::get_cached_message(conn, account_id, folder, header.uid)
+                .ok()
+                .flatten()
+                .map(|message| message.body)
+                .unwrap_or_default();
+            let preview = crate::parse::preview_of(&body);
             json!({
                 "uid": header.uid,
                 "from": display_from(header),
                 "subject": header.subject,
-                "preview": store::cached_body_preview(conn, account_id, folder, header.uid)
-                    .unwrap_or_default(),
+                // Blank when there is nothing to show, as
+                // [`store::cached_body_preview`] has it.
+                "preview": if preview.trim().is_empty() { "" } else { preview.as_str() },
+                // A one-time code the mail carries, for a "copy code" action;
+                // null for every other mail.
+                "code": detect_codes
+                    .then(|| crate::verification_code::detect(&header.subject, &body))
+                    .flatten(),
                 "threadKey": store::card_thread_key(header),
                 "date": header.date,
             })
@@ -70,6 +88,7 @@ pub fn new_messages_detail(
             .and_then(|message| message.get("preview"))
             .and_then(Value::as_str)
             .unwrap_or_default(),
+        "code": messages.first().and_then(|message| message.get("code")).cloned(),
         // Branch-aware card key so a notification tap opens the exact list card
         // the grouping produced.
         "threadKey": store::card_thread_key(latest),

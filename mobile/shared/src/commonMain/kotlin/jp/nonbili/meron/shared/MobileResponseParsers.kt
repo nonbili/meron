@@ -521,6 +521,7 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
                 outgoing = item.findJsonBooleanProperty("outgoing") ?: false,
                 starred = item.findJsonBooleanProperty("starred") ?: false,
                 hasAttachments = item.findJsonBooleanProperty("has_attachments") ?: false,
+                verificationCode = item.findJsonStringProperty("verification_code").orEmpty(),
                 bodyMissing = item.findJsonBooleanProperty("body_missing") ?: false,
                 bodyLoading = item.findJsonBooleanProperty("body_loading") ?: false,
                 link = recipients("link"),

@@ -1160,6 +1160,47 @@ fn mobile_protocol_sync_requires_usable_account_secret() {
 }
 
 #[test]
+fn new_messages_detail_offers_a_code_only_when_detection_is_on() {
+    let data_dir = unique_data_dir("new-messages-code");
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
+    let header = MessageHeader {
+        uid: 7,
+        subject: "482913 is your Acme verification code".to_string(),
+        from_addr: "no-reply@acme.example".to_string(),
+        date: 300,
+        thread_key: "code".to_string(),
+        ..Default::default()
+    };
+    store::upsert_messages(&conn, "me@example.com", "INBOX", &[header.clone()]).unwrap();
+    let detail = |conn: &rusqlite::Connection| {
+        crate::mail_model::new_messages_detail(
+            conn,
+            "me@example.com",
+            "me@example.com",
+            "INBOX",
+            false,
+            std::slice::from_ref(&header),
+        )
+        .unwrap()
+    };
+
+    // Off until the user switches it on.
+    let off = detail(&conn);
+    assert!(off["code"].is_null());
+    assert!(off["messages"][0]["code"].is_null());
+
+    store::setting_set(&conn, crate::verification_code::SETTING_KEY, &json!(true)).unwrap();
+    let on = detail(&conn);
+    assert_eq!(on["code"], "482913");
+    assert_eq!(on["messages"][0]["code"], "482913");
+
+    drop(conn);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn mobile_new_messages_detail_summarizes_new_unread_inbox_mail() {
     let data_dir = unique_data_dir("new-messages-detail");
     seed_mobile_account(&data_dir, "me@example.com");
