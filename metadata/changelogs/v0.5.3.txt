@@ -1,0 +1,7 @@
+- Search individual settings directly from the command palette
+- Detect one-time verification codes in mail and offer them for copying
+- Let you choose the app icon style and name RSS feeds in the list
+- Add feeds directly from a Kanban RSS column header
+- Speed up Kanban card selection by re-rendering only affected cards
+- Fix IDLE missing mail at cycle restarts and size quick-reply images
+- Prevent startup database waits from stalling async workers

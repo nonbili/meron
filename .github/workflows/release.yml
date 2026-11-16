@@ -210,7 +210,13 @@ jobs:
 
           ditto "$APP_PATH" "$DMG_ROOT/Meron.app"
           ln -s /Applications "$DMG_ROOT/Applications"
-          hdiutil create -volname "Meron" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG_PATH"
+          # Automatic image sizing can leave too little room for the app and
+          # filesystem metadata. Use HFS+ with 25% headroom plus 64 MiB.
+          PAYLOAD_KB=$(du -sk "$DMG_ROOT" | awk '{print $1}')
+          DMG_SIZE_KB=$((PAYLOAD_KB + PAYLOAD_KB / 4 + 65536))
+          df -h "$DMG_ROOT" dist
+          hdiutil create -volname "Meron" -fs HFS+ -size "${DMG_SIZE_KB}k" \
+            -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG_PATH"
 
           if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${TEAM_ID:-}" ]; then
             SIGNING_IDENTITY="Developer ID Application: Nonbili Inc. ($TEAM_ID)"

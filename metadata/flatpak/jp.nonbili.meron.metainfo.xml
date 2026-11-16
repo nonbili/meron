@@ -75,6 +75,19 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.5.3" date="2026-11-16">
+      <description>
+        <ul>
+          <li>Search individual settings directly from the command palette</li>
+          <li>Detect one-time verification codes in mail and offer them for copying</li>
+          <li>Let you choose the app icon style and name RSS feeds in the list</li>
+          <li>Add feeds directly from a Kanban RSS column header</li>
+          <li>Speed up Kanban card selection by re-rendering only affected cards</li>
+          <li>Fix IDLE missing mail at cycle restarts and size quick-reply images</li>
+          <li>Prevent startup database waits from stalling async workers</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.5.2" date="2026-11-13">
       <description>
         <ul>
