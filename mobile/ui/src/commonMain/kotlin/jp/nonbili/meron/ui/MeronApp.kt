@@ -1021,7 +1021,7 @@ private fun MeronMobileScreenContent(
             }
             // The screen underneath, fully hidden by a settled conversation: it
             // keeps its state but is neither drawn nor read out.
-            val pulledAway by remember { derivedStateOf { pull.distancePx > 0f } }
+            val pulledAway by remember { derivedStateOf { pull.distancePx != 0f } }
             val threadSettled by remember { derivedStateOf { threadVisibility.isIdle && threadVisibility.currentState } }
             val hostCovered by remember {
                 derivedStateOf { threadVisibility.isIdle && threadVisibility.currentState && pull.distancePx == 0f }

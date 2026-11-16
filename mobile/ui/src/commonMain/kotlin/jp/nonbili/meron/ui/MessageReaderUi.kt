@@ -108,8 +108,12 @@ internal fun MessageReaderScreen(
             Modifier
                 .fillMaxSize()
                 .pullToDismissLayer(pull)
-                .pullToDismiss(pull, isAtTop = { !scrollState.canScrollBackward }, onDismiss = onBack)
-                .pointerInput(Unit) {
+                .pullToDismiss(
+                    pull,
+                    isAtTop = { !scrollState.canScrollBackward },
+                    isAtBottom = { !scrollState.canScrollForward },
+                    onDismiss = onBack,
+                ).pointerInput(Unit) {
                     detectTapGestures { }
                 },
     ) {

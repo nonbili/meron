@@ -1055,6 +1055,7 @@ internal fun ThreadScreen(
                             pull,
                             enabled = active && swipeOpen && WindowInsets.ime.getBottom(LocalDensity.current) == 0,
                             isAtTop = { !listState.canScrollBackward },
+                            isAtBottom = { !listState.canScrollForward },
                             onDismiss = onBack,
                         ),
                 ) {

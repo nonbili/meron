@@ -31,13 +31,18 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.sign
 
-/** A release at least this fast downwards dismisses, however short the pull. */
+/** A release at least this fast downwards dismisses, however short the pull.
+ *  Pulls up past the bottom take the full distance: a quick flick there is as
+ *  often a check for more content as a wish to leave. */
 private const val DISMISS_VELOCITY = 1000f
 
 /**
- * Pulling a full-screen view down past the top of its content to close it:
- * the message reader back to its conversation, a conversation back to its list.
+ * Pulling a full-screen view down past the top of its content, or up past its
+ * bottom, to close it: the message reader back to its conversation, a
+ * conversation back to its list.
  * The view follows the finger with growing resistance, shrinking and fading as
  * it goes, and closes when let go far or fast enough; otherwise it springs back.
  */
@@ -47,15 +52,21 @@ internal class PullToDismissState(
     private val dismissDistancePx: Float,
     private val fallbackHeightPx: Float,
 ) {
+    /** How far the view is out: positive pulled down, negative pulled up. */
     var distancePx by mutableFloatStateOf(0f)
         private set
 
-    /** The height of the view being pulled, which it slides down by to close. */
+    /** The height of the view being pulled, which it slides off by to close. */
     var heightPx by mutableFloatStateOf(0f)
 
-    /** Whether the touch in progress went down with the content at its top. A
-     *  scroll up that reaches the top mid-drag stops there instead of pulling. */
-    internal var armed = false
+    /** Whether the touch in progress went down with the content at its top, or
+     *  at its bottom. A scroll that reaches an end mid-drag stops there instead
+     *  of pulling. */
+    internal var armedTop = false
+    internal var armedBottom = false
+
+    /** Which way the pull in progress goes: 1 down, -1 up, 0 at rest. */
+    private var direction = 0f
 
     private var dismissed = false
     private var settling = false
@@ -64,16 +75,23 @@ internal class PullToDismissState(
     val canPull: Boolean get() = !dismissed && !settling
 
     /** How much of each pixel dragged the view moves, less the further it is out. */
-    private fun resistance(): Float = if (heightPx > 0f) (1f - (distancePx / heightPx).coerceIn(0f, 1f)).coerceAtLeast(0.3f) else 0.8f
+    private fun resistance(): Float = if (heightPx > 0f) (1f - (abs(distancePx) / heightPx).coerceIn(0f, 1f)).coerceAtLeast(0.3f) else 0.8f
 
-    /** Moves the view by a drag of [dy]; returns how much of it was taken. */
+    /** Moves the view by a drag of [dy]; returns how much of it was taken. At
+     *  rest, the drag's own direction starts the pull that way. */
     fun dragBy(dy: Float): Float {
-        if (!canPull) return 0f
+        if (!canPull || dy == 0f) return 0f
+        if (direction == 0f) direction = sign(dy)
+        val dir = direction
         val resistance = resistance()
-        // Pushing back up only takes what returns the view to rest.
-        val taken = if (dy < 0f) dy.coerceAtLeast(-distancePx / resistance) else dy
-        distancePx = (distancePx + taken * resistance).coerceAtLeast(0f)
-        return taken
+        val outward = dy * dir
+        val magnitude = abs(distancePx)
+        // Pushing back only takes what returns the view to rest.
+        val taken = if (outward < 0f) outward.coerceAtLeast(-magnitude / resistance) else outward
+        val next = (magnitude + taken * resistance).coerceAtLeast(0f)
+        distancePx = next * dir
+        if (next == 0f) direction = 0f
+        return taken * dir
     }
 
     fun release(
@@ -85,8 +103,9 @@ internal class PullToDismissState(
         settle =
             scope.launch {
                 try {
-                    if (distancePx >= dismissDistancePx || velocityY > DISMISS_VELOCITY) {
-                        val target = if (heightPx > 0f) heightPx else fallbackHeightPx
+                    val down = distancePx > 0f
+                    if (abs(distancePx) >= dismissDistancePx || (down && velocityY > DISMISS_VELOCITY)) {
+                        val target = (if (heightPx > 0f) heightPx else fallbackHeightPx) * if (down) 1f else -1f
                         animate(distancePx, target, velocityY, spring(stiffness = Spring.StiffnessMediumLow)) { value, _ ->
                             distancePx = value
                         }
@@ -96,6 +115,8 @@ internal class PullToDismissState(
                         animate(distancePx, 0f, velocityY, spring(stiffness = Spring.StiffnessMedium)) { value, _ ->
                             distancePx = value
                         }
+                        distancePx = 0f
+                        direction = 0f
                     }
                 } finally {
                     settling = false
@@ -113,6 +134,7 @@ internal class PullToDismissState(
     fun reset() {
         stop()
         distancePx = 0f
+        direction = 0f
         dismissed = false
     }
 }
@@ -131,7 +153,7 @@ internal fun Modifier.pullToDismissLayer(state: PullToDismissState): Modifier =
     onSizeChanged { state.heightPx = it.height.toFloat() }
         .graphicsLayer {
             translationY = state.distancePx
-            val progress = if (state.heightPx > 0f) (state.distancePx / state.heightPx).coerceIn(0f, 1f) else 0f
+            val progress = if (state.heightPx > 0f) (abs(state.distancePx) / state.heightPx).coerceIn(0f, 1f) else 0f
             alpha = 1f - progress * 0.4f
             // Fades each thing drawn rather than an offscreen copy of the view:
             // Android's WebView cannot be drawn into one (hwui crashes natively
@@ -143,19 +165,22 @@ internal fun Modifier.pullToDismissLayer(state: PullToDismissState): Modifier =
 
 /**
  * Pulls from the scrolling content inside: a drag down that started with it at
- * its top ([isAtTop], read as the finger goes down), and that nothing nested in
- * it scrolls, moves the view instead of the content. Flings never pull, so
- * momentum carrying the content to its top stops there.
+ * its top ([isAtTop], read as the finger goes down), or a drag up that started
+ * with it at its bottom ([isAtBottom]), and that nothing nested in it scrolls,
+ * moves the view instead of the content. Flings never pull, so momentum
+ * carrying the content to an end stops there.
  */
 @Composable
 internal fun Modifier.pullToDismiss(
     state: PullToDismissState,
     enabled: Boolean = true,
     isAtTop: () -> Boolean,
+    isAtBottom: () -> Boolean,
     onDismiss: () -> Unit,
 ): Modifier {
     if (!enabled) return this
     val atTop by rememberUpdatedState(isAtTop)
+    val atBottom by rememberUpdatedState(isAtBottom)
     val dismiss by rememberUpdatedState(onDismiss)
     val connection =
         remember(state) {
@@ -166,14 +191,14 @@ internal fun Modifier.pullToDismiss(
                     source: NestedScrollSource,
                 ): Offset {
                     if (source != NestedScrollSource.UserInput || !state.canPull) return Offset.Zero
-                    if (state.distancePx > 0f && available.y != 0f) return Offset(0f, state.dragBy(available.y))
+                    if (state.distancePx != 0f && available.y != 0f) return Offset(0f, state.dragBy(available.y))
                     return Offset.Zero
                 }
 
-                // Before that, a drag down pulls only with what everything
-                // inside left over, so a capped message bubble scrolls back up
-                // through its own body first. Anything inside scrolling during
-                // the touch disarms it, so reaching a top mid-drag stops there.
+                // Before that, a drag pulls only with what everything inside
+                // left over, so a capped message bubble scrolls through its own
+                // body first. Anything inside scrolling during the touch
+                // disarms it, so reaching an end mid-drag stops there.
                 override fun onPostScroll(
                     consumed: Offset,
                     available: Offset,
@@ -181,10 +206,12 @@ internal fun Modifier.pullToDismiss(
                 ): Offset {
                     if (source != NestedScrollSource.UserInput || !state.canPull) return Offset.Zero
                     if (consumed.y != 0f) {
-                        state.armed = false
+                        state.armedTop = false
+                        state.armedBottom = false
                         return Offset.Zero
                     }
-                    if (available.y > 0f && state.armed && atTop()) return Offset(0f, state.dragBy(available.y))
+                    if (available.y > 0f && state.armedTop && atTop()) return Offset(0f, state.dragBy(available.y))
+                    if (available.y < 0f && state.armedBottom && atBottom()) return Offset(0f, state.dragBy(available.y))
                     return Offset.Zero
                 }
 
@@ -198,7 +225,8 @@ internal fun Modifier.pullToDismiss(
     return pointerInput(state) {
         awaitEachGesture {
             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            state.armed = atTop()
+            state.armedTop = atTop()
+            state.armedBottom = atBottom()
         }
     }.nestedScroll(connection)
 }
@@ -212,7 +240,8 @@ internal fun Modifier.pullToDismissHandle(
     val dismiss by rememberUpdatedState(onDismiss)
     return pointerInput(state) {
         detectVerticalDragGestures(
-            onVerticalDrag = { _, dragAmount -> state.dragBy(dragAmount) },
+            // Only ever down from here, as the bar sits at the top.
+            onVerticalDrag = { _, dragAmount -> if (state.distancePx > 0f || dragAmount > 0f) state.dragBy(dragAmount) },
             onDragEnd = { state.release(0f, dismiss) },
             onDragCancel = { state.release(0f, dismiss) },
         )
