@@ -4,7 +4,6 @@ import { DndContext } from '@dnd-kit/core'
 import { compose$ } from '../../states/composeState'
 import { kanban$, kanbanBoardColumnKey, type KanbanColumn } from '../../states/kanban'
 import type { Message } from '../../types'
-import type { ThreadContextMenuController } from '../threads/ThreadContextMenu'
 import { KanbanThreadCard } from './KanbanThreadCard'
 
 const thread: Message = {
@@ -26,14 +25,27 @@ const thread: Message = {
 }
 
 const inbox = { accountId: 'acc-1', folderId: 'INBOX' } as KanbanColumn
-const threadMenu: ThreadContextMenuController = { menu: null, close: () => {}, isOpen: () => false, open: () => {} }
 
 function renderTwoCards() {
   const second = { ...thread, id: 'root-2', thread_id: 't-2', subject: 'Second' }
   const view = render(
     <DndContext>
-      <KanbanThreadCard boardId="board-1" thread={thread} column={inbox} threadMenu={threadMenu} ownerKey="col-1" />
-      <KanbanThreadCard boardId="board-1" thread={second} column={inbox} threadMenu={threadMenu} ownerKey="col-1" />
+      <KanbanThreadCard
+        boardId="board-1"
+        thread={thread}
+        column={inbox}
+        menuOpen={false}
+        onOpenMenu={() => {}}
+        ownerKey="col-1"
+      />
+      <KanbanThreadCard
+        boardId="board-1"
+        thread={second}
+        column={inbox}
+        menuOpen={false}
+        onOpenMenu={() => {}}
+        ownerKey="col-1"
+      />
     </DndContext>,
   )
   const row = (text: string) => view.getByText(text).closest<HTMLElement>('[data-thread-row]')!
@@ -43,7 +55,14 @@ function renderTwoCards() {
 function renderCard(column: KanbanColumn = inbox) {
   const view = render(
     <DndContext>
-      <KanbanThreadCard boardId="board-1" thread={thread} column={column} threadMenu={threadMenu} ownerKey="col-1" />
+      <KanbanThreadCard
+        boardId="board-1"
+        thread={thread}
+        column={column}
+        menuOpen={false}
+        onOpenMenu={() => {}}
+        ownerKey="col-1"
+      />
       <button>elsewhere</button>
     </DndContext>,
   )

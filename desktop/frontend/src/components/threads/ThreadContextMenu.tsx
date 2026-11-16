@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react'
 import { useValue } from '@legendapp/state/react'
 import {
   Archive,
@@ -98,53 +98,55 @@ function isRssThread(thread: Message, accounts: Account[]) {
 // scroll (outside the menu) and resize.
 export function useThreadContextMenu(accounts: Account[]): ThreadContextMenuController {
   const [menu, setMenu] = useState<ThreadMenuState | null>(null)
+  // open/close keep their identity across renders, so memoized rows (kanban
+  // cards) handed them don't all re-render whenever the menu opens or closes.
+  const accountsRef = useRef(accounts)
+  accountsRef.current = accounts
+  const close = useCallback(() => setMenu(null), [])
+  const open = useCallback((event: MouseEvent, thread: Message, ownerKey?: string) => {
+    event.preventDefault()
+    if (isRssThread(thread, accountsRef.current)) {
+      setMenu({
+        kind: 'feed',
+        x: event.clientX,
+        y: event.clientY,
+        threadId: thread.thread_id,
+        accountId: thread.account_id,
+        subject: thread.subject || '(no subject)',
+        name: thread.from_name || thread.subject || 'this feed',
+        url: thread.feed_url,
+        unread: thread.unread,
+        message: thread,
+        ownerKey,
+      })
+      return
+    }
 
-  useDismissOnOutside(
-    menu !== null,
-    (target) => targetWithin(target, '[data-thread-context-menu]'),
-    () => setMenu(null),
-  )
+    setMenu({
+      kind: 'mail',
+      x: event.clientX,
+      y: event.clientY,
+      threadId: thread.thread_id,
+      subject: thread.subject || '(no subject)',
+      accountId: thread.account_id,
+      folderId: thread.folder_id,
+      unread: thread.unread,
+      starred: thread.starred,
+      ownerKey,
+    })
+  }, [])
+
+  useDismissOnOutside(menu !== null, (target) => targetWithin(target, '[data-thread-context-menu]'), close)
 
   return {
     menu,
-    close: () => setMenu(null),
+    close,
     isOpen: (thread, ownerKey) =>
       menu !== null &&
       menu.ownerKey === ownerKey &&
       menu.accountId === thread.account_id &&
       (menu.kind === 'feed' ? menu.message.id === thread.id : menu.threadId === thread.thread_id),
-    open: (event, thread, ownerKey) => {
-      event.preventDefault()
-      if (isRssThread(thread, accounts)) {
-        setMenu({
-          kind: 'feed',
-          x: event.clientX,
-          y: event.clientY,
-          threadId: thread.thread_id,
-          accountId: thread.account_id,
-          subject: thread.subject || '(no subject)',
-          name: thread.from_name || thread.subject || 'this feed',
-          url: thread.feed_url,
-          unread: thread.unread,
-          message: thread,
-          ownerKey,
-        })
-        return
-      }
-
-      setMenu({
-        kind: 'mail',
-        x: event.clientX,
-        y: event.clientY,
-        threadId: thread.thread_id,
-        subject: thread.subject || '(no subject)',
-        accountId: thread.account_id,
-        folderId: thread.folder_id,
-        unread: thread.unread,
-        starred: thread.starred,
-        ownerKey,
-      })
-    },
+    open,
   }
 }
 

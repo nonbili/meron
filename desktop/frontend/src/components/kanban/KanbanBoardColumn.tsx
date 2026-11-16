@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type { Message } from '../../types'
 import { useTranslation } from '../../lib/i18n'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -285,6 +286,17 @@ function KanbanColumnContent({
     const [from, to] = targetIndex < anchorIndex ? [targetIndex, anchorIndex] : [anchorIndex, targetIndex]
     setBulkSelection(rows.slice(from, to + 1), target.key)
   }
+  // Cards are memoized, so they get callbacks that keep their identity across
+  // renders and read this render's helpers through a ref.
+  const bulkHandlersRef = useRef({ bulkItemFor, selectRangeTo })
+  bulkHandlersRef.current = { bulkItemFor, selectRangeTo }
+  const onBulkRangeSelect = useCallback((thread: Message) => {
+    const { bulkItemFor, selectRangeTo } = bulkHandlersRef.current
+    selectRangeTo(bulkItemFor(thread))
+  }, [])
+  const onBulkModeSelect = useCallback((thread: Message) => {
+    toggleBulkSelection(bulkHandlersRef.current.bulkItemFor(thread))
+  }, [])
 
   // The board's search effect doesn't watch the filters, so a filter change
   // reloads here with whatever search currently covers this column.
@@ -605,14 +617,15 @@ function KanbanColumnContent({
                   boardId={boardId}
                   thread={thread}
                   column={column}
-                  threadMenu={threadMenu}
+                  menuOpen={threadMenu.isOpen(thread, boardKey)}
+                  onOpenMenu={threadMenu.open}
                   ownerKey={boardKey}
                   bulkSelectable={desktopBulk && bulkInColumn}
                   bulkEnabled={desktopBulk}
                   bulkSelected={!!bulkSelection[bulkItem.key]}
-                  onBulkRangeSelect={() => selectRangeTo(bulkItem)}
-                  onBulkModeSelect={() => toggleBulkSelection(bulkItem)}
-                  onBulkPlainSelect={() => clearBulkSelection()}
+                  onBulkRangeSelect={onBulkRangeSelect}
+                  onBulkModeSelect={onBulkModeSelect}
+                  onBulkPlainSelect={clearBulkSelection}
                 />
               )
             })}

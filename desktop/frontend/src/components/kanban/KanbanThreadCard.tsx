@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { useValue } from '@legendapp/state/react'
@@ -19,11 +19,15 @@ import { KANBAN_PANE_ANIMATION_MS } from './KanbanConversationPane'
 // The longest the selected card is followed while the conversation pane opens.
 const FOLLOW_CAP_MS = 2000
 
-export function KanbanThreadCard({
+// Memoized, and every store read below is narrowed to this card, so a click or
+// right-click re-renders only the cards whose highlight actually changes rather
+// than every card on the board (which grows as columns page in more mail).
+export const KanbanThreadCard = memo(function KanbanThreadCard({
   boardId,
   thread,
   column,
-  threadMenu,
+  menuOpen,
+  onOpenMenu,
   ownerKey,
   bulkSelectable = false,
   bulkEnabled = false,
@@ -35,24 +39,22 @@ export function KanbanThreadCard({
   boardId: string
   thread: Message
   column: KanbanColumn
-  threadMenu: ThreadContextMenuController
+  menuOpen: boolean
+  onOpenMenu: ThreadContextMenuController['open']
   // Identifies this card's column so the shared menu only renders here.
   ownerKey: string
   bulkSelectable?: boolean
   bulkEnabled?: boolean
   bulkSelected?: boolean
-  onBulkRangeSelect?: () => void
-  onBulkModeSelect?: () => void
+  // Handed the card's thread, so the column can pass one stable callback to all.
+  onBulkRangeSelect?: (thread: Message) => void
+  onBulkModeSelect?: (thread: Message) => void
   onBulkPlainSelect?: () => void
 }) {
-  const accounts = useValue(accounts$)
-  // Highlight is keyed off the open pane, not ui$.selectedThread, so a card can
-  // never read as "selected" while its conversation pane is closed.
-  const paneThreadId = useValue(kanban$.paneThreadId)
-  const movingThread = useValue(kanban$.movingThread)
+  const account = useValue(() => accounts$.get().find((item) => item.id === thread.account_id))
+  const moving = useValue(() => kanban$.movingThread.get() === thread.thread_id)
   const selectedItemRef = useRef<HTMLDivElement | null>(null)
   const starredColumn = isUnifiedStarredColumn(column)
-  const account = accounts.find((item) => item.id === thread.account_id)
   const starredFeed = starredColumn && isRssAccount(account, thread.account_id)
   // Scoped to the column: the same thread can sit in two columns of one board
   // (a unified inbox next to the account's own), and draggable ids must be unique.
@@ -63,21 +65,25 @@ export function KanbanThreadCard({
     // real account/folder, which the drop resolves as the move's origin.
     data: { type: 'thread', threadId: thread.thread_id, source: column },
   })
+  // The card selected from the keyboard (Esc, then the arrow keys) reads as
+  // selected while nothing is on screen in the pane.
+  const keyboardSelected = useValue(() => {
+    const keyboardCard = kanban$.keyboardCard.get()
+    return (
+      !kanban$.paneThreadId.get() &&
+      !compose$.activeTab.get() &&
+      keyboardCard?.columnKey === kanbanBoardColumnKey(boardId, column) &&
+      (starredFeed ? keyboardCard.itemId === thread.id : keyboardCard.threadId === thread.thread_id)
+    )
+  })
+  // Highlight is keyed off the open pane, not ui$.selectedThread, so a card can
+  // never read as "selected" while its conversation pane is closed.
+  const paneSelected = useValue(() => kanban$.paneThreadId.get() === thread.thread_id)
   // A starred feed item opens in its own reader tab rather than as the card
   // conversation, so it reads as selected while that tab is on screen. Its
   // thread_id is the whole feed's, so match the tab by the item's own id.
-  const activeTab = useValue(compose$.activeTab)
-  // The card selected from the keyboard (Esc, then the arrow keys) reads as
-  // selected while nothing is on screen in the pane.
-  const keyboardCard = useValue(kanban$.keyboardCard)
-  const keyboardSelected =
-    !paneThreadId &&
-    !activeTab &&
-    keyboardCard?.columnKey === kanbanBoardColumnKey(boardId, column) &&
-    (starredFeed ? keyboardCard.itemId === thread.id : keyboardCard.threadId === thread.thread_id)
-  const active = starredFeed
-    ? activeTab === thread.id || keyboardSelected
-    : thread.thread_id === paneThreadId || keyboardSelected
+  const tabSelected = useValue(() => starredFeed && compose$.activeTab.get() === thread.id)
+  const active = (starredFeed ? tabSelected : paneSelected) || keyboardSelected
 
   // Follow the card until the pane is in place: the board narrows only when
   // the pane has slid open (KanbanConversationPane drops data-pane-lifted),
@@ -122,7 +128,7 @@ export function KanbanThreadCard({
 
   const style = {
     transform: transform && !isDragging ? CSS.Translate.toString(transform) : undefined,
-    opacity: isDragging ? 0.18 : movingThread === thread.thread_id ? 0.55 : undefined,
+    opacity: isDragging ? 0.18 : moving ? 0.55 : undefined,
     zIndex: isDragging ? 20 : undefined,
   }
 
@@ -144,8 +150,8 @@ export function KanbanThreadCard({
     >
       <ThreadListItem
         thread={thread}
-        contextMenuOpen={threadMenu.isOpen(thread, ownerKey)}
-        active={starredColumn ? active : thread.thread_id === paneThreadId || keyboardSelected}
+        contextMenuOpen={menuOpen}
+        active={starredColumn ? active : paneSelected || keyboardSelected}
         rootRef={active ? selectedItemRef : undefined}
         badgeAccount={column.accountId === 'unified' ? account : undefined}
         // The margin reaches past the column's own padding and border to the
@@ -159,11 +165,11 @@ export function KanbanThreadCard({
             return
           }
           if (bulkEnabled && event.shiftKey) {
-            onBulkRangeSelect?.()
+            onBulkRangeSelect?.(thread)
             return
           }
           if (bulkSelectable) {
-            onBulkModeSelect?.()
+            onBulkModeSelect?.(thread)
             return
           }
           onBulkPlainSelect?.()
@@ -202,12 +208,12 @@ export function KanbanThreadCard({
             event.stopPropagation()
             return
           }
-          threadMenu.open(event, thread, ownerKey)
+          onOpenMenu(event, thread, ownerKey)
         }}
       />
     </div>
   )
-}
+})
 
 export function KanbanDragPreview({ thread, column }: { thread: Message; column: KanbanColumn }) {
   const accounts = useValue(accounts$)
