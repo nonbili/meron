@@ -356,6 +356,16 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                     onClick={() => openComposeTab()}
                   />
                 )}
+                {isRSSAccount && (
+                  <IconButton
+                    icon={Plus}
+                    iconSize={16}
+                    label={t('feeds.actions.addToAccount')}
+                    size="md"
+                    radius="lg"
+                    onClick={() => openAddFeed(selectedAccount)}
+                  />
+                )}
                 {/* Filter + mark-all-read overflow menu (shared with kanban columns).
                 Hidden in the starred view, where the list is starred-only by definition. */}
                 {!isStarredView && (
@@ -418,16 +428,6 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                     allLabel={isRSSAccount ? t('filters.allFeeds') : t('filters.all')}
                     syncLabel={isRSSAccount ? t('feeds.actions.syncFeeds') : t('threads.actions.syncMailbox')}
                     syncingLabel={isRSSAccount ? t('feeds.actions.syncingFeeds') : t('threads.actions.syncing')}
-                  />
-                )}
-                {isRSSAccount && (
-                  <IconButton
-                    icon={Plus}
-                    iconSize={16}
-                    label={t('feeds.actions.addToAccount')}
-                    size="md"
-                    radius="lg"
-                    onClick={() => openAddFeed(selectedAccount)}
                   />
                 )}
                 {/* View + theme: only reachable here when the side navigation is hidden

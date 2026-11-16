@@ -4,10 +4,11 @@ import type { Message } from '../../types'
 import { useTranslation } from '../../lib/i18n'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Loader2, Minus, Pause, Rss, Search } from 'lucide-react'
+import { Loader2, Minus, Pause, Plus, Rss, Search } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { clsx } from '../../lib/utils'
 import { accounts$ } from '../../states/accounts'
+import { openAddFeed } from '../../states/feeds'
 import { mail$ } from '../../states/mail'
 import { exportFolderAsEml } from '../../states/emlExport'
 import {
@@ -516,6 +517,16 @@ function KanbanColumnContent({
             onPointerDown={(event) => event.stopPropagation()}
             onContextMenu={(event) => event.stopPropagation()}
           >
+            {isRss && (
+              <IconButton
+                icon={Plus}
+                iconSize={15}
+                label={t('feeds.actions.addToAccount')}
+                size="sm"
+                radius="lg"
+                onClick={() => openAddFeed(column.accountId)}
+              />
+            )}
             <IconButton
               icon={Minus}
               iconSize={15}

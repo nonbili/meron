@@ -4,7 +4,8 @@ import { isRssAccount } from '../lib/threadActions'
 import { boot } from '../boot'
 import type { Account, Message } from '../types'
 import { ui$, showToast, type EditFeed } from './ui'
-import { kanban$ } from './kanban'
+import { getKanbanColumns, kanban$ } from './kanban'
+import { activeKanbanColumnQuery, loadKanbanColumn } from '../lib/kanbanData'
 import { loadThreads, mail$ } from './mail'
 import { loadFolders } from './mailFolders'
 
@@ -34,10 +35,17 @@ export function openAddFeed(accountId: string) {
 
 // Add a feed to an existing RSS account, then refresh the account's threads
 // (each feed shows as a thread) and its folder unread count. Throws on failure
-// so the dialog can surface the error inline.
+// so the dialog can surface the error inline. Adding a feed sends no sync
+// event, and the mail list doesn't load under a board, so the open board's
+// columns for the account are reloaded here too.
 export async function submitFeed(accountId: string, url: string) {
   await invoke('rss.addFeed', { account_id: accountId, feed_url: url.trim() })
-  await Promise.all([loadThreads(false), loadFolders(accountId, false)])
+  const columns = getKanbanColumns(kanban$.activeBoardId.peek()).filter((column) => column.accountId === accountId)
+  await Promise.all([
+    loadThreads(false),
+    loadFolders(accountId, false),
+    ...columns.map((column) => loadKanbanColumn(column, false, activeKanbanColumnQuery(column))),
+  ])
 }
 
 // Open the feed edit modal for a single RSS feed (thread).
