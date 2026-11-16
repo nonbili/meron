@@ -26,3 +26,34 @@ func TestShowAndRaiseRemapsWindow(t *testing.T) {
 		t.Fatalf("raise consulted WindowIsMinimised %d times; the remap must not be conditional", windowIsMinimisedCalls)
 	}
 }
+
+// With an activation token the window is presented in place: a remap would
+// pull it onto the current workspace instead of switching to its own.
+func TestShowAndRaiseUsesActivationToken(t *testing.T) {
+	restore := stubWindowCalls(t)
+	defer restore()
+	activate := windowActivateWithToken
+	defer func() { windowActivateWithToken = activate }()
+	var activatedWith string
+	windowActivateWithToken = func(token string) {
+		activatedWith = token
+		windowCalls = append(windowCalls, "activate")
+	}
+
+	setPendingActivationToken("click-token")
+	showAndRaiseMainWindow(context.Background())
+
+	if got := strings.Join(windowCalls, ","); got != "show,activate" {
+		t.Fatalf("window calls = %q, want show,activate", got)
+	}
+	if activatedWith != "click-token" {
+		t.Fatalf("activated with %q, want click-token", activatedWith)
+	}
+
+	// The token is single-use: the next raise (a tray click) remaps again.
+	windowCalls = nil
+	showAndRaiseMainWindow(context.Background())
+	if got := strings.Join(windowCalls, ","); got != "hide,show,unminimise" {
+		t.Fatalf("window calls after token use = %q, want hide,show,unminimise", got)
+	}
+}

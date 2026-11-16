@@ -17,6 +17,8 @@ func setNativeTitlebarIntegrated(integrated bool) {}
 
 func closeNativeWindow() {}
 
+func nativeActivateWithToken(token string) {}
+
 func nativeChromeSettings() (layout, doubleClick string) { return "", "" }
 
 func nativeWindowTiled() bool { return false }

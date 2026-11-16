@@ -283,6 +283,36 @@ static void closeMainWindow(void) {
 	g_idle_add(closeIdle, NULL);
 }
 
+// Presents the main window with an activation token from the notification
+// server. On Wayland GTK hands the token to xdg_activation_v1 when focusing;
+// on X11 it carries the startup id (and its _TIME stamp) mutter checks. Either
+// way mutter treats this as a genuine activation and switches to the window's
+// workspace, unlike a remap, which brings it to the current one.
+static gboolean activateWithTokenIdle(gpointer data) {
+	gchar *token = data;
+	if (mainWindow != NULL) {
+		gboolean handled = FALSE;
+#ifdef GDK_WINDOWING_WAYLAND
+		GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(mainWindow));
+		if (GDK_IS_WAYLAND_DISPLAY(display)) {
+			gdk_wayland_display_set_startup_notification_id(display, token);
+			gtk_window_present(mainWindow);
+			handled = TRUE;
+		}
+#endif
+		if (!handled) {
+			gtk_window_set_startup_id(mainWindow, token);
+			gtk_window_present(mainWindow);
+		}
+	}
+	g_free(token);
+	return G_SOURCE_REMOVE;
+}
+
+static void activateWithToken(const char *token) {
+	g_idle_add(activateWithTokenIdle, g_strdup(token));
+}
+
 // Caller frees.
 static char *copyChromeSetting(int doubleClick) {
 	g_mutex_lock(&chromeMu);
@@ -353,6 +383,14 @@ func nativeWindowTiled() bool {
 
 func closeNativeWindow() {
 	C.closeMainWindow()
+}
+
+// nativeActivateWithToken presents the main window using a notification
+// server's activation token; see showAndRaiseMainWindow.
+func nativeActivateWithToken(token string) {
+	cToken := C.CString(token)
+	defer C.free(unsafe.Pointer(cToken))
+	C.activateWithToken(cToken)
 }
 
 // nativeChromeSettings returns GTK's decoration layout (e.g. "menu:close") and

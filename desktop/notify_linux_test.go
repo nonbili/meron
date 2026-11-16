@@ -70,7 +70,7 @@ func TestTakeFdoNotificationTarget(t *testing.T) {
 		notificationMu.Unlock()
 	})
 
-	target, ok := takeFdoNotificationTarget([]any{uint32(7), fdoNotificationDefaultAction}, 11)
+	target, _, ok := takeFdoNotificationTarget([]any{uint32(7), fdoNotificationDefaultAction}, 11)
 	if !ok {
 		t.Fatal("takeFdoNotificationTarget rejected a registered notification")
 	}
@@ -79,7 +79,7 @@ func TestTakeFdoNotificationTarget(t *testing.T) {
 	}
 	// The entry is consumed: ids are reused, so a later signal carrying the same
 	// id must not reopen this thread.
-	if _, ok := takeFdoNotificationTarget([]any{uint32(7), fdoNotificationDefaultAction}, 12); ok {
+	if _, _, ok := takeFdoNotificationTarget([]any{uint32(7), fdoNotificationDefaultAction}, 12); ok {
 		t.Error("takeFdoNotificationTarget returned a consumed target")
 	}
 }
@@ -106,7 +106,7 @@ func TestTakeFdoNotificationTargetRejectsInvalidSignal(t *testing.T) {
 		{uint32(1234), fdoNotificationDefaultAction},
 	}
 	for _, body := range tests {
-		if target, ok := takeFdoNotificationTarget(body, 11); ok {
+		if target, _, ok := takeFdoNotificationTarget(body, 11); ok {
 			t.Errorf("takeFdoNotificationTarget(%#v) = %#v, want rejection", body, target)
 		}
 	}
@@ -129,14 +129,14 @@ func TestFdoNotificationTargetIgnoresSignalsFromReusedID(t *testing.T) {
 	// to the previous notification that used id 11, even though they are handled
 	// after the replacement target has been registered.
 	closeFdoNotificationTarget([]any{uint32(11), uint32(2)}, 19)
-	if _, ok := takeFdoNotificationTarget(
+	if _, _, ok := takeFdoNotificationTarget(
 		[]any{uint32(11), fdoNotificationDefaultAction},
 		19,
 	); ok {
 		t.Fatal("stale action consumed the replacement notification target")
 	}
 
-	target, ok := takeFdoNotificationTarget(
+	target, _, ok := takeFdoNotificationTarget(
 		[]any{uint32(11), fdoNotificationDefaultAction},
 		21,
 	)
@@ -177,6 +177,56 @@ func TestPortalNotificationTargetRejectsInvalidSignal(t *testing.T) {
 	for _, body := range tests {
 		if target, ok := portalNotificationTarget(body); ok {
 			t.Errorf("portalNotificationTarget(%#v) = %#v, want rejection", body, target)
+		}
+	}
+}
+
+// GNOME Shell sends ActivationToken just before ActionInvoked; the click must
+// come back with that token so the raise can activate the window in place.
+func TestFdoActivationTokenTravelsWithClick(t *testing.T) {
+	notificationMu.Lock()
+	fdoNotificationTargets[13] = fdoNotificationTarget{
+		target:           notificationTarget{Account: "account-1", ThreadID: "thread-1"},
+		responseSequence: 10,
+	}
+	notificationMu.Unlock()
+	t.Cleanup(func() {
+		notificationMu.Lock()
+		delete(fdoNotificationTargets, 13)
+		notificationMu.Unlock()
+	})
+
+	// A token for an earlier holder of the id, or for another app, is ignored.
+	storeFdoActivationToken([]any{uint32(13), "stale-token"}, 9)
+	storeFdoActivationToken([]any{uint32(1234), "other-token"}, 11)
+	storeFdoActivationToken([]any{uint32(13), "click-token"}, 11)
+
+	_, token, ok := takeFdoNotificationTarget([]any{uint32(13), fdoNotificationDefaultAction}, 12)
+	if !ok {
+		t.Fatal("takeFdoNotificationTarget rejected a registered notification")
+	}
+	if token != "click-token" {
+		t.Fatalf("activation token = %q, want click-token", token)
+	}
+}
+
+func TestPortalActivationToken(t *testing.T) {
+	platformData := dbus.MakeVariant(map[string]dbus.Variant{
+		"activation-token": dbus.MakeVariant("portal-token"),
+	})
+	tests := []struct {
+		name string
+		body []any
+		want string
+	}{
+		{"v2 platform data", []any{"id", portalNotificationOpenAction, []dbus.Variant{dbus.MakeVariant("{}"), platformData}}, "portal-token"},
+		{"v1 without platform data", []any{"id", portalNotificationOpenAction, []dbus.Variant{dbus.MakeVariant("{}")}}, ""},
+		{"empty platform data", []any{"id", portalNotificationOpenAction, []dbus.Variant{dbus.MakeVariant(map[string]dbus.Variant{})}}, ""},
+		{"short body", []any{"id", portalNotificationOpenAction}, ""},
+	}
+	for _, test := range tests {
+		if got := portalActivationToken(test.body); got != test.want {
+			t.Errorf("%s: portalActivationToken = %q, want %q", test.name, got, test.want)
 		}
 	}
 }

@@ -32,6 +32,9 @@ const (
 	fdoNotificationClose     = fdoNotificationInterface + ".CloseNotification"
 	fdoNotificationAction    = fdoNotificationInterface + ".ActionInvoked"
 	fdoNotificationClosed    = fdoNotificationInterface + ".NotificationClosed"
+	// Sent just before ActionInvoked with a token that lets the clicked app
+	// activate its window (spec 1.2; GNOME Shell sends it).
+	fdoNotificationActivationToken = fdoNotificationInterface + ".ActivationToken"
 	// The action key a notification server invokes when the body itself is
 	// clicked, as opposed to one of the buttons.
 	fdoNotificationDefaultAction = "default"
@@ -59,6 +62,8 @@ type fdoNotificationTarget struct {
 	target notificationTarget
 	// The one-time code its "copy code" button puts on the clipboard.
 	code string
+	// The activation token from the ActivationToken signal preceding a click.
+	activationToken string
 	// Signals received before the Notify reply belong to an older use of the
 	// same server-generated id, even if their handlers run after this entry is
 	// installed.
@@ -88,7 +93,7 @@ func (a *App) setupNotificationListener() {
 	// Clicks and dismissals on the freedesktop service used outside Flatpak.
 	// These are broadcast to every listener, so the handlers below act only on
 	// ids this process registered.
-	for _, member := range []string{"ActionInvoked", "NotificationClosed"} {
+	for _, member := range []string{"ActionInvoked", "ActivationToken", "NotificationClosed"} {
 		if err := conn.AddMatchSignal(
 			dbus.WithMatchInterface(fdoNotificationInterface),
 			dbus.WithMatchMember(member),
@@ -123,13 +128,15 @@ func (a *App) setupNotificationListener() {
 					if code, ok := portalNotificationCode(signal.Body); ok {
 						a.copyNotificationCode(code)
 					} else if target, ok := portalNotificationTarget(signal.Body); ok {
-						a.openThreadFromNotification(target.Account, target.ThreadID)
+						a.openThreadWithActivationToken(target, portalActivationToken(signal.Body))
 					}
+				case fdoNotificationActivationToken:
+					storeFdoActivationToken(signal.Body, signal.Sequence)
 				case fdoNotificationAction:
 					if code, ok := fdoNotificationCode(signal.Body, signal.Sequence); ok {
 						a.copyNotificationCode(code)
-					} else if target, ok := takeFdoNotificationTarget(signal.Body, signal.Sequence); ok && target.ThreadID != "" {
-						a.openThreadFromNotification(target.Account, target.ThreadID)
+					} else if target, token, ok := takeFdoNotificationTarget(signal.Body, signal.Sequence); ok && target.ThreadID != "" {
+						a.openThreadWithActivationToken(target, token)
 					}
 				case fdoNotificationClosed:
 					// Dismissed or expired: drop the payload so the map only
@@ -139,6 +146,15 @@ func (a *App) setupNotificationListener() {
 			}
 		}
 	}()
+}
+
+// openThreadWithActivationToken opens a clicked notification's thread, raising
+// the window with the token the click came with. The token is single-use and
+// tied to this click, so it never outlives it, even if opening bailed early.
+func (a *App) openThreadWithActivationToken(target notificationTarget, token string) {
+	setPendingActivationToken(token)
+	defer setPendingActivationToken("")
+	a.openThreadFromNotification(target.Account, target.ThreadID)
 }
 
 func (a *App) closeNotificationListener() {
@@ -164,17 +180,23 @@ func (a *App) closeNotificationListener() {
 	_ = conn.Close()
 }
 
-// deliverNotification raises the notification, choosing the transport by
-// sandbox rather than by trying the portal first.
+// deliverNotification raises the notification through the freedesktop
+// notification service, falling back to the portal only inside Flatpak.
 //
-// Inside Flatpak the portal is the only route out, and it works there because
-// the sandbox gives the app a real app id. Outside it, the portal hands the
-// notification to the desktop's own service keyed by an app id it guesses from
-// the process — GNOME Shell then rejects ids it cannot resolve to an installed
-// .desktop ("The app by ID \"meron\" could not be found") and drops it. The
-// portal call still returns success, so that failure is invisible to us and no
-// fallback can key off it. Unsandboxed builds therefore talk to the
-// freedesktop notification service directly, as every other native app does.
+// Outside Flatpak the portal is no option: it hands the notification to the
+// desktop's own service keyed by an app id it guesses from the process — GNOME
+// Shell then rejects ids it cannot resolve to an installed .desktop ("The app
+// by ID \"meron\" could not be found") and drops it. The portal call still
+// returns success, so that failure is invisible to us and no fallback can key
+// off it.
+//
+// Inside Flatpak the portal works, but its click events carry no activation
+// token before Notification portal version 2 (GNOME's backend is still at 1),
+// and without one the window can only be raised by remapping it, which drags
+// it to the current workspace. The freedesktop service sends the token itself,
+// so the sandbox talks to it too when the manifest allows
+// (--talk-name=org.freedesktop.Notifications); a denied call falls through to
+// the portal.
 //
 // It returns the handle withdrawNotification takes, or "" when the
 // notification cannot be withdrawn (the beeep fallback).
@@ -182,6 +204,15 @@ func (a *App) deliverNotification(n notification) string {
 	notificationMu.Lock()
 	conn := notificationConn
 	notificationMu.Unlock()
+
+	if conn != nil {
+		if ok, id := a.notifyFreedesktop(conn, n); ok {
+			if id == 0 {
+				return ""
+			}
+			return fdoHandle(id)
+		}
+	}
 
 	if os.Getenv("FLATPAK_ID") != "" {
 		if conn == nil {
@@ -199,15 +230,6 @@ func (a *App) deliverNotification(n notification) string {
 			return ""
 		}
 		return portalHandlePrefix + id
-	}
-
-	if conn != nil {
-		if ok, id := a.notifyFreedesktop(conn, n); ok {
-			if id == 0 {
-				return ""
-			}
-			return fdoHandle(id)
-		}
 	}
 
 	if err := beeep.Notify(n.title, n.body, notifyIcon()); err != nil {
@@ -285,7 +307,7 @@ func (a *App) notifyFreedesktop(conn *dbus.Conn, n notification) (bool, uint32) 
 		0,
 		"Meron",
 		uint32(0), // 0 replaces nothing; each arrival gets its own notification.
-		notifyIcon(),
+		fdoNotificationIcon(),
 		n.title,
 		n.body,
 		actions,
@@ -312,6 +334,16 @@ func (a *App) notifyFreedesktop(conn *dbus.Conn, n notification) (bool, uint32) 
 	}
 	notificationMu.Unlock()
 	return true, id
+}
+
+// fdoNotificationIcon is the app_icon to send. The sandbox's temp file is not
+// visible to the host's notification server, but the icon Flatpak exports
+// under the app id is.
+func fdoNotificationIcon() string {
+	if id := os.Getenv("FLATPAK_ID"); id != "" {
+		return id
+	}
+	return notifyIcon()
 }
 
 // fdoNotificationCopyAction is the action key of the "copy code" button.
@@ -355,17 +387,17 @@ func linuxDesktopEntry() string {
 // takeFdoNotificationTarget resolves an ActionInvoked signal to the thread it
 // should open, consuming the entry: the click is the notification's last event
 // (the server closes it right after), and ids are reused over time.
-func takeFdoNotificationTarget(body []any, sequence dbus.Sequence) (notificationTarget, bool) {
+func takeFdoNotificationTarget(body []any, sequence dbus.Sequence) (notificationTarget, string, bool) {
 	if len(body) < 2 {
-		return notificationTarget{}, false
+		return notificationTarget{}, "", false
 	}
 	id, ok := body[0].(uint32)
 	if !ok {
-		return notificationTarget{}, false
+		return notificationTarget{}, "", false
 	}
 	action, ok := body[1].(string)
 	if !ok || action != fdoNotificationDefaultAction {
-		return notificationTarget{}, false
+		return notificationTarget{}, "", false
 	}
 	notificationMu.Lock()
 	entry, known := fdoNotificationTargets[id]
@@ -378,7 +410,31 @@ func takeFdoNotificationTarget(body []any, sequence dbus.Sequence) (notification
 	if known {
 		forgetNotification(fdoHandle(id))
 	}
-	return entry.target, known
+	return entry.target, entry.activationToken, known
+}
+
+// storeFdoActivationToken keeps the token an ActivationToken signal carries on
+// the notification it names, for the ActionInvoked that follows it.
+func storeFdoActivationToken(body []any, sequence dbus.Sequence) {
+	if len(body) < 2 {
+		return
+	}
+	id, ok := body[0].(uint32)
+	if !ok {
+		return
+	}
+	token, ok := body[1].(string)
+	if !ok || token == "" {
+		return
+	}
+	notificationMu.Lock()
+	defer notificationMu.Unlock()
+	entry, known := fdoNotificationTargets[id]
+	if !known || sequence <= entry.responseSequence {
+		return
+	}
+	entry.activationToken = token
+	fdoNotificationTargets[id] = entry
 }
 
 func closeFdoNotificationTarget(body []any, sequence dbus.Sequence) {
@@ -459,6 +515,29 @@ func portalNotificationCode(body []any) (string, bool) {
 	}
 	code, ok := parameters[0].Value().(string)
 	return code, ok && code != ""
+}
+
+// portalActivationToken is the activation token a portal ActionInvoked signal
+// carries (version 2 appends a platform-data vardict to its parameters), or ""
+// when it has none.
+func portalActivationToken(body []any) string {
+	if len(body) < 3 {
+		return ""
+	}
+	parameters, ok := body[2].([]dbus.Variant)
+	if !ok {
+		return ""
+	}
+	for _, parameter := range parameters {
+		data, ok := parameter.Value().(map[string]dbus.Variant)
+		if !ok {
+			continue
+		}
+		if token, ok := data["activation-token"].Value().(string); ok && token != "" {
+			return token
+		}
+	}
+	return ""
 }
 
 func portalNotificationTarget(body []any) (notificationTarget, bool) {
