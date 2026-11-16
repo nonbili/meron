@@ -18,7 +18,9 @@ internal suspend fun loadImageBitmapRef(
     ref: String,
     maxBytes: Long = MAX_DECODED_IMAGE_BYTES,
 ): ImageBitmap? =
-    loadCachedImageBitmap(ref) {
+    // Keyed by budget too, so a picture first loaded small is not handed to a
+    // full-size viewer, nor a full-size one to every avatar.
+    loadCachedImageBitmap(if (maxBytes == MAX_DECODED_IMAGE_BYTES) ref else "$ref#$maxBytes") {
         loadImageBytes(ref)?.let { bytes ->
             withContext(ioDispatcher) { decodeImageBitmap(bytes, maxBytes) }
         }

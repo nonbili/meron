@@ -19,11 +19,31 @@ actual fun decodeImageBitmap(
         if (scale >= 1.0) return@runCatching image.toComposeImageBitmap()
         // Scale into a bitmap of the budgeted size rather than keeping the
         // full-size pixels around.
-        val (width, height) = scaledImageSize(image.width, image.height, scale)
-        val bitmap = Bitmap()
-        if (!bitmap.allocN32Pixels(width, height)) return@runCatching null
-        val pixels = bitmap.peekPixels() ?: return@runCatching null
-        if (!image.scalePixels(pixels, FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR), false)) return@runCatching null
-        image.close()
-        bitmap.asComposeImageBitmap()
+        try {
+            val (width, height) = scaledImageSize(image.width, image.height, scale)
+            val bitmap = Bitmap()
+            var scaled = false
+            try {
+                if (bitmap.allocN32Pixels(width, height)) {
+                    val pixels = bitmap.peekPixels()
+                    if (pixels != null) {
+                        try {
+                            scaled = image.scalePixels(pixels, FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR), false)
+                        } finally {
+                            pixels.close()
+                        }
+                    }
+                }
+                if (scaled) {
+                    bitmap.setImmutable()
+                    bitmap.asComposeImageBitmap()
+                } else {
+                    null
+                }
+            } finally {
+                if (!scaled) bitmap.close()
+            }
+        } finally {
+            image.close()
+        }
     }.getOrNull()
