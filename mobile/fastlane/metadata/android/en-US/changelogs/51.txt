@@ -1,0 +1,6 @@
+- Detect one-time verification codes in mail and offer them for copying
+- Close conversation and message views by pulling up past the bottom
+- Support dark, tinted, and monochrome app icons
+- Let you name an RSS feed when adding it
+- Cap decoded image size on Android to prevent crashes on large images
+- Fix IDLE missing mail at cycle restarts
