@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "検索範囲",
   "layout.resizeConversation": "会話のサイズ変更",
   "layout.resizeThreadList": "スレッドリストのサイズ変更",
+  "mail.toast.alreadyArchived": "アーカイブ済みです",
   "mail.toast.archiveFailed": "アーカイブに失敗しました",
   "mail.toast.archiveFailedInSameFolder": "アーカイブに失敗しました: スレッドはまだこのフォルダにあります",
   "mail.toast.archivedCount": "{count, plural, one {スレッドがアーカイブされました} other {{count} スレッドがアーカイブされました}}",

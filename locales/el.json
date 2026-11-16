@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Εύρος αναζήτησης",
   "layout.resizeConversation": "Αλλαγή μεγέθους συνομιλίας",
   "layout.resizeThreadList": "Αλλαγή μεγέθους λίστας νημάτων",
+  "mail.toast.alreadyArchived": "Έχει ήδη αρχειοθετηθεί",
   "mail.toast.archiveFailed": "Η αρχειοθέτηση απέτυχε",
   "mail.toast.archiveFailedInSameFolder": "Η αρχειοθέτηση απέτυχε: το νήμα εξακολουθεί να βρίσκεται σε αυτόν τον φάκελο",
   "mail.toast.archivedCount": "{count, plural, one {Το νήμα αρχειοθετήθηκε} other {Τα νήματα {count} αρχειοθετήθηκαν}}",

@@ -551,3 +551,103 @@ func TestMailSendReportsUndeliveredCopies(t *testing.T) {
 		t.Fatalf("send result = %#v, want blind@example.com undelivered", out)
 	}
 }
+
+// Gmail's Archive folder is All Mail, which also lists every Inbox message.
+// Archiving a conversation while viewing All Mail must take its Inbox copies
+// out of the Inbox (Gmail: remove the Inbox label), not move All Mail onto
+// itself, which moved nothing and failed with "no matching messages found".
+func TestMailArchiveFromArchiveFolderMovesInboxCopies(t *testing.T) {
+	const allMail = "[Gmail]/All Mail"
+	threadID := formatImapThreadID("acc", allMail, "gm:42")
+	app, writer := newMailHandlerTestApp(t,
+		sidecarResponsePlan{Result: map[string]any{"folder": allMail}},
+		sidecarResponsePlan{Result: map[string]any{"ok": true, "moved": float64(1), "source_folder": "INBOX"}},
+	)
+
+	out, err := app.mailArchive(map[string]any{"thread_id": threadID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(writer.calls) != 2 {
+		t.Fatalf("sidecar calls = %#v, want archive lookup and one move", writer.calls)
+	}
+	assertCall(t, writer.calls[1], "messages.move", map[string]any{
+		"account":       "acc",
+		"folder":        "INBOX",
+		"target_folder": allMail,
+		"thread_key":    "gm:42",
+	})
+	result := out.(map[string]any)
+	if result["moved"] != float64(1) || result["folder"] != allMail || result["thread_id"] != threadID {
+		t.Fatalf("archive result = %#v", result)
+	}
+	if result["source_folder"] != "INBOX" {
+		t.Fatalf("source_folder = %v, want INBOX so an undo moves the copies back there", result["source_folder"])
+	}
+}
+
+// A conversation with no Inbox copy is already archived: say so instead of
+// the generic "no matching messages found".
+func TestMailArchiveFromArchiveFolderWithoutInboxCopyReportsAlreadyArchived(t *testing.T) {
+	const allMail = "[Gmail]/All Mail"
+	threadID := formatImapThreadID("acc", allMail, "gm:42")
+	app, _ := newMailHandlerTestApp(t,
+		sidecarResponsePlan{Result: map[string]any{"folder": allMail}},
+		sidecarResponsePlan{Result: map[string]any{"ok": true, "moved": float64(0), "source_folder": "INBOX"}},
+	)
+
+	out, err := app.mailArchive(map[string]any{"thread_id": threadID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result := out.(map[string]any); result["already_archived"] != true {
+		t.Fatalf("archive result = %#v, want already_archived", result)
+	}
+}
+
+// A UID-only thread id names an All Mail message; its UID means nothing in the
+// Inbox, so archiving it there must not move whatever Inbox message has it.
+func TestMailArchiveFromArchiveFolderNeverMovesInboxByAllMailUID(t *testing.T) {
+	const allMail = "[Gmail]/All Mail"
+	app, writer := newMailHandlerTestApp(t,
+		sidecarResponsePlan{Result: map[string]any{"folder": allMail}},
+	)
+
+	out, err := app.mailArchive(map[string]any{"thread_id": "acc#" + allMail + "#7"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(writer.calls) != 1 {
+		t.Fatalf("sidecar calls = %#v, want only the archive lookup", writer.calls)
+	}
+	// A single message already in the Archive folder: nothing to do, and the
+	// toast should say so rather than "no matching messages found".
+	if result := out.(map[string]any); result["already_archived"] != true {
+		t.Fatalf("archive result = %#v, want already_archived", result)
+	}
+}
+
+// Not only Gmail: on any IMAP account, archiving a conversation shown in its
+// Archive folder takes the Inbox copies there, and reports none left as
+// already archived.
+func TestMailArchiveFromPlainArchiveFolderMovesInboxCopies(t *testing.T) {
+	threadID := formatImapThreadID("acc", "Archive", "<root@example.com>")
+	app, writer := newMailHandlerTestApp(t,
+		sidecarResponsePlan{Result: map[string]any{"folder": "Archive"}},
+		sidecarResponsePlan{Result: map[string]any{"ok": true, "moved": float64(0), "source_folder": "INBOX"}},
+	)
+
+	out, err := app.mailArchive(map[string]any{"thread_id": threadID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCall(t, writer.calls[1], "messages.move", map[string]any{
+		"account":       "acc",
+		"folder":        "INBOX",
+		"target_folder": "Archive",
+		"thread_key":    "<root@example.com>",
+	})
+	if result := out.(map[string]any); result["already_archived"] != true || result["thread_id"] != threadID {
+		t.Fatalf("archive result = %#v", result)
+	}
+}

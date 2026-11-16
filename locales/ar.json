@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "نطاق البحث",
   "layout.resizeConversation": "تغيير حجم المحادثة",
   "layout.resizeThreadList": "تغيير حجم قائمة سلاسل الرسائل",
+  "mail.toast.alreadyArchived": "مؤرشفة بالفعل",
   "mail.toast.archiveFailed": "فشل الأرشفة",
   "mail.toast.archiveFailedInSameFolder": "فشل الأرشفة: لا يزال الموضوع موجودًا في هذا المجلد",
   "mail.toast.archivedCount": "{count, plural, one {تمت أرشفة الموضوع} other {تمت أرشفة المواضيع {count}}}",

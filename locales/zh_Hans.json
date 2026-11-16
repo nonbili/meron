@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "搜索范围",
   "layout.resizeConversation": "调整会话大小",
   "layout.resizeThreadList": "调整会话列表大小",
+  "mail.toast.alreadyArchived": "已归档",
   "mail.toast.archiveFailed": "存档失败",
   "mail.toast.archiveFailedInSameFolder": "存档失败：线程仍在该文件夹中",
   "mail.toast.archivedCount": "{count, plural, one {话题已存档} other {{count} 线程已存档}}",

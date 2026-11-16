@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Search scope",
   "layout.resizeConversation": "Resize conversation",
   "layout.resizeThreadList": "Resize thread list",
+  "mail.toast.alreadyArchived": "Already archived",
   "mail.toast.archiveFailed": "Archive failed",
   "mail.toast.archiveFailedInSameFolder": "Archive failed: thread is still in this folder",
   "mail.toast.archivedCount": "{count, plural, one {Thread archived} other {{count} threads archived}}",

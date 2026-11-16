@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Zoekbereik",
   "layout.resizeConversation": "Gesprek vergroten/verkleinen",
   "layout.resizeThreadList": "Lijst met berichtreeksen vergroten/verkleinen",
+  "mail.toast.alreadyArchived": "Al gearchiveerd",
   "mail.toast.archiveFailed": "Archiveren mislukt",
   "mail.toast.archiveFailedInSameFolder": "Archiveren mislukt: berichtreeks bevindt zich nog steeds in deze map",
   "mail.toast.archivedCount": "{count, plural, one {Berichtreeks gearchiveerd} other {{count} berichtreeksen gearchiveerd}}",

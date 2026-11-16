@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Meklēšanas apgabals",
   "layout.resizeConversation": "Mainīt sarunas izmēru",
   "layout.resizeThreadList": "Mainīt pavedienu saraksta izmēru",
+  "mail.toast.alreadyArchived": "Jau arhivēts",
   "mail.toast.archiveFailed": "Arhivēt neizdevās",
   "mail.toast.archiveFailedInSameFolder": "Arhīvs neizdevās: pavediens joprojām atrodas šajā mapē",
   "mail.toast.archivedCount": "{count, plural, one {Pavediens arhivēts} other {{count} pavedieni arhivēti}}",

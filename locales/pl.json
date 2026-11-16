@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Zakres wyszukiwania",
   "layout.resizeConversation": "Zmień rozmiar konwersacji",
   "layout.resizeThreadList": "Zmień rozmiar listy wątków",
+  "mail.toast.alreadyArchived": "Już zarchiwizowano",
   "mail.toast.archiveFailed": "Archiwizacja nie powiodła się",
   "mail.toast.archiveFailedInSameFolder": "Archiwizacja nie powiodła się: wątek nadal znajduje się w tym folderze",
   "mail.toast.archivedCount": "{count, plural, one {Wątek zarchiwizowany} other {Zarchiwizowano {count} wątków}}",

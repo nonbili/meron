@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Arama kapsamı",
   "layout.resizeConversation": "Konuşma boyutunu ayarla",
   "layout.resizeThreadList": "İleti dizisi listesi boyutunu ayarla",
+  "mail.toast.alreadyArchived": "Zaten arşivlendi",
   "mail.toast.archiveFailed": "Arşivleme başarısız oldu",
   "mail.toast.archiveFailedInSameFolder": "Arşivleme başarısız oldu: konu hâlâ bu klasörde",
   "mail.toast.archivedCount": "{count, plural, one {Konu arşivlendi} other {{count} konu arşivlendi}}",

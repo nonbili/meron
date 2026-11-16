@@ -641,6 +641,24 @@ export function isDraftFolder(folderId: string, accountId?: string): boolean {
   )
 }
 
+/** Whether `folderId` is the account's Archive folder (Gmail: All Mail, which
+ * the core gives the archive role). Same role-first, name-fallback shape as
+ * {@link isDraftFolder}; the names mirror the core's `looks_like_archive`. */
+export function isArchiveFolder(folderId: string, accountId?: string): boolean {
+  const candidates = [...(accountId ? (mail$.foldersByAccount[accountId].get() ?? []) : []), ...mail$.folders.get()]
+  const folder = candidates.find((item) => item.id === folderId || item.name === folderId)
+  if (folder?.role) return folder.role === 'archive'
+  return [
+    'archive',
+    'archives',
+    'all mail',
+    'inbox.archive',
+    'inbox.archives',
+    '[gmail]/all mail',
+    '[google mail]/all mail',
+  ].includes(folderId.toLowerCase())
+}
+
 /** Whether a message lives in the account's inbox — i.e. it was delivered to us.
  * Same role-first, name-fallback shape as {@link isDraftFolder}. */
 export function isInboxFolder(folderId: string, accountId?: string): boolean {
