@@ -300,9 +300,10 @@ fn text_lines(doc: &Html) -> Vec<TextLine> {
         node.value().as_element().is_some_and(|element| {
             element.name() != "br"
                 && (stylesheet
-                    || element
-                        .attrs()
-                        .any(|(name, _)| !matches!(name, "href" | "rel" | "target" | "title")))
+                    || element.attrs().any(|(name, _)| {
+                        !matches!(name, "href" | "rel" | "target" | "title")
+                            && name != crate::linkify::URL_LINK_ATTR
+                    }))
         })
     };
     for edge in doc.tree.root().traverse() {

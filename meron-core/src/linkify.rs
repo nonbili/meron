@@ -7,8 +7,14 @@
 //! is the only raw-text element left. That makes a plain scan exact here — it
 //! is not a general HTML tokenizer and must not be fed unsanitized markup.
 
+/// The attribute on a link whose text is a URL, which the core's stylesheet
+/// lets break anywhere (see `prepare_message_html`). The sanitizer drops every
+/// `data-*` attribute a sender writes, so a link carrying it was marked here.
+pub const URL_LINK_ATTR: &str = "data-meron-url";
+
 /// Wrap each bare `http://`, `https://` or `www.` URL in the text of
 /// `html` in an `<a>`, leaving text already inside a link (and CSS) alone.
+/// Links whose text is a URL, new or the sender's, get [`URL_LINK_ATTR`].
 pub fn linkify_html(html: &str) -> String {
     let lower = html.to_ascii_lowercase();
     if !lower.contains("http://") && !lower.contains("https://") && !lower.contains("www.") {
@@ -35,6 +41,14 @@ pub fn linkify_html(html: &str) -> String {
                 } else {
                     anchors + 1
                 };
+                if !closing && link_text_is_url(&html[end..]) && html[..end].ends_with('>') {
+                    out.push_str(&html[i..end - 1]);
+                    out.push(' ');
+                    out.push_str(URL_LINK_ATTR);
+                    out.push_str("=\"\">");
+                    i = end;
+                    continue;
+                }
             }
             out.push_str(&html[i..end]);
             i = end;
@@ -50,6 +64,20 @@ pub fn linkify_html(html: &str) -> String {
         i = next;
     }
     out
+}
+
+/// Whether the link whose content starts `rest` holds nothing but a URL.
+fn link_text_is_url(rest: &str) -> bool {
+    let Some(close) = rest.find('<') else {
+        return false;
+    };
+    let text = rest[..close].trim();
+    rest[close..]
+        .get(..3)
+        .is_some_and(|tag| tag.eq_ignore_ascii_case("</a"))
+        && !text.is_empty()
+        && url_at(text, 0).is_some()
+        && !text.contains(char::is_whitespace)
 }
 
 /// The index just past the `>` closing the tag that opens at `start`, skipping
@@ -95,7 +123,9 @@ fn linkify_text(text: &str, out: &mut String) {
             out.push_str("<a href=\"");
             out.push_str(scheme);
             out.push_str(url);
-            out.push_str("\">");
+            out.push_str("\" ");
+            out.push_str(URL_LINK_ATTR);
+            out.push_str("=\"\">");
             out.push_str(url);
             out.push_str("</a>");
             pos += len;
@@ -212,8 +242,18 @@ mod tests {
             linkify_html(
                 "<p>same as https://github.com/nonbili/meron/releases/tag/android%2Fv0.5.0</p>"
             ),
-            "<p>same as <a href=\"https://github.com/nonbili/meron/releases/tag/android%2Fv0.5.0\">\
+            "<p>same as <a href=\"https://github.com/nonbili/meron/releases/tag/android%2Fv0.5.0\" data-meron-url=\"\">\
              https://github.com/nonbili/meron/releases/tag/android%2Fv0.5.0</a></p>"
+        );
+    }
+
+    #[test]
+    fn marks_a_senders_link_whose_text_is_a_url() {
+        assert_eq!(
+            linkify_html(
+                "<a href=\"https://a.example/x\"> https://a.example/x </a><a href=\"https://a.example/\">docs</a>"
+            ),
+            "<a href=\"https://a.example/x\" data-meron-url=\"\"> https://a.example/x </a><a href=\"https://a.example/\">docs</a>"
         );
     }
 
@@ -234,11 +274,11 @@ mod tests {
     fn trims_punctuation_and_unbalanced_brackets() {
         assert_eq!(
             linkify_html("<p>(see https://x.example/a.)</p>"),
-            "<p>(see <a href=\"https://x.example/a\">https://x.example/a</a>.)</p>"
+            "<p>(see <a href=\"https://x.example/a\" data-meron-url=\"\">https://x.example/a</a>.)</p>"
         );
         assert_eq!(
             linkify_html("<p>https://en.wikipedia.org/wiki/Foo_(bar), ok</p>"),
-            "<p><a href=\"https://en.wikipedia.org/wiki/Foo_(bar)\">https://en.wikipedia.org/wiki/Foo_(bar)</a>, ok</p>"
+            "<p><a href=\"https://en.wikipedia.org/wiki/Foo_(bar)\" data-meron-url=\"\">https://en.wikipedia.org/wiki/Foo_(bar)</a>, ok</p>"
         );
     }
 
@@ -246,7 +286,7 @@ mod tests {
     fn keeps_query_ampersands_and_stops_at_other_entities() {
         assert_eq!(
             linkify_html("<p>&lt;https://x.example/?a=1&amp;b=2&gt;&nbsp;x</p>"),
-            "<p>&lt;<a href=\"https://x.example/?a=1&amp;b=2\">https://x.example/?a=1&amp;b=2</a>&gt;&nbsp;x</p>"
+            "<p>&lt;<a href=\"https://x.example/?a=1&amp;b=2\" data-meron-url=\"\">https://x.example/?a=1&amp;b=2</a>&gt;&nbsp;x</p>"
         );
     }
 
@@ -254,7 +294,7 @@ mod tests {
     fn links_www_with_a_scheme() {
         assert_eq!(
             linkify_html("<p>Visit www.example.com.</p>"),
-            "<p>Visit <a href=\"http://www.example.com\">www.example.com</a>.</p>"
+            "<p>Visit <a href=\"http://www.example.com\" data-meron-url=\"\">www.example.com</a>.</p>"
         );
     }
 
@@ -276,7 +316,9 @@ mod tests {
         let start = std::time::Instant::now();
         let out = linkify_html(&html);
         assert!(start.elapsed() < std::time::Duration::from_secs(1));
-        assert!(out.starts_with("<p><a href=\"https://x.example/\">https://x.example/</a>))"));
+        assert!(out.starts_with(
+            "<p><a href=\"https://x.example/\" data-meron-url=\"\">https://x.example/</a>))"
+        ));
     }
 
     #[test]
@@ -291,7 +333,7 @@ mod tests {
     fn keeps_a_trailing_underscore() {
         assert_eq!(
             linkify_html("<p>https://x.example/?token=abc_ ok</p>"),
-            "<p><a href=\"https://x.example/?token=abc_\">https://x.example/?token=abc_</a> ok</p>"
+            "<p><a href=\"https://x.example/?token=abc_\" data-meron-url=\"\">https://x.example/?token=abc_</a> ok</p>"
         );
     }
 }

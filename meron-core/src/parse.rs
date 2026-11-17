@@ -1283,7 +1283,9 @@ pub fn prepare_message_html(source: &str, load_remote_images: bool, subject: &st
         "<meta charset=\"utf-8\">\
          <meta http-equiv=\"Content-Security-Policy\" content=\"{csp}\">\
          {body_colors}\
-         <style>img,video{{max-width:100%;height:auto}}img{{cursor:zoom-in}}</style>"
+         <style>img,video{{max-width:100%;height:auto}}img{{cursor:zoom-in}}\
+         a[{url_link}]{{word-break:break-all}}</style>",
+        url_link = crate::linkify::URL_LINK_ATTR,
     );
     inject_head(source, &head)
 }
@@ -2845,6 +2847,36 @@ AQID\r\n\
     }
 
     #[test]
+    fn prepare_html_lets_url_links_break_anywhere() {
+        let out = prepare_html(
+            r#"<p>&lt;https://x.example/a&gt; and <a href="https://y.example/">https://y.example/</a> or <a href="https://z.example/">docs</a></p>"#,
+            false,
+        );
+        assert!(
+            out.contains("a[data-meron-url]{word-break:break-all}"),
+            "{out}"
+        );
+        assert_eq!(
+            out.matches(r#" data-meron-url="">https://"#).count(),
+            2,
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"<a href="https://z.example/" rel="noopener noreferrer">docs</a>"#),
+            "{out}"
+        );
+        // A sender's own attribute is dropped, so a prose link cannot claim it.
+        let planted = prepare_html(
+            r#"<a href="https://z.example/" data-meron-url="">docs</a>"#,
+            false,
+        );
+        assert!(
+            !planted.split_once("<body>").unwrap().1.contains("meron-"),
+            "{planted}"
+        );
+    }
+
+    #[test]
     fn prepare_html_strips_sender_claimed_meron_hooks() {
         // The frames read their own `meron-*` ids and classes back out of the
         // document; a sender must not be able to plant one.
@@ -2854,7 +2886,8 @@ AQID\r\n\
              <div class=\"card meron-copy-code\">y</div>",
             false,
         );
-        assert!(!out.contains("meron-"));
+        let body = out.split_once("<body>").expect("shell").1;
+        assert!(!body.contains("meron-"), "{body}");
         // Only the hooks are dropped, not the elements or their other markup.
         assert!(out.contains("<style>"));
         assert!(out.contains("<mark>"));
