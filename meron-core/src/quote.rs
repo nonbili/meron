@@ -7,6 +7,7 @@
 //! is part of the reply. A message that is nothing but a quote, and a forward
 //! (whose quoted part *is* the content), are left alone.
 
+use ego_tree::iter::Edge;
 use ego_tree::{NodeId, NodeRef};
 use scraper::{ElementRef, Html, Node, Selector};
 
@@ -142,9 +143,24 @@ fn is_attribution_continuation(first: &str, second: &str) -> bool {
             .split_whitespace()
             .next()
             .is_some_and(|word| !word.starts_with('<') && word.ends_with('>'));
-    // "… Jane Doe <jane@example.com>" / "wrote:"
-    let split_after_address =
-        first.ends_with('>') && first.contains('@') && second.split_whitespace().count() <= 2;
+    // "… Jane Doe <jane@example.com>" / "wrote:", or with the date after the
+    // address, as localized Gmail writes it: "Jane <jane@example.com>, 29 Eyl
+    // 2026 Sal, 14:46 tarihinde şunu" / "yazdı:". The comma right after the
+    // address and the time in the date tell it from a sentence that happens
+    // to hold an address.
+    let after_address = first
+        .find('@')
+        .and_then(|at| first[at..].rfind('>').map(|close| &first[at + close + 1..]));
+    let has_time = |text: &str| {
+        let chars: Vec<char> = text.chars().collect();
+        chars.windows(4).any(|w| {
+            w[0].is_ascii_digit() && w[1] == ':' && w[2].is_ascii_digit() && w[3].is_ascii_digit()
+        })
+    };
+    let split_after_address = after_address.is_some_and(|rest| {
+        rest.is_empty()
+            || (rest.starts_with(',') && has_time(rest) && !rest.ends_with(['.', '!', '?']))
+    }) && second.split_whitespace().count() <= 2;
     split_inside_address || split_after_address
 }
 
@@ -175,7 +191,320 @@ pub fn is_forward_subject(subject: &str) -> bool {
 /// to fold. `forward` is whether the mail is known to be a forward, which
 /// Outlook's markup -- the same for a reply and a forward -- does not say.
 pub fn mark_html_quote(html: &str, forward: bool) -> String {
-    find_and_mark_html_quote(html, forward).unwrap_or_else(|| html.to_string())
+    find_and_mark_html_quote(html, forward)
+        .or_else(|| mark_text_quote(html, forward))
+        .unwrap_or_else(|| html.to_string())
+}
+
+/// Elements that start a line of their own when they sit among a quote's text.
+const BLOCK_ELEMENTS: &[&str] = &[
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "div",
+    "dl",
+    "fieldset",
+    "figure",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hr",
+    "li",
+    "main",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "table",
+    "ul",
+    "caption",
+    "center",
+    "dd",
+    "details",
+    "figcaption",
+    "hgroup",
+    "summary",
+    "dt",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+];
+
+/// One line of the document as the reader sees it: what lies between two
+/// `<br>`s or block edges, in document order, whatever elements it crosses.
+#[derive(Default)]
+struct TextLine {
+    /// The node the line starts with: its first text, `<br>` or image.
+    first: Option<NodeId>,
+    text: String,
+    content: bool,
+    /// Whether an inline element opens or closes inside it that could be laid
+    /// out as a block, breaking the line where this reading does not.
+    styled: bool,
+}
+
+impl TextLine {
+    fn quoted(&self) -> bool {
+        self.text.trim_start().starts_with('>')
+    }
+
+    fn blank(&self) -> bool {
+        !self.content
+    }
+
+    /// A signature delimiter (a "-- " line) or GitHub's notification footer ("—" then
+    /// "Reply to this email directly", on this line or the `next`): what
+    /// follows folds with the quote, as in a plain body. A bare em dash is too
+    /// common a line start to go by.
+    fn signature(&self, next: Option<&TextLine>) -> bool {
+        let text = self.text.trim();
+        let footer = |text: &str| {
+            text.trim_start()
+                .starts_with("Reply to this email directly")
+        };
+        text == "--"
+            || text.strip_prefix('—').is_some_and(|rest| {
+                footer(rest)
+                    || (rest.trim().is_empty() && next.is_some_and(|line| footer(&line.text)))
+            })
+    }
+}
+
+fn text_lines(doc: &Html) -> Vec<TextLine> {
+    let is_block = |node: NodeRef<Node>| {
+        node.value()
+            .as_element()
+            .is_some_and(|element| BLOCK_ELEMENTS.contains(&element.name()))
+    };
+    let mut lines = Vec::new();
+    let mut line = TextLine::default();
+    // With a stylesheet any element may be laid out as a block; without one,
+    // only one with attributes beyond a link's.
+    let stylesheet = doc.tree.root().descendants().any(|node| {
+        node.value()
+            .as_element()
+            .is_some_and(|el| el.name() == "style")
+    });
+    let styled = |node: NodeRef<Node>| {
+        node.value().as_element().is_some_and(|element| {
+            element.name() != "br"
+                && (stylesheet
+                    || element
+                        .attrs()
+                        .any(|(name, _)| !matches!(name, "href" | "rel" | "target" | "title")))
+        })
+    };
+    for edge in doc.tree.root().traverse() {
+        // An inline element that may be laid out as a block breaks the line
+        // where it opens or closes.
+        let (Edge::Open(node) | Edge::Close(node)) = edge;
+        if line.first.is_some() && !is_block(node) && styled(node) {
+            line.styled = true;
+        }
+        match edge {
+            Edge::Open(node) | Edge::Close(node) if is_block(node) => {
+                if line.first.is_some() {
+                    lines.push(std::mem::take(&mut line));
+                }
+            }
+            Edge::Open(node) => match node.value() {
+                Node::Element(element) if element.name() == "br" => {
+                    line.first.get_or_insert(node.id());
+                    lines.push(std::mem::take(&mut line));
+                }
+                Node::Element(_) if is_content(node) => {
+                    line.first.get_or_insert(node.id());
+                    line.content = true;
+                }
+                Node::Text(text) if is_content(node) => {
+                    line.first.get_or_insert(node.id());
+                    line.text.push_str(text);
+                    line.content = true;
+                }
+                // Kept for its newlines, which may break the line (see
+                // `mark_text_quote`).
+                Node::Text(text) if line.first.is_some() && text.trim().is_empty() => {
+                    line.text.push_str(text);
+                }
+                _ => {}
+            },
+            Edge::Close(_) => {}
+        }
+    }
+    if line.first.is_some() {
+        lines.push(line);
+    }
+    lines
+}
+
+/// Fold a quote written as text: "> " lines between `<br>`s, which is how
+/// GitHub and other plain-text-to-HTML converters render a quoted reply. The
+/// lines are read across elements, as the reader sees them, and everything
+/// from the quote's first line to the end folds: elements carry the marker,
+/// bare text is wrapped in a marked `<span>`.
+fn mark_text_quote(html: &str, forward: bool) -> Option<String> {
+    if forward || !html.contains("&gt;") {
+        return None;
+    }
+    let mut doc = Html::parse_fragment(html);
+    // A container or Outlook quote that was left open -- answered inline, or a
+    // forward -- stays open, whatever text quotes it holds.
+    let containers = Selector::parse(HTML_QUOTE_SELECTOR).ok()?;
+    if doc.select(&containers).next().is_some() || outlook_header(&doc, &containers).is_some() {
+        return None;
+    }
+    let lines = text_lines(&doc);
+    // A line holding a newline, one side of it quoted, is a quote that a
+    // stylesheet, `<pre>` or `white-space` may or may not break there: the
+    // reader could see an answer under it that would fold with it. Left alone.
+    if lines.iter().any(|line| {
+        let mut parts = line.text.lines().filter(|part| !part.trim().is_empty());
+        let quoted = line
+            .text
+            .lines()
+            .any(|part| part.trim_start().starts_with('>'));
+        quoted && parts.nth(1).is_some()
+    }) {
+        return None;
+    }
+    let last_quoted = lines.iter().rposition(TextLine::quoted)?;
+
+    // Only blank lines may follow the quote, up to a signature, under which
+    // everything folds with it, as in a plain body.
+    for (index, line) in lines.iter().enumerate().skip(last_quoted + 1) {
+        if line.signature(lines.get(index + 1)) {
+            break;
+        }
+        if !line.blank() {
+            return None;
+        }
+    }
+
+    // Walk up through the quoted run; blank lines inside it belong to it only
+    // when more quoted lines sit above them.
+    let mut start = last_quoted;
+    let mut cursor = last_quoted;
+    while cursor > 0 {
+        if lines[cursor - 1].quoted() {
+            cursor -= 1;
+            start = cursor;
+        } else if lines[cursor - 1].blank() {
+            cursor -= 1;
+        } else {
+            break;
+        }
+    }
+    // The line right above the quote (one blank line away at most) heading a
+    // forward ("---------- Forwarded message ---------") keeps it open.
+    let mut above = start;
+    if above > 0 && lines[above - 1].blank() {
+        above -= 1;
+    }
+    if above > 0 && is_forward_header(&lines[above - 1].text) {
+        return None;
+    }
+    let quote: String = lines[start..=last_quoted]
+        .iter()
+        .flat_map(|line| {
+            line.text
+                .trim_start_matches(|c: char| c == '>' || c.is_whitespace())
+                .chars()
+        })
+        .take(200)
+        .collect();
+    if is_forward_header(&quote) {
+        return None;
+    }
+    // The attribution sits just above the quote, at most one blank line away.
+    let mut above = start;
+    if above > 0 && lines[above - 1].blank() {
+        above -= 1;
+    }
+    if above > 0 && is_attribution(&lines[above - 1].text) {
+        let line = above - 1;
+        start = line;
+        if line > 0
+            && !lines[line - 1].blank()
+            && is_attribution_continuation(&lines[line - 1].text, &lines[line].text)
+        {
+            start = line - 1;
+        }
+        let attribution: String = lines[start..=line]
+            .iter()
+            .map(|l| l.text.as_str())
+            .collect();
+        if is_forward_header(&attribution) || attribution.to_lowercase().contains("forward") {
+            return None;
+        }
+    }
+    if lines[start..=last_quoted].iter().any(|line| line.styled) {
+        return None;
+    }
+    // The blank lines that set the quote off from the reply fold with it, so
+    // the toggle sits right under the reply.
+    while start > 0 && lines[start - 1].blank() {
+        start -= 1;
+    }
+
+    // Start at the outermost element the quote's first line opens, so a
+    // wrapper holding only quote folds whole rather than leaving its box.
+    let top = doc.root_element().id();
+    let mut first = doc.tree.get(lines[start].first?)?;
+    while let Some(parent) = first.parent()
+        && parent.id() != top
+        && first.prev_siblings().all(|sibling| match sibling.value() {
+            Node::Text(text) => text.trim().is_empty(),
+            Node::Comment(_) => true,
+            _ => false,
+        })
+    {
+        first = parent;
+    }
+    // It and everything after it, up through the elements it sits in.
+    let mut folded = vec![first.id()];
+    let mut current = first;
+    loop {
+        folded.extend(current.next_siblings().map(|node| node.id()));
+        match current.parent() {
+            Some(parent) if parent.id() != top => current = parent,
+            _ => break,
+        }
+    }
+
+    let template = Html::parse_fragment("<span></span>");
+    let span = template
+        .root_element()
+        .first_child()
+        .and_then(|node| node.value().as_element())?
+        .clone();
+    let mut marked = Vec::new();
+    for id in folded {
+        match doc.tree.get(id)?.value() {
+            Node::Element(_) => marked.push(id),
+            Node::Text(text) if !text.trim().is_empty() => {
+                let wrapper = doc
+                    .tree
+                    .get_mut(id)?
+                    .insert_before(Node::Element(span.clone()))
+                    .id();
+                doc.tree.get_mut(wrapper)?.append_id(id);
+                marked.push(wrapper);
+            }
+            _ => {}
+        }
+    }
+    mark(doc, marked)
 }
 
 fn find_and_mark_html_quote(html: &str, forward: bool) -> Option<String> {
@@ -361,19 +690,22 @@ fn mark(mut doc: Html, marked: Vec<NodeId>) -> Option<String> {
         return None;
     }
 
-    // Borrow an attribute name off the first marked element (what finds it
-    // guarantees it has one) rather than building a `QualName` by hand: only
-    // its local name differs.
-    let mut name = doc
-        .tree
-        .get(*marked.first()?)
+    // Take the attribute's name off a parsed one rather than building a
+    // `QualName` by hand.
+    let template = Html::parse_fragment(&format!(r#"<i {HTML_QUOTE_ATTR}=""></i>"#));
+    let name = template
+        .root_element()
+        .first_child()
         .and_then(|node| node.value().as_element())
-        .and_then(|element| element.attrs.iter().next())
+        .and_then(|element| element.attrs.first())
         .map(|(name, _)| name.clone())?;
-    name.local = HTML_QUOTE_ATTR.into();
     for id in marked {
         if let Some(mut node) = doc.tree.get_mut(id)
             && let Node::Element(element) = node.value()
+            && !element
+                .attrs
+                .iter()
+                .any(|(attr, _)| attr.local == name.local)
         {
             element.attrs.extend([(name.clone(), Default::default())]);
         }
@@ -526,6 +858,36 @@ mod tests {
         let body = "Yes.\n\nOn Mon, Sep 1, 2025 at 9:00 AM Jane Doe <jane@example.com>\nwrote:\n> Lunch?\n";
         let start = plain_quote_start(body).expect("quote");
         assert_eq!(&body[..start], "Yes.\n\n");
+    }
+
+    #[test]
+    fn plain_takes_an_attribution_wrapped_after_the_date() {
+        let body = "Works now, thanks!\nJane Doe <jane@example.com>, 29 Eyl 2026 Sal, 14:46 tarihinde şunu\nyazdı:\n> Fixed in 1.2.3\n";
+        let start = plain_quote_start(body).expect("quote");
+        assert_eq!(&body[..start], "Works now, thanks!\n");
+    }
+
+    #[test]
+    fn plain_keeps_a_line_with_an_address_above_a_short_attribution() {
+        let body = "Hello\nPlease contact <help@example.com> for option 2.\nJane wrote:\n> Which option?\n";
+        let start = plain_quote_start(body).expect("quote");
+        assert_eq!(&body[start..], "Jane wrote:\n> Which option?\n");
+    }
+
+    #[test]
+    fn plain_keeps_a_line_with_an_address_and_a_time_above_a_short_attribution() {
+        for line in [
+            "Please email <help@example.com> at 14:00.",
+            "Please email <help@example.com>, from 9:00 to 17:00.",
+        ] {
+            let body = format!("Confirmed.\n{line}\nJane wrote:\n> Who should I contact?\n");
+            let start = plain_quote_start(&body).expect("quote");
+            assert_eq!(
+                &body[start..],
+                "Jane wrote:\n> Who should I contact?\n",
+                "{line}"
+            );
+        }
     }
 
     #[test]
@@ -729,6 +1091,98 @@ mod tests {
         for subject in ["Re: Fw: Lunch", "Lunch", "Forwarding address: new", ""] {
             assert!(!is_forward_subject(subject), "{subject}");
         }
+    }
+
+    #[test]
+    fn html_folds_a_text_quote_and_the_footer_under_it() {
+        // GitHub renders an emailed reply's quote as "> " text between <br>s.
+        let html = "<div><strong>jane</strong> left a comment</div>\nStill not working\n<br>\n\n<br>\nRegards\n<br>\nJane\n<br>\n\n<br>\nOn Mon, 16 Nov, 2026, Joe Doe, ***@***.***&gt; wrote:\n<br>\n\n<br>\n&gt; please try 1.2.3\n<br>\n&gt;\n<br>\n&gt; Reply on GitHub\n<br>\n\n\n<p style=\"color:#666\">&mdash;<br>Reply to this email directly</p>";
+        let out = mark_html_quote(html, false);
+        let (reply, quote) = out.split_once(r#"<br data-meron-quote="">"#).expect(&out);
+        assert!(reply.ends_with("Jane\n<br>\n\n"), "{out}");
+        assert!(!quote.contains("<br>\n"), "every line folds: {out}");
+        assert!(
+            quote.contains("<span data-meron-quote=\"\">\nOn Mon"),
+            "{out}"
+        );
+        assert!(
+            quote.ends_with(
+                r#"<p style="color:#666" data-meron-quote="">—<br>Reply to this email directly</p>"#
+            ),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn html_folds_a_text_quote_a_paragraph_per_line() {
+        let html = "<p>Reply</p><p>On Mon, Jane wrote:</p><p>&gt; first</p><p>&gt; second</p>";
+        let out = mark_html_quote(html, false);
+        assert_eq!(
+            out,
+            r#"<p>Reply</p><p data-meron-quote="">On Mon, Jane wrote:</p><p data-meron-quote="">&gt; first</p><p data-meron-quote="">&gt; second</p>"#
+        );
+        let only = "<p>&gt; first</p><p>&gt; second</p>";
+        assert_eq!(mark_html_quote(only, false), only);
+        // Quote lines in inline wrappers fold as one run too.
+        let spans = "Reply<br><span>&gt; first</span><br><span>&gt; second</span>";
+        assert_eq!(
+            mark_html_quote(spans, false),
+            r#"Reply<br><span data-meron-quote="">&gt; first</span><br data-meron-quote=""><span data-meron-quote="">&gt; second</span>"#
+        );
+        let only = "<span>&gt; first</span><br><span>&gt; second</span>";
+        assert_eq!(mark_html_quote(only, false), only);
+    }
+
+    #[test]
+    fn html_leaves_inline_text_quotes_alone() {
+        // An answer inside a block that starts with a quoted line stays open.
+        let answered = "Hi<br><div>&gt; question<br>My answer</div>&gt; older<br>";
+        let out = mark_html_quote(answered, false);
+        assert!(
+            out.starts_with(
+                r#"Hi<br><div>&gt; question<br>My answer</div><span data-meron-quote="">"#
+            ),
+            "{out}"
+        );
+        // So does one inside an inline wrapper.
+        let wrapped = "<p>Reply</p><p><span>&gt; question<br>My answer</span></p><p>&gt; older</p>";
+        let out = mark_html_quote(wrapped, false);
+        assert!(
+            out.contains("My answer</span></p><p data-meron-quote="),
+            "{out}"
+        );
+        // Text quotes inside a container quote left open (a forward) stay open.
+        // Nor are answers in preformatted text, in a table, or under a line
+        // that only starts like a signature delimiter.
+        for html in [
+            "<p>Reply</p><pre>&gt; question\nMy answer</pre>",
+            "<p>Reply</p><center>&gt; question</center>My answer",
+            r#"<p>Reply</p><p>&gt; question <span style="display:block">My answer</span></p>"#,
+            r#"<p>Reply</p><p>&gt; question <span class="answer">My answer</span></p>"#,
+            r#"<p>Reply</p><span style="display:block">&gt; question</span>My answer"#,
+            r#"<style>#answer{display:block}</style><p>Reply</p><p>&gt; question<span id="answer">My answer</span></p>"#,
+            r#"<style>b{display:block}</style><p>Reply</p><p>&gt; question<b>My answer</b></p>"#,
+            "<p>Reply</p><pre>&gt; question\n<strong>My answer</strong></pre>",
+            "<p>Reply</p><pre>&gt; question<i></i>\n<strong>My answer</strong></pre>",
+            "<p>Reply</p><p style=\"white-space: break-spaces\">&gt; question\nMy answer</p>",
+            "<p>Reply</p><style>.body { white-space: pre-wrap }</style><div class=\"body\">&gt; Question?\nMy answer</div>",
+            "<p>Reply</p><table><tr><td>&gt; question</td></tr><tr><td>My answer</td></tr></table>",
+            "<p>Reply</p><p>&gt; question</p><p>-- additional clarification</p><p>My answer</p>",
+        ] {
+            assert_eq!(mark_html_quote(html, false), html);
+        }
+        let forward = r#"<p>FYI</p><div class="gmail_quote">---------- Forwarded message ---------<br>&gt; Content</div>"#;
+        assert_eq!(mark_html_quote(forward, false), forward);
+        let forward = "<p>FYI</p><p>\n&gt; -----Original Message-----</p><p>\n&gt; Content</p>";
+        assert_eq!(mark_html_quote(forward, false), forward);
+        let forward = "FYI<br>---------- Forwarded message ---------<br>&gt; Hello";
+        assert_eq!(mark_html_quote(forward, false), forward);
+        let inline = "Hi<br>&gt; Lunch?<br>Yes, at noon<br>";
+        assert_eq!(mark_html_quote(inline, false), inline);
+        let only = "&gt; Lunch?<br>&gt; Jane<br>";
+        assert_eq!(mark_html_quote(only, false), only);
+        let forward = "FYI<br>&gt; Lunch?<br>";
+        assert_eq!(mark_html_quote(forward, true), forward);
     }
 
     #[test]
