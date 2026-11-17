@@ -741,13 +741,13 @@ pub fn newest_thread_uids(
     subject_filter: Option<&str>,
 ) -> Result<Vec<u32>> {
     // get_thread_headers orders by date ascending, so the newest is last.
-    let newest = get_thread_headers(conn, account, folder, thread_key)?
-        .into_iter()
-        .filter(|header| match subject_filter {
-            Some(filter) => subject_in_branch(&header.subject, header.encrypted, filter),
-            None => true,
-        })
-        .next_back();
+    let newest = branch_members(
+        get_thread_headers(conn, account, folder, thread_key)?,
+        subject_filter,
+        |header| (&header.subject, header.encrypted),
+    )
+    .into_iter()
+    .next_back();
     Ok(newest.map(|header| header.uid).into_iter().collect())
 }
 
@@ -787,12 +787,11 @@ pub fn thread_uids_by_folder(
             ))
         },
     )?;
+    let rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
     let mut by_folder = std::collections::BTreeMap::<String, Vec<u32>>::new();
-    for row in rows {
-        let (folder, uid, subject, encrypted) = row?;
-        if subject_filter.is_some_and(|filter| !subject_in_branch(&subject, encrypted, filter)) {
-            continue;
-        }
+    for (folder, uid, _, _) in branch_members(rows, subject_filter, |(_, _, subject, encrypted)| {
+        (subject, *encrypted)
+    }) {
         by_folder.entry(folder).or_default().push(uid);
     }
     Ok(by_folder)
@@ -842,10 +841,11 @@ pub fn resolve_message_uids(
     if thread_key.is_empty() {
         return Ok(uid.into_iter().collect());
     }
-    let mut headers = get_thread_headers(conn, account, folder, thread_key)?;
-    if let Some(filter) = subject_filter {
-        headers.retain(|header| subject_in_branch(&header.subject, header.encrypted, filter));
-    }
+    let headers = branch_members(
+        get_thread_headers(conn, account, folder, thread_key)?,
+        subject_filter,
+        |header| (&header.subject, header.encrypted),
+    );
     Ok(headers.into_iter().map(|header| header.uid).collect())
 }
 

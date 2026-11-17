@@ -6456,3 +6456,26 @@ fn encrypting_a_plaintext_store_is_announced_once_before_it_starts() {
     drop(conn);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+// A card listed while its encrypted messages showed the placeholder names the
+// placeholder branch; once they are decrypted that branch matches none of them.
+// Such a filter takes the whole thread rather than nothing. A titled branch
+// that matches nothing stays empty: it is not stale, just not this thread's.
+#[test]
+fn a_placeholder_branch_matching_nothing_takes_the_whole_thread() {
+    let subjects = || vec![("Sig test again today", false), ("Re: Sig test again today", false)];
+    fn subject_of<'a>(item: &'a (&'static str, bool)) -> (&'a str, bool) {
+        (item.0, item.1)
+    }
+    assert_eq!(branch_members(subjects(), Some(""), subject_of).len(), 2);
+    assert_eq!(branch_members(subjects(), Some("..."), subject_of).len(), 2);
+    assert!(branch_members(subjects(), Some("Lunch"), subject_of).is_empty());
+    assert_eq!(branch_members(subjects(), None, subject_of).len(), 2);
+
+    // While anything still matches the placeholder branch, only that is kept.
+    let mixed = vec![("[...]", true), ("Other topic", false)];
+    assert_eq!(
+        branch_members(mixed, Some(""), subject_of),
+        vec![("[...]", true)]
+    );
+}
