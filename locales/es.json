@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Ámbito de búsqueda",
   "layout.resizeConversation": "Redimensionar conversación",
   "layout.resizeThreadList": "Redimensionar lista de hilos",
+  "mail.toast.alreadyArchived": "Ya archivado",
   "mail.toast.archiveFailed": "Error de archivado",
   "mail.toast.archiveFailedInSameFolder": "Error al archivar: el hilo todavía está en esta carpeta",
   "mail.toast.archivedCount": "{count, plural, one {Hilo archivado} other {Hilos de {count} archivados}}",

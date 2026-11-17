@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Escopo da pesquisa",
   "layout.resizeConversation": "Redimensionar conversa",
   "layout.resizeThreadList": "Redimensionar lista de conversas",
+  "mail.toast.alreadyArchived": "Já arquivado",
   "mail.toast.archiveFailed": "Falha no arquivamento",
   "mail.toast.archiveFailedInSameFolder": "Falha no arquivamento: o tópico ainda está nesta pasta",
   "mail.toast.archivedCount": "{count, plural, one {Tópico arquivado} other {Tópicos {count} arquivados}}",

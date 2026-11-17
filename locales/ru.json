@@ -582,6 +582,7 @@
   "kanban.searchScope.label": "Область поиска",
   "layout.resizeConversation": "Изменить размер области переписки",
   "layout.resizeThreadList": "Изменить размер списка переписок",
+  "mail.toast.alreadyArchived": "Уже в архиве",
   "mail.toast.archiveFailed": "Не удалось архивировать",
   "mail.toast.archiveFailedInSameFolder": "Не удалось архивировать: переписка осталась в этой папке",
   "mail.toast.archivedCount": "{count, plural, one {Архивирована {count} переписка} few {Архивированы {count} переписки} many {Архивировано {count} переписок} other {Архивировано {count} переписки}}",

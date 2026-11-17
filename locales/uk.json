@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Область пошуку",
   "layout.resizeConversation": "Змінити розмір області розмови",
   "layout.resizeThreadList": "Змінити розмір списку бесід",
+  "mail.toast.alreadyArchived": "Уже в архіві",
   "mail.toast.archiveFailed": "Не вдалося заархівувати",
   "mail.toast.archiveFailedInSameFolder": "Лист уже знаходиться в архіві",
   "mail.toast.archivedCount": "{count, plural, one {Архівовано {count} розмову} few {Архівовано {count} розмови} many {Архівовано {count} розмов} other {Архівовано {count} розмови}}",

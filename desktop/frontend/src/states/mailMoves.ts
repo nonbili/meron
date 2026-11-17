@@ -31,6 +31,7 @@ import {
 } from './mail'
 import {
   applyMutationFolderUnreads,
+  isArchiveFolder,
   isDraftFolder,
   deletesForever,
   isTrashFolderId,
@@ -371,14 +372,30 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
   if (targets.length === 0) return
   const rollbacks: Array<() => void> = []
   let completed = 0
+  let alreadyArchived = 0
   try {
     for (const item of targets) {
       const sourceThread = findLocalThread(item.threadId)
-      const removal = removeThreadLocally(item.threadId)
-      rollbacks.push(removal.rollback)
-      const res = await invoke('mail.archive', { thread_id: item.threadId })
+      // Threads archived in the Archive folder itself stay listed there (see
+      // archiveThread): no card leaves, so there is nothing to roll back.
+      const staysListed = isArchiveFolder(item.folderId, item.accountId)
+      const removal = staysListed ? null : removeThreadLocally(item.threadId)
+      rollbacks.push(removal?.rollback ?? (() => {}))
+      const res = await invoke<{ already_archived?: boolean; thread_id?: string }>('mail.archive', {
+        thread_id: item.threadId,
+      })
+      if (res?.already_archived) {
+        // Nothing left in the Inbox: nothing to do, and the thread stays put.
+        rollbacks.pop()?.()
+        completed++
+        alreadyArchived++
+        continue
+      }
       assertMoveAffected(res, 'Archive')
-      removal.complete()
+      const archivedInPlace = res?.thread_id === item.threadId
+      if (archivedInPlace) removal?.rollback()
+      else if (removal) removal.complete()
+      else if (res?.thread_id) removeThreadLocally(item.threadId).complete()
       rollbacks.pop()
       completed++
       applyMutationFolderUnreads(res as MutationResult)
@@ -386,7 +403,8 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
     }
     await refreshThreadLocation(undefined, false)
     clearBulkSelection()
-    showToast(t('mail.toast.archivedCount', { count: targets.length }))
+    const archived = targets.length - alreadyArchived
+    showToast(archived ? t('mail.toast.archivedCount', { count: archived }) : t('mail.toast.alreadyArchived'))
   } catch (error) {
     for (const rollback of rollbacks.reverse()) rollback()
     const message = mailTransferError(error, t('mail.toast.archiveFailed'))
@@ -521,40 +539,93 @@ export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
   }
 }
 
+/** Undo for an archive done in the Archive folder itself: the copies go back
+ * to the folder they left, but the thread stays listed here (on Gmail, All Mail
+ * still lists it), so the card stays put and "still listed" is not a failure. */
+async function restoreArchivedInPlace(
+  threadId: string,
+  targetFolderId: string,
+  messageIds: string[],
+  accountId: string | undefined,
+) {
+  try {
+    const res = await invoke<MutationResult>('mail.move', {
+      thread_id: threadId,
+      target_folder_id: targetFolderId,
+      message_ids: messageIds,
+    })
+    assertMoveAffected(res)
+    applyMutationFolderUnreads(res)
+    await refreshThreadLocation(accountId, false)
+    showToast(t('mail.toast.threadMoved'))
+  } catch (error) {
+    showToast(mailTransferError(error, t('mail.toast.moveFailed')), 'error')
+  }
+}
+
 export async function archiveThread(threadId: string) {
   if (!threadId) return
   const sourceThread = findLocalThread(threadId)
   if (isLocalAccountId(sourceThread?.account_id || threadAccountId(threadId))) return
   const sourceFolder = sourceThread?.folder_id ?? ''
-  const { rollback, complete } = removeThreadLocally(threadId)
+  // Archiving in the Archive folder itself (Gmail's All Mail) leaves the thread
+  // listed there, so the card and the selection stay put instead of leaving
+  // and coming back with the next list load.
+  const staysListed = !!sourceFolder && isArchiveFolder(sourceFolder, sourceThread?.account_id)
+  const removal = staysListed ? null : removeThreadLocally(threadId)
   try {
-    const res = await invoke<{ folder?: string; thread_id?: string } & MovedCopiesResult & MutationResult>(
-      'mail.archive',
-      {
-        thread_id: threadId,
-      },
-    )
+    const res = await invoke<
+      { folder?: string; thread_id?: string; source_folder?: string; already_archived?: boolean } & MovedCopiesResult &
+        MutationResult
+    >('mail.archive', {
+      thread_id: threadId,
+    })
+    if (res.already_archived) {
+      removal?.rollback()
+      showToast(t('mail.toast.alreadyArchived'))
+      return
+    }
     assertMoveAffected(res, 'Archive')
-    complete()
-    applyMutationFolderUnreads(res)
     const archivedThreadId = res.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, res.folder)
+    // Viewed in the archive folder itself (Gmail's All Mail): the core took the
+    // Inbox copies out, the thread stays listed here, and undo puts them back
+    // in the folder they left.
+    // Only on the core's word: a reply without a thread_id falls back to the
+    // id it came with, which would look the same.
+    const archivedInPlace = res.thread_id === threadId
+    // The folder wasn't known to be the Archive folder (metadata not loaded
+    // yet), but the thread was archived in place: put the card back.
+    if (archivedInPlace) removal?.rollback()
+    else if (removal) removal.complete()
+    // An archive-named folder that isn't the account's Archive target (a Gmail
+    // label called "Archive"): the thread did leave, so take the card off now.
+    else removeThreadLocally(threadId).complete()
+    applyMutationFolderUnreads(res)
+    // On Gmail an in-place archive only drops the Inbox label: the All Mail
+    // copies keep their UIDs, the core finds no new copies, and no Undo is
+    // offered (as for any Gmail archive). A plain IMAP Archive folder gets one.
+    const undoFolder = archivedInPlace ? (res.source_folder ?? '') : sourceFolder
     const copyIds = movedCopyIds(res)
     await refreshThreadLocation(sourceThread?.account_id, false)
-    if (threadStillListed(threadId)) {
+    if (!archivedInPlace && threadStillListed(threadId)) {
       showToast(t('mail.toast.archiveFailedInSameFolder'), 'error')
-    } else if (sourceFolder && copyIds) {
+    } else if (undoFolder && copyIds) {
       // Offer to move it back where it came from. Falls back to a plain toast
       // when the origin folder or the archived copies are unknown (nothing
       // reliable to restore to, or from).
       showUndoToast(t('mail.toast.archivedCount', { count: 1 }), () => {
+        if (archivedInPlace) {
+          void restoreArchivedInPlace(threadId, undoFolder, copyIds, sourceThread?.account_id)
+          return
+        }
         releaseRemovedThread(threadId)
-        void moveThreadToFolder(archivedThreadId, sourceFolder, { undo: false, messageIds: copyIds })
+        void moveThreadToFolder(archivedThreadId, undoFolder, { undo: false, messageIds: copyIds })
       })
     } else {
       showToast(t('mail.toast.archivedCount', { count: 1 }))
     }
   } catch (error) {
-    rollback()
+    removal?.rollback()
     showToast(mailTransferError(error, t('mail.toast.archiveFailed')), 'error')
   }
 }

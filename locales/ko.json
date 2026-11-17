@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "검색 범위",
   "layout.resizeConversation": "대화 크기 조절",
   "layout.resizeThreadList": "스레드 목록 크기 조절",
+  "mail.toast.alreadyArchived": "이미 보관됨",
   "mail.toast.archiveFailed": "보관 실패",
   "mail.toast.archiveFailedInSameFolder": "보관 실패: 스레드가 아직 이 폴더에 있습니다.",
   "mail.toast.archivedCount": "{count, plural, one {스레드가 보관되었습니다.} other {{count}개의 스레드가 보관되었습니다.}}",

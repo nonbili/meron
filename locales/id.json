@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Cakupan pencarian",
   "layout.resizeConversation": "Ubah ukuran percakapan",
   "layout.resizeThreadList": "Ubah ukuran daftar utas",
+  "mail.toast.alreadyArchived": "Sudah diarsipkan",
   "mail.toast.archiveFailed": "Pengarsipan gagal",
   "mail.toast.archiveFailedInSameFolder": "Pengarsipan gagal: utas masih berada di folder ini",
   "mail.toast.archivedCount": "{count, plural, one {Utas diarsipkan} other {{count} utas diarsipkan}}",

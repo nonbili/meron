@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Phạm vi tìm kiếm",
   "layout.resizeConversation": "Thay đổi kích thước cuộc hội thoại",
   "layout.resizeThreadList": "Thay đổi kích thước danh sách luồng",
+  "mail.toast.alreadyArchived": "Đã lưu trữ",
   "mail.toast.archiveFailed": "Lưu trữ không thành công",
   "mail.toast.archiveFailedInSameFolder": "Lưu trữ không thành công: chủ đề vẫn còn trong thư mục này",
   "mail.toast.archivedCount": "{count, plural, one {Đã lưu trữ chủ đề} other {Đã lưu trữ chủ đề {count}}}",

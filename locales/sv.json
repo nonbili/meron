@@ -780,6 +780,7 @@
   "kanban.searchScope.label": "Sökomfång",
   "layout.resizeConversation": "Ändra storlek på konversation",
   "layout.resizeThreadList": "Ändra storlek på trådlista",
+  "mail.toast.alreadyArchived": "Redan arkiverad",
   "mail.toast.archiveFailed": "Arkivering misslyckades",
   "mail.toast.archiveFailedInSameFolder": "Arkivering misslyckades: tråden finns fortfarande i den här mappen",
   "mail.toast.archivedCount": "{count, plural, one {Tråden arkiverad} other {{count} trådar arkiverade}}",
