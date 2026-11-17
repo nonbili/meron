@@ -1637,7 +1637,9 @@ describe('archiveThread undo', () => {
   })
 
   // Gmail archives to All Mail, which lists Inbox mail too: archiving there
-  // takes the Inbox copies out and leaves the thread listed where it is.
+  // takes the Inbox copies out and leaves the thread listed where it is. Real
+  // Gmail reports no target_uids (no Undo); they stand in for a plain IMAP
+  // Archive folder, which does report them.
   it('archives a thread viewed in the archive folder and undoes into the Inbox', async () => {
     const allMailThread = 'acc#[Gmail]/All Mail#t.MQ'
     mail$.threads.set([thread({ thread_id: allMailThread, folder_id: '[Gmail]/All Mail' })])
@@ -1653,6 +1655,7 @@ describe('archiveThread undo', () => {
         target_uids: [9],
       },
     ]
+    responses['mail.move'] = [{ ok: true, moved: 1, source_folder: '[Gmail]/All Mail', target_uids: [4] }]
     responses['mail.threadList'] = [
       { threads: [thread({ thread_id: allMailThread, folder_id: '[Gmail]/All Mail' })] },
       { threads: [thread({ thread_id: allMailThread, folder_id: '[Gmail]/All Mail' })] },
@@ -1669,7 +1672,9 @@ describe('archiveThread undo', () => {
     const invoke = (window as any).go.main.App.Invoke
     const listedDuringArchive: string[][] = []
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
-      if (command === 'mail.archive') listedDuringArchive.push(mail$.threads.get().map((item) => item.thread_id))
+      if (command === 'mail.archive' || command === 'mail.move') {
+        listedDuringArchive.push(mail$.threads.get().map((item) => item.thread_id))
+      }
       return invoke(command, payload)
     }
 
@@ -1689,6 +1694,13 @@ describe('archiveThread undo', () => {
       target_folder_id: 'INBOX',
       message_ids: ['9'],
     })
+    await nextTick()
+    await nextTick()
+    // Undo leaves the card listed too: it's still in All Mail, which is not a failure.
+    expect(listedDuringArchive).toEqual([[allMailThread], [allMailThread]])
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual([allMailThread])
+    expect(ui$.toastTone.get()).toBe('success')
+    expect(ui$.toast.get()).toBe('Thread moved')
   })
 
   // A Gmail label named "Archive" looks like the archive folder by name, but the
@@ -1713,6 +1725,34 @@ describe('archiveThread undo', () => {
 
     expect(listedAtReload[0]).toEqual([])
     expect(mail$.threads.get()).toHaveLength(0)
+    expect(ui$.toast.get()).toBe('Thread archived')
+  })
+
+  // A localized Archive folder whose metadata isn't loaded yet looks like any
+  // other folder, so the card leaves at first; the core archived in place, so it
+  // comes back with its selection.
+  it('puts the card back when an unrecognised folder turns out to be the archive', async () => {
+    const archivio = 'acc#Archivio#t.MQ'
+    mail$.foldersByAccount.set({})
+    mail$.threads.set([thread({ thread_id: archivio, folder_id: 'Archivio' })])
+    ui$.selectedThread.set(archivio)
+    responses['mail.archive'] = [
+      { ok: true, moved: 1, folder: 'Archivio', source_folder: 'INBOX', thread_id: archivio, target_uids: [9] },
+    ]
+    responses['mail.threadList'] = [{ threads: [thread({ thread_id: archivio, folder_id: 'Archivio' })] }]
+    // Back before the list reload, not only because of it.
+    const invoke = (window as any).go.main.App.Invoke
+    const listedAtReload: string[][] = []
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      if (command === 'mail.threadList') listedAtReload.push(mail$.threads.get().map((item) => item.thread_id))
+      return invoke(command, payload)
+    }
+
+    await archiveThread(archivio)
+
+    expect(listedAtReload[0]).toEqual([archivio])
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual([archivio])
+    expect(ui$.selectedThread.get()).toBe(archivio)
     expect(ui$.toast.get()).toBe('Thread archived')
   })
 
@@ -1833,6 +1873,18 @@ describe('bulk thread actions', () => {
     expect(listedDuringArchive).toEqual([['acc#[Gmail]/All Mail#t.NQ'], ['acc#[Gmail]/All Mail#t.NQ']])
     expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['acc#[Gmail]/All Mail#t.NQ'])
     expect(ui$.toastTone.get()).toBe('success')
+  })
+
+  it('says already archived when no thread in a bulk archive moved', async () => {
+    const allMail = thread({ thread_id: 'acc#[Gmail]/All Mail#t.NQ', folder_id: '[Gmail]/All Mail' })
+    mail$.threads.set([allMail])
+    responses['mail.archive'] = [{ ok: true, moved: 0, already_archived: true }]
+    responses['mail.threadList'] = [{ threads: [allMail] }]
+
+    await bulkArchiveSelected([bulkItem(allMail)])
+
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual([allMail.thread_id])
+    expect(ui$.toast.get()).toBe('Already archived')
   })
 
   it('takes an archive-named label card off in a bulk archive', async () => {

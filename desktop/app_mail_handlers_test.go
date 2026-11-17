@@ -627,6 +627,25 @@ func TestMailArchiveFromArchiveFolderNeverMovesInboxByAllMailUID(t *testing.T) {
 	}
 }
 
+// A synthetic `uid:N` thread key is as folder-local as a bare UID.
+func TestMailArchiveFromArchiveFolderNeverMovesInboxBySyntheticUIDKey(t *testing.T) {
+	const allMail = "[Gmail]/All Mail"
+	app, writer := newMailHandlerTestApp(t,
+		sidecarResponsePlan{Result: map[string]any{"folder": allMail}},
+	)
+
+	out, err := app.mailArchive(map[string]any{"thread_id": formatImapThreadID("acc", allMail, "uid:7")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(writer.calls) != 1 {
+		t.Fatalf("sidecar calls = %#v, want only the archive lookup", writer.calls)
+	}
+	if result := out.(map[string]any); result["already_archived"] != true {
+		t.Fatalf("archive result = %#v, want already_archived", result)
+	}
+}
+
 // Not only Gmail: on any IMAP account, archiving a conversation shown in its
 // Archive folder takes the Inbox copies there, and reports none left as
 // already archived.

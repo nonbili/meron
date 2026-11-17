@@ -542,10 +542,11 @@ func (a *App) mailArchive(payload map[string]any) (any, error) {
 	// Gmail's Archive folder is All Mail, which lists Inbox mail too, so a
 	// conversation can be archived while viewed there. Archiving it means
 	// taking its Inbox copies out of the Inbox (on Gmail: dropping the Inbox
-	// label), found by the same thread key. A bare UID names one message
-	// that is already archived, and would pick an unrelated one in the Inbox.
+	// label), found by the same thread key. A bare UID, or a synthetic
+	// `uid:N` key, names one message that is already archived; its UID is
+	// folder-local and would pick an unrelated message in the Inbox.
 	inArchive := canonThreadFolder(ids.Folder) == canonThreadFolder(targetFolder)
-	if inArchive && ids.ThreadKey == "" {
+	if inArchive && (ids.ThreadKey == "" || strings.HasPrefix(ids.ThreadKey, "uid:")) {
 		return map[string]any{
 			"ok":               true,
 			"moved":            0,
