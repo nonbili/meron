@@ -97,16 +97,24 @@ MimeType=x-scheme-handler/mailto;message/rfc822;
 `, desktopExecArg(target), icon, desktopProgramName)
 }
 
+// writeIfChanged makes path hold data, leaving a file that already does alone.
+//
+// The file is replaced rather than written into. AppImage integrators (Gear
+// Lever, AppImageLauncher) install their own meron.desktop at this path, some
+// of them read-only, and writing into a read-only file fails even for its
+// owner: the entry then kept the integrator's icon and window class, and the
+// app icon setting did nothing. Renaming a new file over it only needs the
+// directory to be writable. A failure is logged, since nothing else would show
+// why the launcher is stale.
 func writeIfChanged(path string, data []byte) {
 	if existing, err := os.ReadFile(path); err == nil {
 		if sha256.Sum256(existing) == sha256.Sum256(data) {
 			return
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
+	if err := writeFileAtomic(path, data, 0o644, 0o755); err != nil && globalApp != nil {
+		globalApp.logf("desktop entry: cannot write %s: %v", path, err)
 	}
-	_ = os.WriteFile(path, data, 0o644)
 }
 
 // desktopProgramName is the name the windows announce themselves under (the
