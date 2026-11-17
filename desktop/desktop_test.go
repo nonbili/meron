@@ -19,6 +19,58 @@ func TestDesktopEntry(t *testing.T) {
 	}
 }
 
+func TestWriteIfChangedReplacesAReadOnlyFile(t *testing.T) {
+	// What an AppImage integrator leaves behind: its own entry, read-only.
+	path := filepath.Join(t.TempDir(), "applications", "meron.desktop")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("Icon=/somewhere/else\n"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+
+	writeIfChanged(path, []byte("Icon=meron\n"))
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "Icon=meron\n" {
+		t.Fatalf("the read-only entry was left as it was: %q", got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("mode = %v, want 0644", info.Mode().Perm())
+	}
+	// Nothing left next to it.
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("temporary files left behind: %v", entries)
+	}
+}
+
+func TestWriteIfChangedLeavesAnUpToDateFileAlone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "meron.desktop")
+	if err := os.WriteFile(path, []byte("same"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.Stat(path)
+	writeIfChanged(path, []byte("same"))
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) || after.Mode().Perm() != 0o444 {
+		t.Fatal("an unchanged file must not be replaced")
+	}
+}
+
 func TestDesktopLaunchTarget(t *testing.T) {
 	mount := t.TempDir()
 	if resolved, err := filepath.EvalSymlinks(mount); err == nil {
