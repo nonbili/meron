@@ -1527,22 +1527,50 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
     let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let target_folder = find_cached_archive_folder(&conn, &parsed.account)?;
-        if parsed.folder == target_folder {
-            return Ok(json!({
-                "ok": true,
-                "moved": 0,
-                "folder": target_folder,
-                "thread_id": thread_id,
-            }));
-        }
+        let (source_folder, in_place) = match crate::mail_model::archive_plan(
+            &parsed.folder,
+            &parsed.thread_key,
+            &target_folder,
+        ) {
+            crate::mail_model::ArchivePlan::AlreadyArchived => {
+                return Ok(crate::mail_model::already_archived_result(
+                    &target_folder,
+                    &thread_id,
+                ));
+            }
+            crate::mail_model::ArchivePlan::Move {
+                source_folder,
+                in_place,
+            } => (source_folder, in_place),
+        };
+        // Archived in place, the thread is still listed under the id it came
+        // with; the messages leave the same thread in the Inbox.
+        let in_folder = |folder: &str| {
+            crate::mail_model::thread_id_in_folder(&thread_id, folder)
+                .ok_or_else(|| "invalid thread_id".to_string())
+        };
+        let (source_thread_id, moved_thread_id) = if in_place {
+            (in_folder(&source_folder)?, thread_id.clone())
+        } else {
+            (thread_id.clone(), in_folder(&target_folder)?)
+        };
+        let parsed = ParsedThreadId {
+            folder: source_folder,
+            ..parsed.clone()
+        };
         let uids = cached_thread_uids(&conn, &parsed)?;
         if uids.is_empty() {
-            return Ok(json!({
-                "ok": true,
-                "moved": 0,
-                "folder": target_folder,
-                "thread_id": thread_id,
-            }));
+            let thread_id = if in_place {
+                &moved_thread_id
+            } else {
+                &thread_id
+            };
+            return Ok(crate::mail_model::archive_result(
+                json!({ "ok": true, "moved": 0 }),
+                &target_folder,
+                thread_id,
+                in_place,
+            ));
         }
         let creds = load_mobile_account_creds(&conn, &parsed.account)?;
         if account_needs_reconnect(&creds) {
@@ -1603,25 +1631,29 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
         // The server MOVE succeeded for all resolved UIDs. A concurrent sync
         // can remove a source cache row before this local reconciliation runs.
         let moved = uids.len();
-        let moved_thread_id = format_thread_id(&parsed.account, &target_folder, &parsed.thread_key);
-        crate::mail_model::mutation_result(
+        let result = crate::mail_model::mutation_result(
             json!({
                 "ok": true,
                 "moved": moved,
-                "folder": target_folder,
-                "thread_id": moved_thread_id,
+                "source_folder": parsed.folder,
                 "target_uids": copies.uids,
             }),
             &conn,
             &parsed.account,
-            &thread_id,
+            &source_thread_id,
             &parsed.folder,
             Some(&target_folder),
             None,
             None,
             true,
         )
-        .map_err(|err| err.to_string())
+        .map_err(|err| err.to_string())?;
+        Ok(crate::mail_model::archive_result(
+            result,
+            &target_folder,
+            &moved_thread_id,
+            in_place,
+        ))
     })
 }
 

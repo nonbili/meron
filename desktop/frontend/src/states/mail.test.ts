@@ -1756,6 +1756,36 @@ describe('archiveThread undo', () => {
     expect(ui$.toast.get()).toBe('Thread archived')
   })
 
+  // The copies left the Inbox: a card for the Inbox copy (a Kanban Inbox
+  // column, say) goes, while the All Mail one stays.
+  it('takes the Inbox copy card off after archiving in the archive folder', async () => {
+    const allMailThread = 'acc#[Gmail]/All Mail#t.MQ'
+    const inboxThread = 'acc#INBOX#t.MQ'
+    mail$.foldersByAccount.set({
+      acc: [{ id: '[Gmail]/All Mail', account_id: 'acc', name: 'All Mail', role: 'archive', unread: 0 }],
+    })
+    mail$.threads.set([
+      thread({ thread_id: allMailThread, folder_id: '[Gmail]/All Mail' }),
+      thread({ id: 'm2', thread_id: inboxThread, folder_id: 'INBOX' }),
+    ])
+    ui$.selectedThread.set(allMailThread)
+    responses['mail.archive'] = [
+      { ok: true, moved: 1, folder: '[Gmail]/All Mail', source_folder: 'INBOX', thread_id: allMailThread },
+    ]
+    responses['mail.threadList'] = [{ threads: [thread({ thread_id: allMailThread, folder_id: '[Gmail]/All Mail' })] }]
+    const invoke = (window as any).go.main.App.Invoke
+    const listedAtReload: string[][] = []
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      if (command === 'mail.threadList') listedAtReload.push(mail$.threads.get().map((item) => item.thread_id))
+      return invoke(command, payload)
+    }
+
+    await archiveThread(allMailThread)
+
+    expect(listedAtReload[0]).toEqual([allMailThread])
+    expect(ui$.selectedThread.get()).toBe(allMailThread)
+  })
+
   it('says a thread with no Inbox copy is already archived', async () => {
     const allMailThread = 'acc#[Gmail]/All Mail#t.MQ'
     mail$.threads.set([thread({ thread_id: allMailThread, folder_id: '[Gmail]/All Mail' })])
@@ -1852,6 +1882,9 @@ describe('bulk thread actions', () => {
 
   it('leaves already archived threads listed in a bulk archive', async () => {
     const allMail = thread({ id: 'm2', thread_id: 'acc#[Gmail]/All Mail#t.NQ', folder_id: '[Gmail]/All Mail' })
+    mail$.foldersByAccount.set({
+      acc: [{ id: '[Gmail]/All Mail', account_id: 'acc', name: 'All Mail', role: 'archive', unread: 0 }],
+    })
     mail$.threads.set([thread({ thread_id: 'acc#inbox#t.MQ' }), allMail])
     responses['mail.archive'] = [
       { ok: true, moved: 1 },

@@ -104,14 +104,34 @@ pub fn cached_archive_folder_from_folders(
     // Gmail advertises All Mail as \All rather than \Archive; either fills the
     // archive role (the live `imap::find_archive_folder` accepts both too, and
     // a localized name defeats the `looks_like_archive` fallback).
-    folders
-        .iter()
-        .find(|folder| {
-            matches!(folder.special_use.as_deref(), Some("archive" | "all"))
-                && !folder.name.eq_ignore_ascii_case(current)
-        })
-        .map(|folder| folder.name.clone())
+    // A real \Archive folder wins over \All, whatever order the folders come
+    // in; `imap::find_archive_folder` follows the same rule.
+    let by_attr = |attr: &str| {
+        folders
+            .iter()
+            .find(|folder| {
+                folder.special_use.as_deref() == Some(attr)
+                    && !folder.name.eq_ignore_ascii_case(current)
+            })
+            .map(|folder| folder.name.clone())
+    };
+    by_attr("archive")
+        .or_else(|| by_attr("all"))
         .or_else(|| find_role_folder(folders, "archive", imap::looks_like_archive, current))
+}
+
+/// The account's Archive folder, the same answer on every platform: from the
+/// cached folder list, or from the server while nothing is cached yet.
+pub async fn archive_folder(engine: &Arc<Engine>, account: &str) -> anyhow::Result<Option<String>> {
+    let folders = store::get_folders(&engine.db.lock().unwrap(), account)?;
+    if let Some(folder) = cached_archive_folder_from_folders(folders, "") {
+        return Ok(Some(folder));
+    }
+    engine
+        .with_read_session(account, |session| {
+            Box::pin(async move { imap::find_archive_folder(session).await })
+        })
+        .await
 }
 
 /// Canonicalize folder names so "inbox"/"INBOX" map to one store key + mailbox.

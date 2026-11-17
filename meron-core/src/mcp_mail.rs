@@ -174,14 +174,21 @@ pub async fn organize(engine: &Arc<Engine>, value: Value) -> Result<Value> {
             None
         }
         _ => {
+            // Resolved the way the apps resolve it, so all archive to one folder.
+            let archive = if input.action == "archive" {
+                crate::engine::archive_folder(engine, &account)
+                    .await?
+                    .context("Archive folder not found")?
+            } else {
+                String::new()
+            };
             engine
                 .with_write_session(&account, |session| {
                     let input = input.clone();
+                    let archive = archive.clone();
                     Box::pin(async move {
                         let target = match input.action.as_str() {
-                            "archive" => imap::find_archive_folder(session)
-                                .await?
-                                .context("Archive folder not found")?,
+                            "archive" => archive,
                             "trash" => imap::find_trash_folder(session)
                                 .await?
                                 .context("Trash folder not found")?,

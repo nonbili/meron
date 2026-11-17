@@ -364,6 +364,15 @@ export async function copyThreadToFolder(threadId: string, targetAccountId: stri
   }
 }
 
+/** After an archive in place, the conversation's copies left the Inbox
+ * (`sourceFolder`): take its Inbox card off wherever it shows, a Kanban Inbox
+ * column for one, while its card in the Archive folder stays. */
+function removeInboxCopyCard(threadId: string, accountId: string | undefined, sourceFolder: string | undefined) {
+  if (!sourceFolder) return
+  const inboxThreadId = threadIdInFolder(threadId, accountId || threadAccountId(threadId), sourceFolder)
+  if (inboxThreadId !== threadId) removeThreadLocally(inboxThreadId).complete()
+}
+
 export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
   // Local folders have no Archive folder.
   const targets = uniqueThreadItems(items).filter(
@@ -381,9 +390,12 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
       const staysListed = isArchiveFolder(item.folderId, item.accountId)
       const removal = staysListed ? null : removeThreadLocally(item.threadId)
       rollbacks.push(removal?.rollback ?? (() => {}))
-      const res = await invoke<{ already_archived?: boolean; thread_id?: string }>('mail.archive', {
-        thread_id: item.threadId,
-      })
+      const res = await invoke<{ already_archived?: boolean; thread_id?: string; source_folder?: string }>(
+        'mail.archive',
+        {
+          thread_id: item.threadId,
+        },
+      )
       if (res?.already_archived) {
         // Nothing left in the Inbox: nothing to do, and the thread stays put.
         rollbacks.pop()?.()
@@ -393,8 +405,10 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
       }
       assertMoveAffected(res, 'Archive')
       const archivedInPlace = res?.thread_id === item.threadId
-      if (archivedInPlace) removal?.rollback()
-      else if (removal) removal.complete()
+      if (archivedInPlace) {
+        removal?.rollback()
+        removeInboxCopyCard(item.threadId, item.accountId, res?.source_folder)
+      } else if (removal) removal.complete()
       else if (res?.thread_id) removeThreadLocally(item.threadId).complete()
       rollbacks.pop()
       completed++
@@ -595,8 +609,10 @@ export async function archiveThread(threadId: string) {
     const archivedInPlace = res.thread_id === threadId
     // The folder wasn't known to be the Archive folder (metadata not loaded
     // yet), but the thread was archived in place: put the card back.
-    if (archivedInPlace) removal?.rollback()
-    else if (removal) removal.complete()
+    if (archivedInPlace) {
+      removal?.rollback()
+      removeInboxCopyCard(threadId, sourceThread?.account_id, res.source_folder)
+    } else if (removal) removal.complete()
     // An archive-named folder that isn't the account's Archive target (a Gmail
     // label called "Archive"): the thread did leave, so take the card off now.
     else removeThreadLocally(threadId).complete()

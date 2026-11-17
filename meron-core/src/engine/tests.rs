@@ -109,6 +109,42 @@ pub fn cached_archive_folder_prefers_server_attribute_over_name() {
     );
 }
 
+// Archive goes where the cached folder list says on every platform; with no
+// account to reach, an answer here can only have come from the cache.
+#[tokio::test]
+async fn archive_folder_answers_from_the_cached_folder_list() {
+    struct Host;
+    impl super::EngineHost for Host {
+        fn open_db(&self) -> anyhow::Result<Connection> {
+            crate::store::open_at(":memory:")
+        }
+        fn apply_secret(&self, _: &Connection, _: &str, _: &mut imap::Creds) {}
+        fn store_secret(
+            &self,
+            _: &Connection,
+            _: &str,
+            _: &crate::secrets::Secrets,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+    let engine = std::sync::Arc::new(super::Engine::new(Box::new(Host)).unwrap());
+    crate::store::upsert_folders(
+        &engine.db.lock().unwrap(),
+        "acc",
+        &[
+            role_folder("INBOX", None),
+            role_folder("Archive", Some("archive")),
+            role_folder("All Mail", Some("all")),
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        super::archive_folder(&engine, "acc").await.unwrap(),
+        Some("Archive".to_string())
+    );
+}
+
 #[test]
 pub fn cached_archive_folder_resolves_localized_attribute_only_name() {
     let folders = vec![

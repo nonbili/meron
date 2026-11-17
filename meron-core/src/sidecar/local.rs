@@ -31,7 +31,7 @@ const LOCAL_MAIL_METHODS: &[&str] = &[
     "folders.delete",
     "folders.rename",
     "folders.setNotify",
-    "folders.archive",
+    "messages.archive",
     "messages.emptyFolder",
     "messages.recent",
     "messages.sync",
@@ -350,7 +350,7 @@ async fn local_mail(
         "folders.setNotify" => Err(anyhow::anyhow!(
             "Local folders get no new mail to notify about"
         )),
-        "folders.archive" => Err(anyhow::anyhow!("Local folders have no Archive folder")),
+        "messages.archive" => Err(anyhow::anyhow!("Local folders have no Archive folder")),
         "messages.emptyFolder" => Err(anyhow::anyhow!(
             "Only Trash and Junk folders can be emptied"
         )),

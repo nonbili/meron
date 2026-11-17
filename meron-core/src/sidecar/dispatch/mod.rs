@@ -143,7 +143,6 @@ pub(crate) async fn dispatch(
         | "folders.delete"
         | "folders.rename"
         | "folders.setNotify"
-        | "folders.archive"
         | "messages.emptyFolder" => folders::dispatch(engine, req, out).await,
 
         "messages.unifiedRecent"
@@ -172,6 +171,7 @@ pub(crate) async fn dispatch(
         | "tags.replace"
         | "messages.delete"
         | "messages.move"
+        | "messages.archive"
         | "messages.copy"
         | "messages.markAllRead"
         | "messages.markAllReadUnified" => actions::dispatch(engine, req, out).await,

@@ -2418,18 +2418,23 @@ pub async fn find_trash_folder(session: &mut Session) -> Result<Option<String>> 
 
 pub async fn find_archive_folder(session: &mut Session) -> Result<Option<String>> {
     let mut stream = session.list(Some(""), Some("*")).await.context("LIST")?;
-    let mut by_attr: Option<String> = None;
+    // A real \Archive folder wins over \All (Gmail's All Mail), whatever
+    // order the server lists them in, as `engine::cached_archive_folder_from_folders`.
+    let mut by_archive: Option<String> = None;
+    let mut by_all: Option<String> = None;
     let mut by_name: Option<String> = None;
     while let Some(item) = stream.next().await {
         let entry = item.context("LIST item")?;
         let name = entry.name().to_string();
         for attr in entry.attributes() {
-            if matches!(
-                attr,
-                async_imap::imap_proto::NameAttribute::Archive
-                    | async_imap::imap_proto::NameAttribute::All
-            ) {
-                by_attr = Some(name.clone());
+            match attr {
+                async_imap::imap_proto::NameAttribute::Archive if by_archive.is_none() => {
+                    by_archive = Some(name.clone());
+                }
+                async_imap::imap_proto::NameAttribute::All if by_all.is_none() => {
+                    by_all = Some(name.clone());
+                }
+                _ => {}
             }
         }
         if by_name.is_none() && looks_like_archive(&name) {
@@ -2437,7 +2442,7 @@ pub async fn find_archive_folder(session: &mut Session) -> Result<Option<String>
         }
     }
     drop(stream);
-    Ok(by_attr.or(by_name))
+    Ok(by_archive.or(by_all).or(by_name))
 }
 
 pub async fn find_drafts_folder(session: &mut Session) -> Result<Option<String>> {

@@ -263,19 +263,6 @@ pub(crate) async fn dispatch(
             }))
         }
 
-        "folders.archive" => {
-            let account = req_str(p, "account")?;
-            let archive = engine
-                .with_read_session(&account, |session| {
-                    Box::pin(async move { imap::find_archive_folder(session).await })
-                })
-                .await?;
-            match archive {
-                Some(folder) => Ok(json!({ "folder": folder })),
-                None => Err(anyhow::anyhow!("Archive folder not found for this account")),
-            }
-        }
-
         // Permanently delete every message in a folder, server side and in the
         // store. Restricted to Trash and Junk: the operation is unrecoverable,
         // so an arbitrary folder must never reach it even if a caller asks.

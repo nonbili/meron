@@ -462,8 +462,9 @@ func sidecarCallTimeout(method string) time.Duration {
 	// A copy downloads every message in the thread in full, then APPENDs each
 	// one to the target.
 	// Moving into or out of local folders downloads or uploads every message
-	// in full; so does a move between accounts.
-	case "eml.read", "messages.saveRawBatch", "messages.copy", "messages.move":
+	// in full; so does a move between accounts. Archive looks up the
+	// Archive folder, then moves.
+	case "eml.read", "messages.saveRawBatch", "messages.copy", "messages.move", "messages.archive":
 		return 2 * time.Minute
 	// A snapshot or a restore copies every archived message.
 	case "account.localBackup", "account.localRestore":
@@ -475,7 +476,7 @@ func sidecarCallTimeout(method string) time.Duration {
 		return 30 * time.Second
 	case "messages.read", "messages.thread", "messages.markRead", "messages.markStarred", "messages.markAllRead", "messages.markAllReadUnified", "send", "save_draft", "discard_draft", "folders.delete", "folders.rename":
 		return 30 * time.Second
-	case "folders.list", "folders.create", "folders.archive", "messages.recent", "messages.sync", "rss.markRead", "rss.markAllRead", "watch.start", "watch.stop", "account.addRss", "account.addLocal", "feed.add", "rss.importOpml":
+	case "folders.list", "folders.create", "messages.recent", "messages.sync", "rss.markRead", "rss.markAllRead", "watch.start", "watch.stop", "account.addRss", "account.addLocal", "feed.add", "rss.importOpml":
 		return 15 * time.Second
 	default:
 		return 5 * time.Second

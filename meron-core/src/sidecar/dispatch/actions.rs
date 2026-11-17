@@ -337,115 +337,9 @@ pub(crate) async fn dispatch(
             )
         }
 
-        "messages.move" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let target_folder = canon_folder(&req_str(p, "target_folder")?);
-            let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
-            let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
-            let explicit_uids = p
-                .get("uids")
-                .and_then(Value::as_array)
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(Value::as_u64)
-                        .map(|n| n as u32)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            let changed_thread_id = if thread_key.is_empty() {
-                uid.map(|uid| format!("{account}#{folder}#{uid}"))
-                    .unwrap_or_default()
-            } else {
-                let key = subject_filter
-                    .as_deref()
-                    .map(|subject| store::branch_compound_key(&thread_key, subject))
-                    .unwrap_or_else(|| thread_key.clone());
-                mail_model::format_thread_id(&account, &folder, &key)
-            };
+        "messages.move" => move_messages(engine, p).await,
 
-            let target_account = req_str(p, "target_account").unwrap_or_else(|_| account.clone());
-            if account == target_account && folder == target_folder {
-                return mail_model::mutation_result(
-                    json!({ "ok": true, "moved": 0, "source_folder": folder, "target_folder": target_folder }),
-                    &engine.db.lock().unwrap(),
-                    &account,
-                    &changed_thread_id,
-                    &folder,
-                    Some(&target_folder),
-                    None,
-                    None,
-                    false,
-                );
-            }
-
-            let uids = {
-                let db = engine.db.lock().unwrap();
-                store::resolve_message_uids(
-                    &db,
-                    &account,
-                    &folder,
-                    &thread_key,
-                    subject_filter.as_deref(),
-                    uid,
-                    &explicit_uids,
-                )?
-            };
-
-            if uids.is_empty() {
-                return mail_model::mutation_result(
-                    json!({ "ok": true, "moved": 0, "source_folder": folder, "target_folder": target_folder }),
-                    &engine.db.lock().unwrap(),
-                    &account,
-                    &changed_thread_id,
-                    &folder,
-                    Some(&target_folder),
-                    None,
-                    None,
-                    false,
-                );
-            }
-
-            if target_account != account {
-                return move_between_accounts(
-                    engine,
-                    &account,
-                    &folder,
-                    &changed_thread_id,
-                    &target_account,
-                    &target_folder,
-                    &uids,
-                )
-                .await;
-            }
-
-            let copies =
-                move_within_account(engine, &account, &folder, &target_folder, &uids).await?;
-            // The IMAP MOVE above completed for every resolved UID. A concurrent
-            // source-folder refresh may already have pruned those rows locally,
-            // so the cache DELETE count is not the number moved on the server.
-            let moved = uids.len();
-            mail_model::mutation_result(
-                json!({
-                    "ok": true,
-                    "moved": moved,
-                    "source_folder": folder,
-                    "target_folder": target_folder,
-                    "target_uids": copies.uids,
-                }),
-                &engine.db.lock().unwrap(),
-                &account,
-                &changed_thread_id,
-                &folder,
-                Some(&target_folder),
-                None,
-                None,
-                true,
-            )
-        }
+        "messages.archive" => archive_messages(engine, p).await,
 
         "messages.copy" => {
             let account = req_str(p, "account")?;
@@ -689,5 +583,161 @@ pub(crate) async fn dispatch(
         }
 
         other => Err(anyhow::anyhow!("unknown method: {other}")),
+    }
+}
+
+/// `messages.move`: move a thread (or the given `uids`) to `target_folder`,
+/// possibly in another account.
+async fn move_messages(engine: &Arc<Engine>, p: &Value) -> anyhow::Result<Value> {
+    let account = req_str(p, "account")?;
+    let folder = canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+    let target_folder = canon_folder(&req_str(p, "target_folder")?);
+    let (thread_key, subject_filter) =
+        store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
+    let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
+    let explicit_uids = p
+        .get("uids")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_u64)
+                .map(|n| n as u32)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let changed_thread_id = if thread_key.is_empty() {
+        uid.map(|uid| format!("{account}#{folder}#{uid}"))
+            .unwrap_or_default()
+    } else {
+        let key = subject_filter
+            .as_deref()
+            .map(|subject| store::branch_compound_key(&thread_key, subject))
+            .unwrap_or_else(|| thread_key.clone());
+        mail_model::format_thread_id(&account, &folder, &key)
+    };
+
+    let target_account = req_str(p, "target_account").unwrap_or_else(|_| account.clone());
+    if account == target_account && folder == target_folder {
+        return mail_model::mutation_result(
+            json!({ "ok": true, "moved": 0, "source_folder": folder, "target_folder": target_folder }),
+            &engine.db.lock().unwrap(),
+            &account,
+            &changed_thread_id,
+            &folder,
+            Some(&target_folder),
+            None,
+            None,
+            false,
+        );
+    }
+
+    let uids = {
+        let db = engine.db.lock().unwrap();
+        store::resolve_message_uids(
+            &db,
+            &account,
+            &folder,
+            &thread_key,
+            subject_filter.as_deref(),
+            uid,
+            &explicit_uids,
+        )?
+    };
+
+    if uids.is_empty() {
+        return mail_model::mutation_result(
+            json!({ "ok": true, "moved": 0, "source_folder": folder, "target_folder": target_folder }),
+            &engine.db.lock().unwrap(),
+            &account,
+            &changed_thread_id,
+            &folder,
+            Some(&target_folder),
+            None,
+            None,
+            false,
+        );
+    }
+
+    if target_account != account {
+        return move_between_accounts(
+            engine,
+            &account,
+            &folder,
+            &changed_thread_id,
+            &target_account,
+            &target_folder,
+            &uids,
+        )
+        .await;
+    }
+
+    let copies = move_within_account(engine, &account, &folder, &target_folder, &uids).await?;
+    // The IMAP MOVE above completed for every resolved UID. A concurrent
+    // source-folder refresh may already have pruned those rows locally,
+    // so the cache DELETE count is not the number moved on the server.
+    let moved = uids.len();
+    mail_model::mutation_result(
+        json!({
+            "ok": true,
+            "moved": moved,
+            "source_folder": folder,
+            "target_folder": target_folder,
+            "target_uids": copies.uids,
+        }),
+        &engine.db.lock().unwrap(),
+        &account,
+        &changed_thread_id,
+        &folder,
+        Some(&target_folder),
+        None,
+        None,
+        true,
+    )
+}
+
+/// `messages.archive`: archive the thread viewed in `folder` (`thread_key`, or
+/// one message by `uid`) into the account's Archive folder, following
+/// [`mail_model::archive_plan`]. The reply is a `messages.move` reply plus
+/// where the thread is now (see [`mail_model::archive_result`]).
+async fn archive_messages(engine: &Arc<Engine>, p: &Value) -> anyhow::Result<Value> {
+    let account = req_str(p, "account")?;
+    let folder = canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+    let thread_key = match (
+        req_str(p, "thread_key").unwrap_or_default(),
+        p.get("uid").and_then(Value::as_u64),
+    ) {
+        (key, Some(uid)) if key.is_empty() => format!("uid:{uid}"),
+        (key, _) => key,
+    };
+    let archive_folder = archive_folder(engine, &account)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Archive folder not found for this account"))?;
+    let archived_thread_id = mail_model::format_thread_id(&account, &archive_folder, &thread_key);
+    match mail_model::archive_plan(&folder, &thread_key, &archive_folder) {
+        mail_model::ArchivePlan::AlreadyArchived => Ok(mail_model::already_archived_result(
+            &archive_folder,
+            &archived_thread_id,
+        )),
+        mail_model::ArchivePlan::Move {
+            source_folder,
+            in_place,
+        } => {
+            let mut params = p.clone();
+            params["folder"] = json!(source_folder);
+            params["target_folder"] = json!(archive_folder);
+            if let Some(params) = params.as_object_mut() {
+                // Archive stays in the account, and takes the whole thread.
+                params.remove("target_account");
+                params.remove("uids");
+            }
+            let moved = move_messages(engine, &params).await?;
+            Ok(mail_model::archive_result(
+                moved,
+                &archive_folder,
+                &archived_thread_id,
+                in_place,
+            ))
+        }
     }
 }

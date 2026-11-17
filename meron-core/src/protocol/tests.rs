@@ -3237,6 +3237,128 @@ fn mobile_protocol_archive_requires_server_credentials() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+/// An account with Inbox and Archive folders, and thread "topic" in Archive.
+fn seed_archived_topic(label: &str) -> std::path::PathBuf {
+    let data_dir = unique_data_dir(label);
+    seed_mobile_account(&data_dir, "me@example.com");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::upsert_folders(
+        &conn,
+        "me@example.com",
+        &[
+            Folder {
+                name: "INBOX".to_string(),
+                delimiter: Some("/".to_string()),
+                ..Default::default()
+            },
+            Folder {
+                name: "Archive".to_string(),
+                delimiter: Some("/".to_string()),
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "Archive",
+        &[MessageHeader {
+            uid: 7,
+            subject: "Archived".to_string(),
+            date: 100,
+            thread_key: "topic".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    data_dir
+}
+
+#[test]
+fn mobile_protocol_archive_in_the_archive_folder_moves_the_inbox_copies() {
+    let data_dir = seed_archived_topic("thread-archive-in-place");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        &[MessageHeader {
+            uid: 3,
+            subject: "Reply".to_string(),
+            date: 200,
+            thread_key: "topic".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    drop(conn);
+
+    // The Inbox copy was found and is being moved: with no password the move
+    // stops at the server, where it used to answer "moved: 0" without trying.
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":83,"method":"mail.archive","params":{"thread_id":"me@example.com#Archive#t.dG9waWM"}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("account needs reconnect"),
+        "{value}"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn mobile_protocol_archive_in_the_archive_folder_without_inbox_copy_is_already_archived() {
+    let data_dir = seed_archived_topic("thread-archive-in-place-none");
+
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":84,"method":"mail.archive","params":{"thread_id":"me@example.com#Archive#t.dG9waWM"}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    assert_eq!(value["result"]["already_archived"], true, "{value}");
+    assert_eq!(value["result"]["moved"], 0);
+    assert_eq!(value["result"]["folder"], "Archive");
+    assert_eq!(
+        value["result"]["thread_id"],
+        "me@example.com#Archive#t.dG9waWM"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn mobile_protocol_archive_never_reads_an_archive_uid_in_the_inbox() {
+    let data_dir = seed_archived_topic("thread-archive-in-place-uid");
+    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    // An unrelated Inbox message that happens to share the Archive UID.
+    store::upsert_messages(
+        &conn,
+        "me@example.com",
+        "INBOX",
+        &[MessageHeader {
+            uid: 7,
+            subject: "Unrelated".to_string(),
+            thread_key: "other".to_string(),
+            ..Default::default()
+        }],
+    )
+    .unwrap();
+    drop(conn);
+
+    let value = invoke_mobile_protocol_json(
+        r#"{"id":85,"method":"mail.archive","params":{"thread_id":"me@example.com#Archive#7"}}"#,
+        Some(data_dir.to_str().unwrap()),
+    );
+    assert_eq!(value["result"]["already_archived"], true, "{value}");
+    assert_eq!(value["result"]["thread_id"], "me@example.com#Archive#7");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 #[test]
 fn mobile_protocol_archive_requires_cached_archive_folder() {
     let data_dir = unique_data_dir("thread-archive-missing-folder");

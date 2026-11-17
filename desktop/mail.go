@@ -529,51 +529,14 @@ func (a *App) mailArchive(payload map[string]any) (any, error) {
 	if !ok {
 		return map[string]any{"ok": true}, nil
 	}
-	res, err := a.sidecar.Call("folders.archive", map[string]any{"account": ids.Account})
-	if err != nil {
-		return nil, err
+	// The core decides what archiving means where the thread is viewed
+	// (mail_model::archive_plan), including from the Archive folder itself.
+	params := map[string]any{"account": ids.Account, "folder": ids.Folder, "thread_key": ids.ThreadKey}
+	if ids.ThreadKey == "" && ids.UID > 0 {
+		delete(params, "thread_key")
+		params["uid"] = ids.UID
 	}
-	obj, _ := res.(map[string]any)
-	targetFolder, _ := obj["folder"].(string)
-	if targetFolder == "" {
-		return nil, errors.New("Archive folder not found for this account")
-	}
-	payload["target_folder_id"] = targetFolder
-	// Gmail's Archive folder is All Mail, which lists Inbox mail too, so a
-	// conversation can be archived while viewed there. Archiving it means
-	// taking its Inbox copies out of the Inbox (on Gmail: dropping the Inbox
-	// label), found by the same thread key. A bare UID, or a synthetic
-	// `uid:N` key, names one message that is already archived; its UID is
-	// folder-local and would pick an unrelated message in the Inbox.
-	inArchive := canonThreadFolder(ids.Folder) == canonThreadFolder(targetFolder)
-	if inArchive && (ids.ThreadKey == "" || strings.HasPrefix(ids.ThreadKey, "uid:")) {
-		return map[string]any{
-			"ok":               true,
-			"moved":            0,
-			"already_archived": true,
-			"folder":           targetFolder,
-			"thread_id":        threadID,
-		}, nil
-	}
-	if inArchive {
-		payload["thread_id"] = formatParsedImapThreadIDInFolder(ids, "INBOX")
-	}
-	moveRes, err := a.mailMove(payload)
-	if err != nil {
-		return nil, err
-	}
-	out, _ := moveRes.(map[string]any)
-	if out == nil {
-		out = map[string]any{"ok": true}
-	}
-	if inArchive {
-		if moved, ok := out["moved"].(float64); ok && moved <= 0 {
-			out["already_archived"] = true
-		}
-	}
-	out["folder"] = targetFolder
-	out["thread_id"] = formatParsedImapThreadIDInFolder(ids, targetFolder)
-	return out, nil
+	return a.sidecar.Call("messages.archive", params)
 }
 
 func (a *App) markRead(payload map[string]any) (any, error) {

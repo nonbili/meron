@@ -919,12 +919,72 @@ func TestIntegrationMailFlow(t *testing.T) {
 		}
 	})
 
-	t.Run("archive folder resolves", func(t *testing.T) {
-		// folders.archive resolves the account's special-use Archive folder; the
-		// move-to-archive action depends on this lookup succeeding.
-		result := callMap(t, sidecar, "folders.archive", map[string]any{"account": "bob"})
-		if folder := str(result, "folder"); folder == "" {
-			t.Fatalf("folders.archive returned no folder: %v", result)
+	t.Run("archive from the archive folder takes the inbox copies", func(t *testing.T) {
+		// A conversation listed in the Archive folder can still have Inbox
+		// copies (a reply arrived after it was archived). Archiving it there
+		// moves those copies, not the Archive folder onto itself.
+		archiveSubject := "Meron integration archive " + nonce
+		rootID := fmt.Sprintf("itest-archive-%s@mail.test", nonce)
+		if _, err := sidecar.Call("send", map[string]any{
+			"account":    "alice",
+			"to":         "bob@mail.test",
+			"subject":    archiveSubject,
+			"body":       "archive me",
+			"message_id": rootID,
+		}); err != nil {
+			t.Fatalf("send archive fixture: %v", err)
+		}
+		original := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == archiveSubject
+		})
+		threadKey := str(original, "thread_key")
+
+		// The reply names the Archive folder the account resolved to.
+		result := callMap(t, sidecar, "messages.archive", map[string]any{
+			"account": "bob", "folder": "INBOX", "thread_key": threadKey,
+		})
+		archive := str(result, "folder")
+		if moved := num(result, "moved"); moved != 1 || archive == "" || archive == "INBOX" {
+			t.Fatalf("messages.archive from INBOX = %v, want 1 moved into the Archive folder", result)
+		}
+		pollFolder(t, sidecar, "bob", archive, func(m map[string]any) bool {
+			return str(m, "subject") == archiveSubject
+		})
+
+		if _, err := sidecar.Call("send", map[string]any{
+			"account":     "alice",
+			"to":          "bob@mail.test",
+			"subject":     "Re: " + archiveSubject,
+			"body":        "a reply after archiving",
+			"in_reply_to": rootID,
+			"references":  rootID,
+		}); err != nil {
+			t.Fatalf("send archive reply: %v", err)
+		}
+		reply := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
+			return str(m, "subject") == "Re: "+archiveSubject
+		})
+		if str(reply, "thread_key") != threadKey {
+			t.Fatalf("reply thread_key %q != archived thread_key %q", str(reply, "thread_key"), threadKey)
+		}
+
+		archived := formatImapThreadID("bob", archive, threadKey)
+		result = callMap(t, sidecar, "messages.archive", map[string]any{
+			"account": "bob", "folder": archive, "thread_key": threadKey,
+		})
+		if num(result, "moved") != 1 || str(result, "source_folder") != "INBOX" ||
+			str(result, "thread_id") != archived || boolValue(result, "already_archived") {
+			t.Fatalf("messages.archive from %s = %v, want the Inbox reply moved, thread still %s", archive, result, archived)
+		}
+		assertNoMessageInFolder(t, sidecar, "bob", "INBOX", func(m map[string]any) bool {
+			return str(m, "subject") == "Re: "+archiveSubject
+		})
+
+		result = callMap(t, sidecar, "messages.archive", map[string]any{
+			"account": "bob", "folder": archive, "thread_key": threadKey,
+		})
+		if num(result, "moved") != 0 || !boolValue(result, "already_archived") {
+			t.Fatalf("archiving again = %v, want already_archived", result)
 		}
 	})
 

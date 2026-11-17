@@ -64,6 +64,10 @@ data class ThreadActionLocation(
     val threadId: String = "",
     val folder: String = "",
     val permanent: Boolean = false,
+    /** An archive that had nothing to move: the thread was already archived. */
+    val alreadyArchived: Boolean = false,
+    /** The folder the messages left (an archive in place: the Inbox). */
+    val sourceFolder: String = "",
 )
 
 fun parseThreadActionLocationResponse(responseJson: String): ThreadActionLocation =
@@ -71,6 +75,8 @@ fun parseThreadActionLocationResponse(responseJson: String): ThreadActionLocatio
         threadId = responseJson.findJsonStringProperty("thread_id", topLevelOnly = true).orEmpty(),
         folder = responseJson.findJsonStringProperty("folder", topLevelOnly = true) ?: responseJson.findJsonStringProperty("trash", topLevelOnly = true).orEmpty(),
         permanent = responseJson.findJsonBooleanProperty("permanent", topLevelOnly = true) ?: false,
+        alreadyArchived = responseJson.findJsonBooleanProperty("already_archived", topLevelOnly = true) ?: false,
+        sourceFolder = responseJson.findJsonStringProperty("source_folder", topLevelOnly = true).orEmpty(),
     )
 
 fun parseAllocatedMessageId(responseJson: String): String = responseJson.findJsonStringProperty("message_id").orEmpty()

@@ -793,6 +793,24 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun parsesAlreadyArchivedFromArchiveResponse() {
+        val location =
+            parseThreadActionLocationResponse(
+                """{"already_archived":true,"folder":"Archive","moved":0,"ok":true,"thread_id":"acc#Archive#7"}""",
+            )
+
+        assertTrue(location.alreadyArchived)
+        assertEquals("acc#Archive#7", location.threadId)
+        assertEquals(
+            "INBOX",
+            parseThreadActionLocationResponse(
+                """{"change":{"source_folder":"Other"},"moved":1,"ok":true,"source_folder":"INBOX"}""",
+            ).sourceFolder,
+        )
+        assertFalse(parseThreadActionLocationResponse("""{"ok":true,"moved":1}""").alreadyArchived)
+    }
+
+    @Test
     fun threadActionLocationUsesTopLevelFieldsWhenChangeComesFirst() {
         val location =
             parseThreadActionLocationResponse(

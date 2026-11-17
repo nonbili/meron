@@ -71,6 +71,8 @@ internal fun MeronMobileState.runCoreThreadAction(
     onUndo: ((String) -> Unit)? = null,
     afterSuccess: (() -> Unit)? = null,
     removesThread: Boolean = false,
+    /** Reads the core's reply once the action is done, before [afterSuccess]. */
+    onResponse: ((String) -> Unit)? = null,
 ) {
     if (!coreLoaded) {
         status = coreUnavailableMessage
@@ -110,6 +112,7 @@ internal fun MeronMobileState.runCoreThreadAction(
             applyCoreFolderUnreadChanges(response)
             if ((undoMessage == null || onUndo == null) && doneStatus != null) status = doneStatus
             committed.complete(response)
+            onResponse?.invoke(response)
             afterSuccess?.invoke()
         }.onFailure {
             removal?.rollback()
@@ -1594,6 +1597,8 @@ internal fun MeronMobileState.archiveOrRemove(thread: ThreadSummary) {
                 )
             },
         )
+    } else if (thread.folderRole == "archive") {
+        archiveInPlace(thread)
     } else {
         val threadsSnapshot = coreThreads
         val kanbanSnapshot = kanbanColumns
@@ -1609,6 +1614,59 @@ internal fun MeronMobileState.archiveOrRemove(thread: ThreadSummary) {
             onUndo = { response -> restoreThread(thread, threadsSnapshot, kanbanSnapshot, response) },
         )
     }
+}
+
+/**
+ * Archive a thread viewed in the Archive folder (Gmail's All Mail). The core
+ * takes its Inbox copies out of the Inbox (mail_model::archive_plan), and the
+ * thread stays listed here, so its card stays too, and there is nothing to
+ * undo from this view.
+ */
+private fun MeronMobileState.archiveInPlace(thread: ThreadSummary) {
+    runCoreThreadAction(
+        thread = thread,
+        label = "Archive",
+        doneStatus = null,
+        failedStatus = trs("mail.toast.archiveFailed"),
+        action = { archive(ThreadActionParams(threadId = thread.id)) },
+        update = { threads -> threads },
+        onResponse = { response ->
+            val location = parseThreadActionLocationResponse(response)
+            status =
+                if (location.alreadyArchived) {
+                    trs("mail.toast.alreadyArchived")
+                } else {
+                    trs("mail.toast.archivedCount", mapOf("count" to 1))
+                }
+            if (!location.alreadyArchived) {
+                val left = location.threadId.isNotBlank() && location.threadId != thread.id
+                if (left) {
+                    // A folder that only looks like the Archive folder (a Gmail
+                    // label named "Archive"): the thread did leave, so its card goes.
+                    removeArchivedCard(thread.id)
+                    releaseMovedThread(response)
+                } else if (location.sourceFolder.isNotBlank()) {
+                    // Archived in place: the conversation left the Inbox, so
+                    // its Inbox card (a Kanban column, a cached list) goes.
+                    val account = thread.id.substringBefore('#', missingDelimiterValue = "")
+                    val key = thread.id.substringAfterLast('#', missingDelimiterValue = "")
+                    if (account.isNotBlank() && key.isNotBlank()) {
+                        removeArchivedCard("$account#${location.sourceFolder}#$key")
+                    }
+                }
+            }
+        },
+    )
+}
+
+/** Take a card off after the core moved its thread, through the removal
+ * guard like any other removal: cached mailboxes drop it, and reads already
+ * under way can't bring it back. */
+private fun MeronMobileState.removeArchivedCard(threadId: String) {
+    val removal = suppressRemovedThread(threadId)
+    coreThreads = coreThreads.filterNot { it.id == threadId }
+    kanbanColumns = kanbanColumns.mapValues { (_, column) -> column.copy(threads = column.threads.filterNot { it.id == threadId }) }
+    removal.complete()
 }
 
 internal fun MeronMobileState.deleteThread(thread: ThreadSummary) {

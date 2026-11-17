@@ -175,6 +175,86 @@ pub fn format_thread_id(account_id: &str, folder: &str, thread_key: &str) -> Str
     format!("{account_id}#{}#t.{encoded}", canon_folder(folder))
 }
 
+/// `thread_id` (`account#folder#key`) moved to `folder`. The key is kept as is,
+/// so a thread branched by subject stays that branch; re-formatting it from a
+/// parsed root key would widen it to the whole conversation.
+pub fn thread_id_in_folder(thread_id: &str, folder: &str) -> Option<String> {
+    let (account, _) = thread_id.split_once('#')?;
+    let (_, key) = thread_id.rsplit_once('#')?;
+    Some(format!("{account}#{}#{key}", canon_folder(folder)))
+}
+
+/// What archiving a thread does, decided by [`archive_plan`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArchivePlan {
+    /// Move the thread's messages from `source_folder` into the Archive
+    /// folder. `in_place` when the thread is viewed in the Archive folder
+    /// itself: it stays listed there, and `source_folder` is the Inbox.
+    Move {
+        source_folder: String,
+        in_place: bool,
+    },
+    /// Nothing to move: a single message already in the Archive folder.
+    AlreadyArchived,
+}
+
+/// The one rule for archiving a thread viewed in `folder`, on every platform.
+///
+/// The Archive folder can list Inbox mail too (Gmail's All Mail does), so a
+/// thread can be archived while viewed there. That takes its Inbox copies,
+/// found by the same thread key, out of the Inbox (on Gmail: drops the Inbox
+/// label). A uid-style thread (`thread_key` empty or `uid:N`) names one message
+/// by a UID that only means something in `folder`: in the Inbox it would pick
+/// an unrelated message, so it is already archived instead.
+pub fn archive_plan(folder: &str, thread_key: &str, archive_folder: &str) -> ArchivePlan {
+    let folder = canon_folder(folder);
+    if folder != canon_folder(archive_folder) {
+        return ArchivePlan::Move {
+            source_folder: folder,
+            in_place: false,
+        };
+    }
+    if thread_key.is_empty() || thread_key.starts_with("uid:") {
+        return ArchivePlan::AlreadyArchived;
+    }
+    ArchivePlan::Move {
+        source_folder: "INBOX".to_string(),
+        in_place: true,
+    }
+}
+
+/// Complete an archive reply with where the thread is now: `folder` (the
+/// Archive folder) and `thread_id` there. An archive in place that found no
+/// Inbox copy to move is `already_archived`, so clients can say so.
+pub fn archive_result(
+    mut result: Value,
+    archive_folder: &str,
+    archived_thread_id: &str,
+    in_place: bool,
+) -> Value {
+    if !result.is_object() {
+        result = json!({ "ok": true });
+    }
+    let moved = result.get("moved").and_then(Value::as_u64).unwrap_or(0);
+    if in_place && moved == 0 {
+        result["already_archived"] = json!(true);
+    }
+    result["folder"] = json!(canon_folder(archive_folder));
+    result["thread_id"] = json!(archived_thread_id);
+    result
+}
+
+/// The reply for [`ArchivePlan::AlreadyArchived`]: nothing moved, and the
+/// thread stays where it is.
+pub fn already_archived_result(archive_folder: &str, thread_id: &str) -> Value {
+    archive_result(
+        json!({ "ok": true, "moved": 0 }),
+        archive_folder,
+        thread_id,
+        true,
+    )
+}
+
 pub fn thread_cards_json(
     conn: &Connection,
     account_id: &str,
@@ -1365,5 +1445,82 @@ mod tests {
         assert_eq!(result["change"]["target_role"], "archive");
         assert_eq!(result["change"]["removed"], true);
         assert_eq!(result["folder_counts"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn thread_id_in_folder_keeps_a_branched_key() {
+        let branch = store::branch_compound_key("<root@example.com>", "status");
+        let id = format_thread_id("acc", "INBOX", &branch);
+        assert_eq!(
+            thread_id_in_folder(&id, "Archive"),
+            Some(format_thread_id("acc", "Archive", &branch))
+        );
+        assert_eq!(
+            thread_id_in_folder("acc#Archive#7", "inbox"),
+            Some("acc#INBOX#7".to_string())
+        );
+        assert_eq!(thread_id_in_folder("no-folder", "Archive"), None);
+    }
+
+    #[test]
+    fn archive_plan_moves_a_thread_out_of_its_folder() {
+        assert_eq!(
+            archive_plan("inbox", "<root@example.com>", "[Gmail]/All Mail"),
+            ArchivePlan::Move {
+                source_folder: "INBOX".into(),
+                in_place: false,
+            }
+        );
+        // A label merely named like the Archive folder is not it.
+        assert_eq!(
+            archive_plan("Archive", "uid:7", "[Gmail]/All Mail"),
+            ArchivePlan::Move {
+                source_folder: "Archive".into(),
+                in_place: false,
+            }
+        );
+    }
+
+    #[test]
+    fn archive_plan_in_the_archive_folder_takes_the_inbox_copies() {
+        for archive in ["[Gmail]/All Mail", "Archive"] {
+            assert_eq!(
+                archive_plan(archive, "<root@example.com>", archive),
+                ArchivePlan::Move {
+                    source_folder: "INBOX".into(),
+                    in_place: true,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn archive_plan_never_reads_an_archive_uid_in_the_inbox() {
+        assert_eq!(
+            archive_plan("[Gmail]/All Mail", "", "[Gmail]/All Mail"),
+            ArchivePlan::AlreadyArchived
+        );
+        assert_eq!(
+            archive_plan("[Gmail]/All Mail", "uid:7", "[Gmail]/All Mail"),
+            ArchivePlan::AlreadyArchived
+        );
+    }
+
+    #[test]
+    fn archive_result_reports_an_empty_archive_in_place_as_already_archived() {
+        let id = "acc#Archive#t.MQ";
+        let moved = archive_result(json!({ "ok": true, "moved": 2 }), "Archive", id, true);
+        assert_eq!(moved["already_archived"], Value::Null);
+        assert_eq!(moved["folder"], "Archive");
+        assert_eq!(moved["thread_id"], id);
+        let none = archive_result(json!({ "ok": true, "moved": 0 }), "Archive", id, true);
+        assert_eq!(none["already_archived"], true);
+        // Leaving the Inbox with nothing moved is not "already archived".
+        let elsewhere = archive_result(json!({ "ok": true, "moved": 0 }), "Archive", id, false);
+        assert_eq!(elsewhere["already_archived"], Value::Null);
+        assert_eq!(
+            already_archived_result("Archive", id)["already_archived"],
+            true
+        );
     }
 }

@@ -253,6 +253,81 @@ class KanbanColumnLoadOrderTest {
             }
         }
 
+    // Archiving in the Archive folder (Gmail's All Mail) takes the Inbox copies
+    // out; the thread stays listed there, so its card stays.
+    @Test
+    fun archivingInTheArchiveFolderKeepsTheCard() =
+        checkArchiveInPlace(
+            reply = """{"folder":"Archive","moved":1,"ok":true,"source_folder":"INBOX","thread_id":"a#Archive#t1"}""",
+            cardStays = true,
+            status = "mail.toast.archivedCount",
+            inboxCardStays = false,
+        )
+
+    @Test
+    fun archivingAnAlreadyArchivedThreadSaysSo() =
+        checkArchiveInPlace(
+            reply = """{"already_archived":true,"folder":"Archive","moved":0,"ok":true,"thread_id":"a#Archive#t1"}""",
+            cardStays = true,
+            status = "mail.toast.alreadyArchived",
+        )
+
+    // A Gmail label named "Archive" has the archive role too, but the account
+    // archives to All Mail: the thread leaves, so its card goes.
+    @Test
+    fun archivingFromAFolderThatOnlyLooksLikeTheArchiveRemovesTheCard() =
+        checkArchiveInPlace(
+            reply = """{"folder":"[Gmail]/All Mail","moved":1,"ok":true,"thread_id":"a#[Gmail]/All Mail#t1"}""",
+            cardStays = false,
+            status = "mail.toast.archivedCount",
+        )
+
+    private fun checkArchiveInPlace(
+        reply: String?,
+        cardStays: Boolean,
+        status: String,
+        inboxCardStays: Boolean = true,
+    ) = runBlocking {
+        val childScope = CoroutineScope(coroutineContext + Job(coroutineContext[Job]))
+        try {
+            val core = GatedCore()
+            core.archiveReply = reply
+            val gate = CompletableDeferred<Unit>()
+            core.actionGates[MobileCommand.Archive] = gate
+            val state = state(core, childScope)
+            val thread =
+                ThreadSummary(id = "a#Archive#t1", accountId = "a", folder = "Archive", folderRole = "archive", subject = "Hello", sender = "Ada")
+            // The same conversation's Inbox copy, in a Kanban column and a cached list.
+            val inboxThread = ThreadSummary(id = "a#INBOX#t1", accountId = "a", folder = "INBOX", subject = "Hello", sender = "Ada")
+            val inboxColumn = kanbanColumnKey(KanbanColumnSpec(accountId = "a", folderId = "INBOX"))
+            state.kanbanColumns = mapOf(inboxColumn to KanbanColumnState(threads = listOf(inboxThread)))
+            state.coreThreads = listOf(thread)
+            val cacheKey = MailboxCacheKey(accountId = "a", folderId = "Archive", query = "", filter = FilterMode.All)
+            val inboxKey = cacheKey.copy(folderId = "INBOX")
+            state.mailboxCache =
+                mapOf(
+                    cacheKey to MailboxLoadResult(folders = emptyList(), folder = "Archive", threads = listOf(thread)),
+                    inboxKey to MailboxLoadResult(folders = emptyList(), folder = "INBOX", threads = listOf(inboxThread)),
+                )
+            state.archiveOrRemove(thread)
+            waitUntil { core.actionCalls == 1 }
+            // Nothing leaves while the archive is under way.
+            assertEquals(listOf(thread.id), state.coreThreads.map { it.id })
+            gate.complete(Unit)
+            val expected = if (status == "mail.toast.archivedCount") state.trs(status, mapOf("count" to 1)) else state.trs(status)
+            waitUntil { state.status == expected }
+            val listed = if (cardStays) listOf(thread.id) else emptyList()
+            assertEquals(listed, state.coreThreads.map { it.id })
+            // The cached mailbox agrees, so switching back doesn't revive it.
+            assertEquals(listed, state.mailboxCache[cacheKey]?.threads?.map { it.id })
+            val inbox = if (inboxCardStays) listOf(inboxThread.id) else emptyList()
+            assertEquals(inbox, state.kanbanColumns[inboxColumn]?.threads?.map { it.id })
+            assertEquals(inbox, state.mailboxCache[inboxKey]?.threads?.map { it.id })
+        } finally {
+            childScope.cancel()
+        }
+    }
+
     @Test
     fun cachedMailboxesRetainTheirOtherRowsAndCursorsAfterRemoval() = checkCachedRemoval(success = true)
 
@@ -515,6 +590,9 @@ class KanbanColumnLoadOrderTest {
         private val listedFolder: String = "INBOX",
     ) : MeronCore {
         var zeroMove = false
+
+        /** Answers Archive with this instead of the usual move into "Archive". */
+        var archiveReply: String? = null
         var folderListCalls = 0
         val actionGate = CompletableDeferred<Unit>()
         val actionGates = mutableMapOf<String, CompletableDeferred<Unit>>()
@@ -575,6 +653,10 @@ class KanbanColumnLoadOrderTest {
                     when {
                         zeroMove && command == MobileCommand.Move -> {
                             """{"ok":true,"moved":0}"""
+                        }
+
+                        command == MobileCommand.Archive && archiveReply != null -> {
+                            archiveReply!!
                         }
 
                         actionFails -> {
