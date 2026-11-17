@@ -49,6 +49,7 @@ import { EmptyState } from '../empty-state/EmptyState'
 import { IconButton } from '../button/IconButton'
 import { QuickSettingsMenu } from '../sidenav/QuickSettingsMenu'
 import { useTitleBar } from '../titlebar/TitleBar'
+import { LOAD_MORE_THRESHOLD, useFillScroller } from '../../lib/useFillScroller'
 import { FolderSwitcher } from '../menu/FolderSwitcher'
 import { ThreadActionsMenu } from './ThreadActionsMenu'
 import { ThreadContextMenu, useThreadContextMenu } from './ThreadContextMenu'
@@ -177,6 +178,14 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   // cursor (feeds, starred) there is nothing more to load. The attachments
   // toggle narrows the same cursor-paged listing, so it does not stop paging.
   const canLoadMore = !!threadsCursor && (!!query.trim() || filterMode === 'all')
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  useFillScroller(scrollerRef, {
+    viewKey: threadListViewKey(selectedAccount, selectedFolder, query, listFilterKey(filterMode, attachmentsOnly)),
+    count: filteredThreads.length,
+    canLoad: canLoadMore,
+    busy: threadsLoading || threadsLoadingMore,
+    load: () => void loadMoreThreads(),
+  })
   const feedRowsDraggable = !isStarredView && isRSSAccount
   // The folder switcher needs a folder list to offer. That is an account's real
   // folders, or — in the unified view — the synthetic per-role list, where each
@@ -461,11 +470,12 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
 
       {/* Thread List Items */}
       <div
+        ref={scrollerRef}
         className="flex-1 overflow-y-auto flex flex-col gap-0.5 p-1.5"
         onScroll={(event) => {
           if (!canLoadMore || threadsLoadingMore) return
           const el = event.currentTarget
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+          if (el.scrollHeight - el.scrollTop - el.clientHeight < LOAD_MORE_THRESHOLD) {
             void loadMoreThreads()
           }
         }}

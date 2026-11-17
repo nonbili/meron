@@ -71,6 +71,7 @@ import { KanbanColumnMinimized } from './KanbanColumnMinimized'
 import { BulkActionBar } from '../threads/BulkActionBar'
 import { SearchOptions } from '../search/SearchOptions'
 import { boardWallpaper } from '../../lib/wallpapers'
+import { LOAD_MORE_THRESHOLD, useFillScroller } from '../../lib/useFillScroller'
 
 // A board column is both a dnd-kit sortable item and a drop target; this bundles
 // the wiring the column renderers need from those hooks.
@@ -174,6 +175,14 @@ function KanbanColumnContent({
   // are still read from persisted boards, but nothing writes them.)
   const hasMore = starredColumn ? false : !!(allCursors[key] ?? '')
   const minimized = !!minimizedColumns[boardKey]
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  useFillScroller(scrollerRef, {
+    viewKey: `${key}:${filterMode}:${attachmentsOnly}:${searchActive ? searchQuery : ''}`,
+    count: threads.length,
+    canLoad: hasMore && !minimized,
+    busy: loading || loadingMore,
+    load: () => void loadMoreKanbanColumn(column),
+  })
   const columnAccount =
     column.accountId !== 'unified' ? accounts.find((account) => account.id === column.accountId) : undefined
   const columnAccountLabel = columnAccount ? columnAccount.display_name || columnAccount.email || columnAccount.id : ''
@@ -591,13 +600,14 @@ function KanbanColumnContent({
       )}
       {headerContextMenu}
       <div
+        ref={scrollerRef}
         data-thread-list
         data-kanban-column={boardKey}
         className="flex-1 space-y-1 overflow-y-auto p-1"
         onScroll={(event) => {
           if (!hasMore || loadingMore) return
           const el = event.currentTarget
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+          if (el.scrollHeight - el.scrollTop - el.clientHeight < LOAD_MORE_THRESHOLD) {
             void loadMoreKanbanColumn(column)
           }
         }}
