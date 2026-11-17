@@ -338,6 +338,38 @@ describe('openThreadTabById', () => {
     expect(calls.filter((call) => call.command === 'mail.threadRead')).toHaveLength(1)
   })
 
+  // The list row is only a summary: for a draft its From is the counterpart and
+  // an encrypted one's subject is the placeholder. When the read can't find the
+  // draft, a composer seeded from the row would carry the real draft's id, so ✕
+  // would discard the draft and every save would be refused or overwrite it.
+  for (const [name, open] of [
+    ['openDraftCompose', openDraftCompose],
+    ['openDraftConversationOrCompose', openDraftConversationOrCompose],
+  ] as const) {
+    it(`${name} opens no composer from the list row when the read finds no draft`, async () => {
+      const row = message({
+        id: 'acc-notification#Drafts#42#99',
+        folder_id: 'Drafts',
+        thread_id: 'acc-notification#Drafts#t.stale',
+        from_addr: 'you@example.com',
+        to: 'you@example.com',
+        subject: '[...]',
+        body: '',
+      })
+      ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+        calls.push({ command, payload })
+        if (command === 'mail.threadRead') return { messages: [] }
+        return {}
+      }
+
+      expect(await open(row)).toBe(true)
+
+      expect(compose$.tabs.get()).toHaveLength(0)
+      expect(ui$.toastTone.get()).toBe('error')
+      expect(ui$.toast.get()).toBe("Couldn't open draft")
+    })
+  }
+
   it('opens a Drafts row with a cached ancestor in the conversation view', async () => {
     const ancestor = message({
       id: 'acc-notification#INBOX#42#1',
