@@ -620,7 +620,9 @@ third-party certifications are not imported.
 **Lookup on click** (`openpgp::lookup`, `pgp.lookup`):
 - Sources (setting `openpgp_key_sources`, default WKD + `https://keys.openpgp.org`; custom sources must be `https://`):
   - WKD: advanced URL `https://openpgpkey.<domain>/.well-known/openpgpkey/<domain>/hu/<z-base-32(SHA-1(lowercase local))>?l=<local>`,
-    then the direct URL `https://<domain>/.well-known/openpgpkey/hu/…`.
+    then the direct URL `https://<domain>/.well-known/openpgpkey/hu/…`. The domain must parse as a DNS name with at
+    least two labels: no port, no IP address in any form the system resolver reads (`127.1`, `0x7f.1`), no
+    `localhost` or `*.localhost`. A name whose DNS points at a private address is still fetched.
   - VKS: `<base>/vks/v1/by-email/<address>`.
   - HKP: `<base>/pks/lookup?op=get&options=mr&search=<address>`, marked "doesn't check addresses".
 - Every request goes through the app-wide proxy (`proxy::agent`), 10 s timeout, response capped at 1 MiB,
