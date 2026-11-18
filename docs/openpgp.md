@@ -758,7 +758,19 @@ message iframe.
 **Suggestions for CI (maintainer's call):**
 - A `cargo audit` / `cargo deny` gate would need upstream's existing advisories triaged first.
 - `gitleaks` scans the git history, but `.gitattributes` marks the OpenPGP `testdata` binaries, so a `gitleaks dir`
-  pass over the working tree would also scan them (every testdata key is a made-up `example.*` identity).
+  pass over the working tree would also scan them (every testdata key is a made-up `example.*` identity). Such a
+  pass needs a `.gitleaks.toml` allowlist: gitleaks 8.28 reports 10 findings in `meron-core/src/openpgp/testdata/`
+  (6 secret keys, 4 Autocrypt `keydata=` public keys) and the intentionally embedded Google client secret in
+  `desktop/oauth_config.go`:
+
+  ```toml
+  [extend]
+  useDefault = true
+
+  [[allowlists]]
+  description = "Made-up OpenPGP test keys"
+  paths = ['''^meron-core/src/openpgp/testdata/''']
+  ```
 
 **Residual risks accepted by decision:**
 - Decrypted plaintext and secret keys rest in SQLCipher; whoever can read the database and the OS keyring as the user
