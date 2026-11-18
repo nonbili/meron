@@ -172,16 +172,17 @@ pub fn wkd_urls(addr: &str) -> Option<[String; 2]> {
     if local.is_empty() || domain.is_empty() || domain.contains('/') {
         return None;
     }
-    let domain = domain.to_ascii_lowercase();
-    // WKD needs a real DNS name. Reject ports, IPv6 brackets, IP literals and
-    // single-label names, so a click-triggered lookup can't reach a local or
-    // private service like x@127.0.0.1:631.
-    if domain.contains(':')
-        || domain.contains('[')
-        || domain.contains(']')
-        || !domain.contains('.')
-        || domain.parse::<std::net::IpAddr>().is_ok()
-    {
+    // WKD needs a real DNS name. Reject ports, IP literals, single-label names
+    // and localhost, so a click-triggered lookup can't reach a local or private
+    // service like x@127.0.0.1:631. The URL parser refuses ports and reads the
+    // shortened, hex and zero-padded IPv4 forms the system resolver accepts
+    // (127.1, 0x7f.1) as addresses, which Rust's strict IP parser doesn't.
+    // A name whose DNS points at a private address is not caught here.
+    let url::Host::Domain(domain) = url::Host::parse(domain).ok()? else {
+        return None;
+    };
+    let name = domain.strip_suffix('.').unwrap_or(&domain);
+    if !name.contains('.') || name.split('.').any(str::is_empty) || name.ends_with(".localhost") {
         return None;
     }
     let digest = ring::digest::digest(
@@ -191,8 +192,8 @@ pub fn wkd_urls(addr: &str) -> Option<[String; 2]> {
     let hash = zbase32(digest.as_ref());
     let l = url::form_urlencoded::byte_serialize(local.as_bytes()).collect::<String>();
     Some([
-        format!("https://openpgpkey.{domain}/.well-known/openpgpkey/{domain}/hu/{hash}?l={l}"),
-        format!("https://{domain}/.well-known/openpgpkey/hu/{hash}?l={l}"),
+        format!("https://openpgpkey.{name}/.well-known/openpgpkey/{name}/hu/{hash}?l={l}"),
+        format!("https://{name}/.well-known/openpgpkey/hu/{hash}?l={l}"),
     ])
 }
 
@@ -390,9 +391,49 @@ mod tests {
         assert!(wkd_urls("x@127.0.0.1:631").is_none(), "host with port");
         assert!(wkd_urls("x@[::1]").is_none(), "IPv6 literal");
         assert!(wkd_urls("x@192.168.0.5").is_none(), "private IPv4");
+        assert!(wkd_urls("x@example.org:8443").is_none(), "name with port");
         assert!(wkd_urls("x@localhost").is_none(), "no dot, not a FQDN");
+        assert!(wkd_urls("x@intranet").is_none(), "single-label name");
+        for addr in ["x@.example.org", "x@example..org", "x@example.org.."] {
+            assert!(wkd_urls(addr).is_none(), "empty label in {addr}");
+        }
+        assert!(
+            wkd_urls("x@intranet.").is_none(),
+            "single label, trailing dot"
+        );
         // A normal domain still works.
         assert!(wkd_urls("x@example.org").is_some());
+    }
+
+    // The system resolver also reads shortened, hex and zero-padded IPv4
+    // forms, which Rust's strict IP parser doesn't, and a trailing dot keeps
+    // localhost a valid name. Each of these reaches this machine.
+    #[test]
+    fn wkd_refuses_legacy_ipv4_forms_and_localhost() {
+        for addr in [
+            "x@127.1",
+            "x@0x7f.1",
+            "x@0x7f.0.0.1",
+            "x@127.000.000.001",
+            "x@2130706433.",
+            "x@localhost.",
+            "x@LocalHost.",
+            "x@foo.localhost",
+            "x@foo.localhost.",
+        ] {
+            assert!(wkd_urls(addr).is_none(), "{addr}");
+        }
+        // Real names that merely look numeric or end in a dot still work.
+        assert!(wkd_urls("x@1password.com").is_some());
+        assert!(wkd_urls("x@example.org.").is_some());
+    }
+
+    #[test]
+    fn wkd_uses_the_canonical_domain() {
+        let expected = wkd_urls("x@example.org").unwrap();
+        assert_eq!(wkd_urls("x@example.org.").unwrap(), expected);
+        assert_eq!(wkd_urls("x@%65xample.org").unwrap(), expected);
+        assert_eq!(wkd_urls("x@example。org").unwrap(), expected);
     }
 
     #[test]

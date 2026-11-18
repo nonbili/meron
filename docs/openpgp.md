@@ -620,7 +620,9 @@ third-party certifications are not imported.
 **Lookup on click** (`openpgp::lookup`, `pgp.lookup`):
 - Sources (setting `openpgp_key_sources`, default WKD + `https://keys.openpgp.org`; custom sources must be `https://`):
   - WKD: advanced URL `https://openpgpkey.<domain>/.well-known/openpgpkey/<domain>/hu/<z-base-32(SHA-1(lowercase local))>?l=<local>`,
-    then the direct URL `https://<domain>/.well-known/openpgpkey/hu/…`.
+    then the direct URL `https://<domain>/.well-known/openpgpkey/hu/…`. The domain must parse as a DNS name with at
+    least two labels: no port, no IP address in any form the system resolver reads (`127.1`, `0x7f.1`), no
+    `localhost` or `*.localhost`. Other names can still resolve to local or private addresses through DNS or the system hosts file.
   - VKS: `<base>/vks/v1/by-email/<address>`.
   - HKP: `<base>/pks/lookup?op=get&options=mr&search=<address>`, marked "doesn't check addresses".
 - Every request goes through the app-wide proxy (`proxy::agent`), 10 s timeout, response capped at 1 MiB,
@@ -756,7 +758,19 @@ message iframe.
 **Suggestions for CI (maintainer's call):**
 - A `cargo audit` / `cargo deny` gate would need upstream's existing advisories triaged first.
 - `gitleaks` scans the git history, but `.gitattributes` marks the OpenPGP `testdata` binaries, so a `gitleaks dir`
-  pass over the working tree would also scan them (every testdata key is a made-up `example.*` identity).
+  pass over the working tree would also scan them (every testdata key is a made-up `example.*` identity). Such a
+  scan with gitleaks 8.28 reports 11 findings. The following `.gitleaks.toml` suppresses the 10 testdata findings
+  (6 secret keys and 4 Autocrypt `keydata=` public keys). The scan still reports the intentionally embedded Google
+  client secret in `desktop/oauth_config.go`.
+
+  ```toml
+  [extend]
+  useDefault = true
+
+  [[allowlists]]
+  description = "Made-up OpenPGP test keys"
+  paths = ['''^meron-core/src/openpgp/testdata/''']
+  ```
 
 **Residual risks accepted by decision:**
 - Decrypted plaintext and secret keys rest in SQLCipher; whoever can read the database and the OS keyring as the user
