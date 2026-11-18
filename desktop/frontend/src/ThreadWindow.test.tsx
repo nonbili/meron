@@ -228,8 +228,12 @@ it('keeps a failed save editable and allows closing to retry', async () => {
 })
 it('delegates saved drafts to their existing editor instead of hydrating a second reply', async () => {
   await mount()
+  const draft = { ...message, id: 'saved-reply', folder_id: 'Drafts', body: 'Saved reply' }
+  // The read of a draft's thread returns the draft itself; a read without it
+  // opens nothing (the list row alone can't seed an editor).
+  readThread = async () => ({ messages: [message, draft] })
   await act(async () => {
-    await openDraftCompose({ ...message, folder_id: 'Drafts', body: 'Saved reply' })
+    await openDraftCompose(draft)
   })
   expect(calls.some((call) => call.command === 'threadWindow.openDraft')).toBe(true)
   expect(compose$.quickReplyDraftId.peek()).toBe('')

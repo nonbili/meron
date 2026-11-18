@@ -819,9 +819,18 @@ describe('Composer', () => {
   it('opens another draft without waiting for an Esc save', async () => {
     const { view } = openSavedDraftTab()
     await pressEscWithSaveHeld(view.getByDisplayValue('Hello'))
+    // The read of a draft's thread returns the draft itself; a read without it
+    // opens nothing (the list row alone can't seed an editor).
+    const other = draftRow('other@example.com')
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      if (command !== 'mail.threadRead') return invoke(command, payload)
+      calls.push({ command, payload })
+      return { messages: [other] }
+    }
 
     await act(async () => {
-      await openDraftCompose(draftRow('other@example.com'))
+      await openDraftCompose(other)
     })
 
     expect(calls.some((call) => call.command === 'mail.threadRead')).toBe(true)
