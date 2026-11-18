@@ -11,6 +11,7 @@ import jp.nonbili.meron.shared.ThreadReadParams
 import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
 import jp.nonbili.meron.shared.bareAddress
+import jp.nonbili.meron.shared.decryptFailed
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.forwardInlineImages
 import jp.nonbili.meron.shared.forwardableAttachments
@@ -49,6 +50,13 @@ internal fun MeronMobileState.openDraftCompose(
 ) {
     if (!coreLoaded) {
         status = coreUnavailableMessage
+        return
+    }
+    // A draft whose body couldn't be fetched or decrypted would open blank yet
+    // bound to the draft's id: Back would discard it as erased, a save replace
+    // it, without the user ever seeing it.
+    if (message.bodyMissing || message.crypto.decryptFailed()) {
+        status = trs("compose.toast.couldNotOpenDraft")
         return
     }
     val generation = ++composeSessionGeneration
@@ -373,6 +381,15 @@ internal fun MeronMobileState.hydrateQuickReplyFromTailDraft(
     // this one stranded. Reading the thread back-fills the header.
     val tailDraftId = tail.messageId.trim().trim('<', '>')
     if (tailDraftId.isBlank()) return
+    // Nor one whose body couldn't be fetched or decrypted: the bar would show
+    // empty while holding the draft's id, so a keystroke's autosave would
+    // replace it, or Back would discard it, without the user ever seeing it.
+    if (tail.bodyMissing || tail.crypto.decryptFailed()) return
+    // Nor one carrying what the bar can neither show nor save: a Bcc or a
+    // Reply-To. Its saves rebuild the reply from the parent, so leaving the
+    // thread would quietly rewrite the draft without them, unseen. Edit on the
+    // draft shows what the full composer keeps (a Bcc, though not a Reply-To).
+    if (tail.bcc.isNotBlank() || tail.replyTo.isNotBlank()) return
     // Only into a bar that is free. Hydration fills an empty reply from a saved
     // draft; it is not entitled to replace a reply the user began before this
     // read came back, nor to drop the id that reply is already saved under.

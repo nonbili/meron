@@ -103,7 +103,7 @@ pub fn thread_page_headers(
     } else {
         store::get_thread_headers_all_folders(db, account, thread_key)?
     };
-    let headers = store::branch_members(headers, subject_filter, |header| {
+    let headers = store::branch_members_or_thread(headers, subject_filter, |header| {
         (&header.subject, header.encrypted)
     });
     let headers = store::collapse_thread_draft_headers(db, account, folder, headers)?;
@@ -1548,8 +1548,7 @@ mod tests {
             ..Default::default()
         };
         crate::store::upsert_messages(&db, "acct", "Drafts", &[draft.clone()]).unwrap();
-        let (root, filter) =
-            crate::store::split_thread_key(&crate::store::card_thread_key(&draft));
+        let (root, filter) = crate::store::split_thread_key(&crate::store::card_thread_key(&draft));
         let read = |db: &rusqlite::Connection| {
             super::thread_page_headers(
                 db,

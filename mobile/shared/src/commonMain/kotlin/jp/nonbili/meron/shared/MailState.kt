@@ -263,6 +263,9 @@ data class MessageCrypto(
     val verifiedConflict: Boolean = false,
 )
 
+/** Whether decryption failed, so there is no body to show. */
+fun MessageCrypto?.decryptFailed(): Boolean = this?.problem in setOf("no_key", "integrity", "too_large", "unreadable")
+
 fun MessageBody.mayQuoteOriginal(): Boolean =
     crypto?.let {
         !it.encrypted || (it.signed && it.trust in setOf("known", "verified") && it.problem.isBlank() && !it.partial && !it.weakHash && !it.verifiedConflict)

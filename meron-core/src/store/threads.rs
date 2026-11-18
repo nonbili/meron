@@ -919,15 +919,7 @@ pub fn subject_in_branch(subject: &str, encrypted: bool, filter: &str) -> bool {
 
 /// The messages of a thread that belong to subject branch `filter` (see
 /// [`subject_in_branch`]); `subject_of` gives a message's subject and whether
-/// it is encrypted.
-///
-/// A card listed while its messages were still encrypted names the placeholder
-/// branch: `[...]` groups as the empty subject, Thunderbird's `...` as itself.
-/// The prefetcher can decrypt them before the list is drawn again, writing back
-/// their real subjects, and then that filter matches none of them. An empty
-/// result would open an empty conversation (or an empty draft, refused on every
-/// save) and make every action on the card a no-op, so a placeholder filter
-/// that matches nothing takes the whole thread instead.
+/// it is encrypted. Every message when there is no filter.
 pub fn branch_members<T>(
     items: Vec<T>,
     filter: Option<&str>,
@@ -936,15 +928,36 @@ pub fn branch_members<T>(
     let Some(filter) = filter else {
         return items;
     };
-    if !is_placeholder_branch(filter) {
-        return items
-            .into_iter()
-            .filter(|item| {
-                let (subject, encrypted) = subject_of(item);
-                subject_in_branch(subject, encrypted, filter)
-            })
-            .collect();
+    items
+        .into_iter()
+        .filter(|item| {
+            let (subject, encrypted) = subject_of(item);
+            subject_in_branch(subject, encrypted, filter)
+        })
+        .collect()
+}
+
+/// [`branch_members`] for reading a card's conversation.
+///
+/// A card listed while its messages were still encrypted names the placeholder
+/// branch: `[...]` groups as the empty subject, Thunderbird's `...` as itself.
+/// The prefetcher can decrypt them before the list is drawn again, writing back
+/// their real subjects, and then that filter matches none of them. An empty
+/// read would open an empty conversation (or a draft seeded from the list row),
+/// so a placeholder filter that matches nothing reads the whole thread instead.
+///
+/// Reads only: pass every `items` of the thread at once, across all the folders
+/// being read. Actions (flags, tags, move, delete) use [`branch_members`], so a
+/// stale card can't reach the thread's other branches.
+pub fn branch_members_or_thread<T>(
+    items: Vec<T>,
+    filter: Option<&str>,
+    subject_of: impl Fn(&T) -> (&str, bool),
+) -> Vec<T> {
+    if !filter.is_some_and(is_placeholder_branch) {
+        return branch_members(items, filter, subject_of);
     }
+    let filter = filter.unwrap_or_default();
     let (members, others): (Vec<T>, Vec<T>) = items.into_iter().partition(|item| {
         let (subject, encrypted) = subject_of(item);
         subject_in_branch(subject, encrypted, filter)

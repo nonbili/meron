@@ -39,7 +39,10 @@ pub fn starred_mutation_targets(
     if let Some(key) = thread_key {
         let (root, subject) = split_thread_key(key);
         let branch = |headers: Vec<MessageHeader>| {
-            let headers = headers.into_iter().filter(|header| header.uid != 0).collect();
+            let headers = headers
+                .into_iter()
+                .filter(|header| header.uid != 0)
+                .collect();
             branch_members(headers, subject.as_deref(), |header| {
                 (&header.subject, header.encrypted)
             })

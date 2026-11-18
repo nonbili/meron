@@ -23,7 +23,7 @@ import { getActiveThread, normalizeMessageId } from './mail'
 import { mail$ } from './mailState'
 import { isDraftFolder } from './mailFolders'
 import { LOCAL_SEND_PREFIX } from './pendingSends'
-import { mayQuoteOriginal, ownSentCrypto } from '../lib/crypto'
+import { decryptFailed, mayQuoteOriginal, ownSentCrypto } from '../lib/crypto'
 import { htmlToText, resolveInlineCids } from '../lib/html'
 import { parseMailto } from '../lib/mailto'
 import {
@@ -1085,6 +1085,13 @@ async function openDraftMessageInCompose(draft: Message) {
       }
       return true
     }
+  }
+  // A draft whose body couldn't be fetched or decrypted would seed an empty
+  // editor holding the real draft's id: a save would overwrite it with nothing,
+  // ✕ discard it unseen.
+  if (draft.body_missing || decryptFailed(draft.crypto)) {
+    showDraftNotFound()
+    return true
   }
   const id = openComposeTab(composeFromDraftMessage(draft))
   if (!id) return true
