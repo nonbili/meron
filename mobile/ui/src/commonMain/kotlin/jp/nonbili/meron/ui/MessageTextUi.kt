@@ -232,7 +232,7 @@ internal fun messageLinkAtPosition(
  *  [SelectionContainer] (whose own long press starts text selection) by claiming the
  *  press in the initial pass — but only when it lands on a link, so selecting plain
  *  text and scrolling the bubble keep working. */
-private suspend fun PointerInputScope.detectMessageLinkGestures(
+internal suspend fun PointerInputScope.detectMessageLinkGestures(
     linkAt: (Offset) -> InlineMessageLink?,
     onTap: (InlineMessageLink) -> Unit,
     onLongPress: (InlineMessageLink, Offset) -> Unit,

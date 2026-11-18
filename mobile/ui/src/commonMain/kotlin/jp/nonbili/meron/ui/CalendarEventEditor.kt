@@ -57,6 +57,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextDecoration
@@ -295,11 +298,9 @@ internal fun CalendarEventEditor(
                     onPick = { secondAlert = it ?: NO_ALERT },
                 )
             }
-            FieldRow(
-                icon = Icons.AutoMirrored.Filled.Notes,
-                value = notes,
-                onValueChange = { notes = it },
-                placeholder = tr("calendar.fields.notes"),
+            NotesRow(
+                notes = notes,
+                onNotesChange = { notes = it },
                 minLines = if (invite) 6 else 2,
                 maxLines = if (invite) 12 else 6,
             )
@@ -447,6 +448,7 @@ private fun FieldRow(
     singleLine: Boolean = false,
     minLines: Int = 1,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    fieldModifier: Modifier = Modifier,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Row(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 4.dp)) {
@@ -459,7 +461,65 @@ private fun FieldRow(
             minLines = minLines,
             maxLines = maxLines,
             colors = bareFieldColors(),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).then(fieldModifier),
+        )
+    }
+}
+
+/**
+ * Notes read with their links tappable, as an invitation's usually carry a
+ * meeting link; a tap elsewhere in them edits them. Empty notes start as the
+ * field. Mirrors desktop's NotesField.
+ */
+@Composable
+private fun NotesRow(
+    notes: String,
+    onNotesChange: (String) -> Unit,
+    minLines: Int,
+    maxLines: Int,
+) {
+    var editing by remember { mutableStateOf(notes.isBlank()) }
+    // Only a tap on the read view moves focus into the field.
+    var focusOnEdit by remember { mutableStateOf(false) }
+    if (editing) {
+        val focusRequester = remember { FocusRequester() }
+        var focused by remember { mutableStateOf(false) }
+        FieldRow(
+            icon = Icons.AutoMirrored.Filled.Notes,
+            value = notes,
+            onValueChange = onNotesChange,
+            placeholder = tr("calendar.fields.notes"),
+            minLines = minLines,
+            maxLines = maxLines,
+            fieldModifier =
+                Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged {
+                        if (focused && !it.isFocused && notes.isNotBlank()) editing = false
+                        focused = it.isFocused
+                    },
+        )
+        LaunchedEffect(Unit) {
+            if (focusOnEdit) focusRequester.requestFocus()
+        }
+        return
+    }
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable {
+                    focusOnEdit = true
+                    editing = true
+                }.padding(start = 24.dp, end = 4.dp),
+    ) {
+        Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = null, Modifier.padding(top = 17.dp).size(22.dp), tint = colors.onSurfaceVariant)
+        LinkifiedText(
+            notes,
+            minLines = minLines,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 16.dp),
         )
     }
 }

@@ -7,6 +7,7 @@ import { CalendarDays, Mail, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { formatDueDate, taskIsOverdue } from '../../lib/date'
 import { Checkbox } from '../field/Checkbox'
+import { LinkifiedText } from '../field/LinkifiedText'
 import { IconButton } from '../button/IconButton'
 import type { Task } from '../../states/tasks'
 
@@ -102,12 +103,21 @@ export function TaskRow({
               >
                 {task.title}
               </span>
-              {task.notes ? (
-                <span className="mt-0.5 line-clamp-4 whitespace-pre-wrap break-words text-xs text-secondary">
-                  {task.notes}
-                </span>
-              ) : null}
             </button>
+            {/* Outside the title button so its links can be clicked; the rest
+              of the notes still opens the editor, and the title button stays
+              the keyboard path. */}
+            {task.notes ? (
+              <div
+                onClick={() => {
+                  setFocusDueDate(false)
+                  onOpen()
+                }}
+                className="mb-0.5 line-clamp-4 cursor-default whitespace-pre-wrap break-words text-xs text-secondary"
+              >
+                <LinkifiedText text={task.notes} />
+              </div>
+            ) : null}
             {/* The message link is a button of its own, so the chips sit beside
               the title button rather than inside it. */}
             {task.due_at > 0 || hasMessage ? (

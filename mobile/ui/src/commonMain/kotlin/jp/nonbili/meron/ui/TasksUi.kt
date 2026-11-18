@@ -461,7 +461,7 @@ private fun TaskRowContent(
                 color = if (task.done) secondary else colors.onSurface,
             )
             if (task.notes.isNotBlank()) {
-                Text(
+                LinkifiedText(
                     task.notes,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,

@@ -21,6 +21,7 @@ import { settings$ } from '../../states/settings'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 import { Checkbox } from '../field/Checkbox'
+import { LinkifiedText } from '../field/LinkifiedText'
 import { SelectInput, TextInput } from '../field/Field'
 
 const REPEATS: { value: CalendarRepeat; label: string }[] = [
@@ -218,6 +219,58 @@ function InviteLocation({ location }: { location: string }) {
   )
 }
 
+// Notes read with their links clickable, as an invitation's usually carry a
+// meeting link; a click elsewhere in them, or Enter, edits them. Empty notes
+// start as the textarea.
+function NotesField({
+  notes,
+  className,
+  onChange,
+}: {
+  notes: string
+  className: string
+  onChange: (notes: string) => void
+}) {
+  const { t } = useTranslation()
+  const [editing, setEditing] = useState(() => !notes.trim())
+  const label = t('calendar.fields.notes')
+
+  if (editing) {
+    return (
+      <textarea
+        className={`${className} resize-y placeholder-secondary`}
+        placeholder={label}
+        aria-label={label}
+        value={notes}
+        // Mounted with notes only when the read view was clicked.
+        autoFocus={!!notes.trim()}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={() => setEditing(!notes.trim())}
+      />
+    )
+  }
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      className={`${className} max-h-80 cursor-text overflow-y-auto whitespace-pre-wrap break-words`}
+      onClick={() => {
+        // Selecting text to copy it is not a request to edit.
+        if (window.getSelection()?.isCollapsed !== false) setEditing(true)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' && event.target === event.currentTarget) {
+          event.preventDefault()
+          setEditing(true)
+        }
+      }}
+    >
+      <LinkifiedText text={notes} />
+    </div>
+  )
+}
+
 // Create or change an event made here. An accepted invitation opens read-only
 // but for its notes and alerts: its time and title are the organizer's to change. Mirrors
 // mobile's EventEditorSheet.
@@ -383,12 +436,10 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
           set={set}
         />
 
-        <textarea
-          className={`${invite ? 'min-h-48' : 'min-h-20'} resize-y rounded-lg border border-border bg-chats px-2.5 py-1.5 text-xs text-primary placeholder-secondary outline-none transition-colors focus:border-accent select-text`}
-          placeholder={t('calendar.fields.notes')}
-          aria-label={t('calendar.fields.notes')}
-          value={form.notes}
-          onChange={(event) => set('notes', event.target.value)}
+        <NotesField
+          notes={form.notes}
+          className={`${invite ? 'min-h-48' : 'min-h-20'} rounded-lg border border-border bg-chats px-2.5 py-1.5 text-xs text-primary outline-none transition-colors focus:border-accent select-text`}
+          onChange={(notes) => set('notes', notes)}
         />
 
         <div className="flex items-center gap-2">

@@ -155,3 +155,58 @@ it('allows a touch swipe without dragging and starts dragging after a hold', () 
   expect(fireEvent.touchMove(f.row, { touches: [{ clientX: 0, clientY: 10 }] })).toBe(false)
   fireEvent.touchEnd(f.row, { touches: [] })
 })
+
+it('opens a link in the notes without opening the editor', () => {
+  const open = jest.spyOn(window, 'open').mockImplementation(() => null)
+  const linked = { ...task, notes: 'Join: https://meet.example.com/abc-defg.' }
+  const view = render(
+    <TaskRow
+      task={linked}
+      sortable={false}
+      expanded={false}
+      onToggle={() => {}}
+      onOpen={() => {
+        throw new Error('opened the editor')
+      }}
+      onDelete={() => {}}
+    />,
+  )
+  const link = view.getByRole('link', { name: 'https://meet.example.com/abc-defg' })
+  fireEvent.click(link)
+  expect(open).toHaveBeenCalledWith('https://meet.example.com/abc-defg', '_blank', 'noreferrer')
+  open.mockRestore()
+})
+
+it('opens the editor from the notes text', () => {
+  const f = fixture()
+  fireEvent.click(f.view.getByText(/First line/))
+  expect(f.opens()).toBe(1)
+})
+
+it('offers to copy a link in the notes from its context menu', async () => {
+  const writes: string[] = []
+  const clipboard = navigator.clipboard
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: async (text: string) => void writes.push(text) },
+    configurable: true,
+  })
+  const linked = { ...task, notes: 'Join: https://meet.example.com/abc-defg' }
+  let opens = 0
+  const view = render(
+    <TaskRow
+      task={linked}
+      sortable={false}
+      expanded={false}
+      onToggle={() => {}}
+      onOpen={() => opens++}
+      onDelete={() => {}}
+    />,
+  )
+  fireEvent.contextMenu(view.getByRole('link', { name: 'https://meet.example.com/abc-defg' }))
+  fireEvent.click(view.getByRole('button', { name: 'Copy link address' }))
+  await act(async () => {})
+  expect(writes).toEqual(['https://meet.example.com/abc-defg'])
+  expect(opens).toBe(0)
+  expect(view.queryByRole('button', { name: 'Copy link address' })).toBeNull()
+  Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true })
+})
