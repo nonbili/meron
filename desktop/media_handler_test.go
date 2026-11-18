@@ -108,6 +108,7 @@ func TestMediaHandlerServesDecryptedFilesFromTheSecureDir(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", filepath.Join(base, "run"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(base, "cache"))
+	t.Setenv("LocalAppData", filepath.Join(base, "cache"))
 	t.Setenv("HOME", filepath.Join(base, "home"))
 	secure, plain := secureMediaDir(), mediaDir()
 	write := func(root, name, body string) {
