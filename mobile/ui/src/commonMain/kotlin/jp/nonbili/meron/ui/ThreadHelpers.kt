@@ -10,6 +10,7 @@ import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.folderIsTrash
+import jp.nonbili.meron.shared.threadIdIsRss
 
 // How long after open the list keeps re-anchoring to the target message while
 // asynchronously measured bubbles (HTML bodies in WebViews) settle.
@@ -219,6 +220,24 @@ internal fun threadDeleteActionKey(
         folderRole == "trash" || (folderRole == "folder" && folderIsTrash(folder)) -> "threads.actions.deleteForever"
         else -> "threads.actions.moveToTrash"
     }
+
+/** The catalog key naming what deleting all of [threads] does, or null when
+ * there is nothing to delete (deleting skips feeds). Drafts and Trash both go
+ * for good, so a mix of them is "Delete forever"; plain "Delete" is for some
+ * going to Trash and some going for good. */
+internal fun threadsDeleteActionKey(threads: List<ThreadSummary>): String? {
+    val keys =
+        threads
+            .filterNot { threadIdIsRss(it.backendThreadId()) }
+            .map { threadDeleteActionKey(it.folder, it.folderRole) }
+            .toSet()
+    return when {
+        keys.isEmpty() -> null
+        keys.size == 1 -> keys.single()
+        "threads.actions.moveToTrash" in keys -> "buttons.delete"
+        else -> "threads.actions.deleteForever"
+    }
+}
 
 /** The catalog key for having deleted a thread in [folder]; takes a `count`. */
 internal fun threadDeletedStatusKey(

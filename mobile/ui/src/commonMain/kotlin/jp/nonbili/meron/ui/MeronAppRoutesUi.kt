@@ -336,11 +336,15 @@ internal fun KanbanRouteContent(
                                 }) {
                                     Icon(Icons.Filled.Archive, contentDescription = tr("threads.actions.archiveThread"))
                                 }
-                                IconButton(onClick = {
-                                    selectedMailThreads.forEach(::deleteThread)
-                                    selectedMailThreadIds = emptySet()
-                                }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = tr("buttons.delete"))
+                                val deleteActionKey = threadsDeleteActionKey(selectedMailThreads)
+                                IconButton(
+                                    enabled = deleteActionKey != null,
+                                    onClick = {
+                                        selectedMailThreads.forEach(::deleteThread)
+                                        selectedMailThreadIds = emptySet()
+                                    },
+                                ) {
+                                    Icon(Icons.Filled.Delete, contentDescription = tr(deleteActionKey ?: "buttons.delete"))
                                 }
                                 Box {
                                     IconButton(onClick = { mailSelectionMenuOpen = true }) {
@@ -890,11 +894,15 @@ internal fun MailRouteContent(
                                 }) {
                                     Icon(Icons.Filled.Archive, contentDescription = tr("threads.actions.archiveThread"))
                                 }
-                                IconButton(onClick = {
-                                    selectedMailThreads.forEach(::deleteThread)
-                                    selectedMailThreadIds = emptySet()
-                                }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = tr("buttons.delete"))
+                                val deleteActionKey = threadsDeleteActionKey(selectedMailThreads)
+                                IconButton(
+                                    enabled = deleteActionKey != null,
+                                    onClick = {
+                                        selectedMailThreads.forEach(::deleteThread)
+                                        selectedMailThreadIds = emptySet()
+                                    },
+                                ) {
+                                    Icon(Icons.Filled.Delete, contentDescription = tr(deleteActionKey ?: "buttons.delete"))
                                 }
                                 Box {
                                     IconButton(onClick = { mailSelectionMenuOpen = true }) {
