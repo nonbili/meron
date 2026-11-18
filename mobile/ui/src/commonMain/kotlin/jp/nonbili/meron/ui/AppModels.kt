@@ -148,6 +148,9 @@ internal const val TASKS_ENABLED_PREF = "tasks_enabled_v1"
 internal const val CALENDAR_ENABLED_PREF = "calendar_enabled_v1"
 internal const val SHOW_SENDER_IMAGES_PREF = "show_sender_images_v1"
 
+/** Whether thread rows show the sender avatar; off gives denser rows. */
+internal const val SHOW_THREAD_AVATARS_PREF = "show_thread_avatars_v1"
+
 /** Whether HTML mail bodies are darkened under a dark theme. Off by default:
  *  the sender's own colors are what the mail was designed in. */
 internal const val DARK_MAIL_BODIES_PREF = "dark_mail_bodies_v1"

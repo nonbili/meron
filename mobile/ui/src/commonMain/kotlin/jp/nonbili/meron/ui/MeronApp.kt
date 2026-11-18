@@ -355,6 +355,7 @@ fun MeronApp(
         LocalAppLocale provides appLanguageTag.ifBlank { deviceLanguageTag },
         LocalPlatformServices provides services,
         LocalAvatarCore provides core,
+        LocalShowThreadAvatars provides state.showThreadAvatars,
     ) {
         MeronTheme(
             appearanceMode = themeChoice.resolve(systemDark),
@@ -1287,6 +1288,11 @@ private fun MeronMobileScreenContent(
                                 showSenderImages = !showSenderImages
                                 saveAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, showSenderImages)
                             },
+                            showThreadAvatars = showThreadAvatars,
+                            onToggleThreadAvatars = {
+                                showThreadAvatars = !showThreadAvatars
+                                saveAppBoolean(prefs, SHOW_THREAD_AVATARS_PREF, showThreadAvatars)
+                            },
                             darkMailBodies = darkMailBodies,
                             onToggleDarkMailBodies = {
                                 darkMailBodies = !darkMailBodies
@@ -1363,6 +1369,7 @@ private fun MeronMobileScreenContent(
                             onToggleDetectOneTimeCodes = { saveDetectOneTimeCodes(!detectOneTimeCodes) },
                             onRemoveRemoteImageSender = { addr -> setRemoteImageSender(addr, false) },
                             onSaveAccountSignature = ::saveAccountSignature,
+                            onSaveAccountColor = ::saveAccountColor,
                             onSaveAccountProxy = ::saveAccountProxy,
                             onSaveAccountServerSettings = ::saveAccountServerSettings,
                             foldersByAccount = foldersByAccount,

@@ -5,6 +5,7 @@ import { Dialog } from './Dialog'
 import type { LucideIcon } from 'lucide-react'
 import {
   CalendarDays,
+  CircleUser,
   X,
   UnfoldVertical,
   Upload,
@@ -78,6 +79,7 @@ import { AccountProxyCard, ProxySettingsSection } from './ProxySettingsCard'
 import { AccountSignatureCard, SignatureSettingsSection } from './SignatureSettingsCard'
 import { TagsSection } from './TagsSection'
 import { AccountProfileGroup } from './AccountProfileGroup'
+import { ColorSwatchPicker } from '../field/ColorSwatchPicker'
 import { useAccountAvatar } from './useAccountAvatar'
 import { RemoveImageBadge } from './RemoveImageBadge'
 import { AccountAliasesCard } from './AccountAliasesCard'
@@ -461,6 +463,7 @@ function BoardGroup({
 function GeneralSection() {
   const { t } = useTranslation()
   const showRealAvatars = useValue(settings$.showRealAvatars)
+  const showThreadAvatars = useValue(settings$.showThreadAvatars)
   const showUnreadAccountBadge = useValue(settings$.showUnreadAccountBadge)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
   const showCalendarInSideNav = useValue(settings$.showCalendarInSideNav)
@@ -498,6 +501,13 @@ function GeneralSection() {
           hint={t('settings.appearance.showSenderImagesHint')}
           checked={showRealAvatars}
           onChange={() => settings$.showRealAvatars.set(!showRealAvatars)}
+        />
+        <ToggleRow
+          icon={<CircleUser size={15} />}
+          title={t('settings.appearance.showThreadAvatars')}
+          hint={t('settings.appearance.showThreadAvatarsHint')}
+          checked={showThreadAvatars}
+          onChange={() => settings$.showThreadAvatars.set(!showThreadAvatars)}
         />
         <AppIconRows />
         <TrayIconRow />
@@ -908,12 +918,13 @@ function AppIconRows() {
         <SettingRow
           title={t('settings.appearance.appIconColour')}
           control={
-            <input
-              type="color"
+            // Applied live while the picker is dragged: setAppIcon keeps only
+            // the latest colour in flight.
+            <ColorSwatchPicker
               value={colour}
-              onChange={(event) => settings$.appIconColour.set(parseAppIconColour(event.target.value))}
-              title={t('settings.appearance.appIconColour')}
-              className="h-7 w-10 cursor-pointer rounded-md border border-border bg-transparent p-0.5"
+              onChange={(color) => settings$.appIconColour.set(parseAppIconColour(color))}
+              onPreview={(color) => settings$.appIconColour.set(parseAppIconColour(color))}
+              label={t('settings.appearance.appIconColour')}
             />
           }
         />

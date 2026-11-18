@@ -18,6 +18,7 @@ object MobileCommand {
     const val AccountSetAvatar = "account.setAvatar"
     const val AccountWriteAvatarFile = "account.writeAvatarFile"
     const val AccountSetChatWallpaper = "account.setChatWallpaper"
+    const val AccountSetColor = "account.setColor"
     const val AccountWriteChatWallpaperFile = "account.writeChatWallpaperFile"
     const val AccountSetImages = "account.setImages"
     const val AccountSetConversationHtml = "account.setConversationHtml"
@@ -438,6 +439,18 @@ data class AccountNameParams(
         jsonObject(
             "id" to accountId.jsonString(),
             "name" to name.jsonString(),
+        )
+}
+
+/** An account colour as `#rrggbb`; blank clears it. */
+data class AccountColorParams(
+    val accountId: String,
+    val color: String,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "id" to accountId.jsonString(),
+            "color" to color.jsonString(),
         )
 }
 
@@ -1327,6 +1340,8 @@ class MobileMailCommandClient(
     suspend fun writeAccountAvatarFile(params: AccountMediaFileParams): String = core.invoke(MobileCommand.AccountWriteAvatarFile, params.toJson())
 
     suspend fun setAccountChatWallpaper(params: AccountChatWallpaperParams): String = core.invoke(MobileCommand.AccountSetChatWallpaper, params.toJson())
+
+    suspend fun setAccountColor(params: AccountColorParams): String = core.invoke(MobileCommand.AccountSetColor, params.toJson())
 
     suspend fun writeAccountChatWallpaperFile(params: AccountMediaFileParams): String = core.invoke(MobileCommand.AccountWriteChatWallpaperFile, params.toJson())
 

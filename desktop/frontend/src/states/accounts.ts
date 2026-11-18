@@ -259,6 +259,18 @@ export async function setAccountName(accountId: string, name: string) {
   }
 }
 
+// Set or clear (null) the colour that marks an account's rows in mixed lists.
+export async function setAccountColor(accountId: string, color: string | null) {
+  const previous = accounts$.get()
+  accounts$.set(previous.map((acc) => (acc.id === accountId ? { ...acc, color } : acc)))
+  try {
+    await invoke('account.setColor', { id: accountId, color: color ?? '' })
+  } catch (error) {
+    accounts$.set(previous)
+    showToast(error instanceof Error ? error.message : t('accounts.toast.failedToUpdateSetting'), 'error')
+  }
+}
+
 // Set the sender name (outgoing mail From display name) for an account.
 export async function setAccountSenderName(accountId: string, name: string) {
   const previous = accounts$.get()

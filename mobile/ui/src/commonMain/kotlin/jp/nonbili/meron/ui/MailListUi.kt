@@ -107,6 +107,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -631,6 +632,9 @@ internal fun MailRow(
     val unread = thread.unread
     val chat = LocalChatColors.current
     val senderLabel = thread.sender.ifBlank { thread.accountId }
+    val showAvatar = LocalShowThreadAvatars.current
+    val accountColor = account?.let { accountColorOrNull(it.color) }
+    val badgeAccount = account.takeIf { accountColor == null }
     val hasDraft = thread.hasDraft || thread.folderRole == "drafts" || (thread.folderRole == "folder" && folderIsDrafts(thread.folder))
     val draftBadge = tr("chat.draft")
     val primaryText = if (unread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
@@ -662,6 +666,7 @@ internal fun MailRow(
         Modifier
             .fillMaxWidth()
             .background(rowBackground)
+            .accountColorEdge(accountColor)
             .combinedClickable(onClick = onOpen, onLongClick = onLongPress)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -676,11 +681,11 @@ internal fun MailRow(
                     modifier = Modifier.size(24.dp),
                 )
             }
-        } else {
+        } else if (showAvatar) {
             ThreadAvatarWithAccountBadge(
                 senderLabel = senderLabel,
                 showSenderImages = showSenderImages,
-                account = account,
+                account = badgeAccount,
             )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -692,6 +697,7 @@ internal fun MailRow(
                     Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (!showAvatar && !selectionActive && badgeAccount != null) InlineAccountBadge(badgeAccount)
                     val me = tr("threads.me")
                     Text(
                         if (thread.senders.size > 1) {
@@ -848,6 +854,25 @@ internal fun MailRowAttachmentChips(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/** Whether thread rows show the sender avatar (Settings, Appearance). */
+internal val LocalShowThreadAvatars = compositionLocalOf { true }
+
+/**
+ * A mixed-account row's account, inline before the sender, for when there is
+ * no sender avatar to badge and the account has no colour bar.
+ */
+@Composable
+internal fun InlineAccountBadge(account: AccountSummary) {
+    Box(Modifier.padding(end = 6.dp)) {
+        AccountBadgeAvatar(
+            label = account.displayName.ifBlank { account.email.ifBlank { account.id } },
+            avatarUrl = account.avatarUrl,
+            size = 16.dp,
+            fallbackIcon = accountAvatarFallbackIcon(account),
+        )
     }
 }
 

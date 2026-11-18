@@ -3477,6 +3477,44 @@ fn chat_wallpaper_round_trips_and_can_be_cleared() {
 }
 
 #[test]
+fn account_color_is_normalized_validated_and_clearable() {
+    let conn = Connection::open_in_memory().unwrap();
+    db::run_migrations(&conn).unwrap();
+    conn.execute(
+        "INSERT INTO accounts(id, engine, provider, prefs) VALUES('acct', 'mail', 'custom', '{}')",
+        [],
+    )
+    .unwrap();
+
+    assert_eq!(list_accounts(&conn).unwrap()[0]["color"], Value::Null);
+
+    set_account_color(&conn, "acct", Some(" #3B82F6 ")).unwrap();
+    assert_eq!(list_accounts(&conn).unwrap()[0]["color"], "#3b82f6");
+
+    for bad in ["red", "#12345", "3b82f6", "#3b82fg"] {
+        assert!(
+            set_account_color(&conn, "acct", Some(bad)).is_err(),
+            "{bad}"
+        );
+    }
+    assert_eq!(list_accounts(&conn).unwrap()[0]["color"], "#3b82f6");
+
+    set_account_color(&conn, "acct", Some("")).unwrap();
+    assert_eq!(list_accounts(&conn).unwrap()[0]["color"], Value::Null);
+    set_account_color(&conn, "acct", Some("#10b981")).unwrap();
+    set_account_color(&conn, "acct", None).unwrap();
+    assert_eq!(list_accounts(&conn).unwrap()[0]["color"], Value::Null);
+
+    // A hand-edited, unreadable colour lists as unset rather than leaking through.
+    conn.execute(
+        "UPDATE accounts SET prefs = json_set(prefs, '$.color', 'blue') WHERE id = 'acct'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(list_accounts(&conn).unwrap()[0]["color"], Value::Null);
+}
+
+#[test]
 fn signature_pref_round_trips_and_can_be_cleared() {
     let conn = Connection::open_in_memory().unwrap();
     db::run_migrations(&conn).unwrap();

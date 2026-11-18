@@ -41,6 +41,8 @@ export type Account = {
   save_sent_copy?: boolean | null
   /** Per-account conversation background; absent uses Meron's default pattern. */
   chat_wallpaper?: ChatWallpaper | null
+  /** Account colour (`#rrggbb`), marking its rows in lists that mix accounts. */
+  color?: string | null
   /** Whether this account's inbox folds into the unified inbox (default true). */
   included_in_unified?: boolean
   /** Whether new-mail desktop notifications are suppressed (default false). */

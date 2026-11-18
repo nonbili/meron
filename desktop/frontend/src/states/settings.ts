@@ -127,6 +127,8 @@ export type Settings = {
   /** Message body text size, in percent, applied on top of `fontScale`. */
   messageFontScale: number
   showRealAvatars: boolean
+  /** Whether thread list rows show the sender avatar; off gives denser rows. */
+  showThreadAvatars: boolean
   /** Whether a message that brings its own light design is drawn inverted under
    *  a dark theme, instead of as a light card (see `darkensCanvas`). */
   darkMessageBodies: boolean
@@ -238,6 +240,7 @@ const DB_KEY = {
   fontScale: 'font_scale',
   messageFontScale: 'message_font_scale',
   showRealAvatars: 'show_real_avatars',
+  showThreadAvatars: 'show_thread_avatars',
   darkMessageBodies: 'dark_message_bodies',
   autoFitMessages: 'auto_fit_messages',
   readerBottomActions: 'reader_bottom_actions',
@@ -456,6 +459,7 @@ export const settings$ = observable<Settings>({
   fontScale: fontBootstrap.fontScale,
   messageFontScale: fontBootstrap.messageFontScale,
   showRealAvatars: false,
+  showThreadAvatars: true,
   darkMessageBodies: false,
   autoFitMessages: false,
   readerBottomActions: false,
@@ -987,6 +991,9 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
 
     if (typeof prefs[DB_KEY.showRealAvatars] === 'boolean') {
       settings$.showRealAvatars.set(prefs[DB_KEY.showRealAvatars] as boolean)
+    }
+    if (typeof prefs[DB_KEY.showThreadAvatars] === 'boolean') {
+      settings$.showThreadAvatars.set(prefs[DB_KEY.showThreadAvatars] as boolean)
     }
 
     if (typeof prefs[DB_KEY.darkMessageBodies] === 'boolean') {

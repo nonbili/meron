@@ -7,6 +7,8 @@ import { AccountAvatar } from '../avatar/AccountAvatar'
 import { formatThreadDate } from '../../lib/date'
 import { clsx } from '../../lib/utils'
 import { useTranslation } from '../../lib/i18n'
+import { useValue } from '@legendapp/state/react'
+import { settings$ } from '../../states/settings'
 import { isDraftFolder } from '../../states/mailFolders'
 import { AttachmentChips } from './AttachmentChips'
 import { TagChips } from './TagChips'
@@ -30,8 +32,8 @@ export function ThreadListItem({
 }: {
   thread: Message
   active?: boolean
-  // The account the thread belongs to, badged on the avatar in lists that mix
-  // accounts; omitted elsewhere.
+  // The account the thread belongs to, marked (colour bar, else avatar badge)
+  // in lists that mix accounts; omitted elsewhere.
   badgeAccount?: Account
   // The thread's folder, chipped beside the date in lists that mix folders
   // (contact history); omitted where the list is already one folder.
@@ -56,6 +58,11 @@ export function ThreadListItem({
   const isRSS = !!thread.feed_url
   const unread = thread.unread
   const hasDraft = !isRSS && (thread.has_draft || isDraftFolder(thread.folder_id, thread.account_id))
+  const showAvatar = useValue(settings$.showThreadAvatars)
+  // In lists that mix accounts, a coloured account is marked by a bar along the
+  // row's edge; one without a colour falls back to its avatar as a badge.
+  const accountColor = badgeAccount?.color || undefined
+  const accountBadge = accountColor ? undefined : badgeAccount
 
   return (
     <div
@@ -84,6 +91,14 @@ export function ThreadListItem({
         onContextMenu={onContextMenu}
         title={threadTitle}
       >
+        {accountColor && (
+          <span
+            data-account-color
+            aria-hidden="true"
+            className="absolute left-0.5 top-2 bottom-2 w-[3px] rounded-full"
+            style={{ backgroundColor: accountColor }}
+          />
+        )}
         {bulkSelectable ? (
           <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center">
             <span
@@ -97,29 +112,40 @@ export function ThreadListItem({
               <Check size={17} strokeWidth={2.6} />
             </span>
           </span>
-        ) : (
+        ) : showAvatar ? (
           <div className="relative shrink-0">
             <Avatar
               name={thread.from_name || thread.from_addr}
               email={isRSS ? undefined : thread.from_addr}
               src={isRSS && thread.feed_icon ? `/media/${thread.feed_icon}` : undefined}
             />
-            {badgeAccount && (
+            {accountBadge && (
               <div className="absolute -bottom-1 -left-1 rounded-full ring-2 ring-chats overflow-hidden">
                 <AccountAvatar
-                  accountId={badgeAccount.id}
-                  name={badgeAccount.display_name || badgeAccount.email}
-                  src={badgeAccount.avatar_url}
+                  accountId={accountBadge.id}
+                  name={accountBadge.display_name || accountBadge.email}
+                  src={accountBadge.avatar_url}
                   size={16}
                 />
               </div>
             )}
           </div>
-        )}
+        ) : null}
 
         <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
           <div className="flex items-center gap-2 min-w-0">
             <div className="flex min-w-0 items-center gap-1">
+              {/* Without the sender avatar to badge, an uncoloured account is
+                  marked inline before the sender instead. */}
+              {!showAvatar && !bulkSelectable && accountBadge && (
+                <AccountAvatar
+                  accountId={accountBadge.id}
+                  name={accountBadge.display_name || accountBadge.email}
+                  src={accountBadge.avatar_url}
+                  size={14}
+                  className="mr-0.5 shrink-0"
+                />
+              )}
               <span
                 className={clsx(
                   'text-[0.8125rem] truncate',

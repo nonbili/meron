@@ -382,6 +382,10 @@ class MobileCommandsTest {
         assertEquals(MobileCommand.AccountSetName, core.lastCommand)
         assertEquals("""{"id":"acc1","name":"Personal"}""", core.lastPayloadJson)
 
+        runSuspend { client.setAccountColor(AccountColorParams(accountId = "acc1", color = "#3b82f6")) }
+        assertEquals(MobileCommand.AccountSetColor, core.lastCommand)
+        assertEquals("""{"id":"acc1","color":"#3b82f6"}""", core.lastPayloadJson)
+
         runSuspend { client.setAccountAvatar(AccountAvatarParams(accountId = "acc1", avatarUrl = "https://example.com/avatar.png")) }
         assertEquals(MobileCommand.AccountSetAvatar, core.lastCommand)
         assertEquals("""{"id":"acc1","avatar_url":"https://example.com/avatar.png"}""", core.lastPayloadJson)

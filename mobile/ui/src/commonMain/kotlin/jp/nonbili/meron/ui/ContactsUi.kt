@@ -851,6 +851,9 @@ private fun ContactThreadRow(
     val colors = MaterialTheme.colorScheme
     val chat = LocalChatColors.current
     val senderLabel = thread.sender.ifBlank { thread.accountId }
+    val showAvatar = LocalShowThreadAvatars.current
+    val accountColor = account?.let { accountColorOrNull(it.color) }
+    val badgeAccount = account.takeIf { accountColor == null }
     val hasDraft = thread.hasDraft || thread.folderRole == "drafts" || (thread.folderRole == "folder" && folderIsDrafts(thread.folder))
     val draftBadge = tr("chat.draft")
     val rowBackground =
@@ -863,16 +866,19 @@ private fun ContactThreadRow(
         Modifier
             .fillMaxWidth()
             .background(rowBackground)
+            .accountColorEdge(accountColor)
             .clickable(onClick = onOpen)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ThreadAvatarWithAccountBadge(
-            senderLabel = senderLabel,
-            showSenderImages = showSenderImages,
-            account = account,
-        )
+        if (showAvatar) {
+            ThreadAvatarWithAccountBadge(
+                senderLabel = senderLabel,
+                showSenderImages = showSenderImages,
+                account = badgeAccount,
+            )
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -882,6 +888,7 @@ private fun ContactThreadRow(
                     Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (!showAvatar && badgeAccount != null) InlineAccountBadge(badgeAccount)
                     val me = tr("threads.me")
                     Text(
                         if (thread.senders.size > 1) {

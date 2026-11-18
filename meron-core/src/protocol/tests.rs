@@ -225,6 +225,9 @@ fn mobile_protocol_updates_account_settings_and_aliases() {
             r#"{{"id":80,"method":"account.setRSSSyncInterval","params":{{"id":"{email}","minutes":30}}}}"#
         ),
         format!(
+            r##"{{"id":90,"method":"account.setColor","params":{{"id":"{email}","color":"#F59E0B"}}}}"##
+        ),
+        format!(
             r#"{{"id":81,"method":"account.setAliases","params":{{"id":"{email}","aliases":[{{"email":"alias@example.com","name":"Alias"}},{{"email":"alias@example.com","name":"Duplicate"}},{{"email":"   ","name":"Blank"}}]}}}}"#
         ),
     ];
@@ -246,6 +249,7 @@ fn mobile_protocol_updates_account_settings_and_aliases() {
     );
     assert_eq!(account["chat_wallpaper"]["kind"], "preset", "{listed}");
     assert_eq!(account["chat_wallpaper"]["presetId"], "grid", "{listed}");
+    assert_eq!(account["color"], "#f59e0b", "{listed}");
     assert_eq!(account["load_remote_images"], true, "{listed}");
     assert_eq!(account["conversation_html"], false, "{listed}");
     assert_eq!(account["included_in_unified"], false, "{listed}");

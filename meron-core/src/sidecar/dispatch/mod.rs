@@ -96,6 +96,7 @@ pub(crate) async fn dispatch(
         | "account.setImages"
         | "account.setConversationHtml"
         | "account.setChatWallpaper"
+        | "account.setColor"
         | "account.setProxy"
         | "account.setCertPin"
         | "account.setName"

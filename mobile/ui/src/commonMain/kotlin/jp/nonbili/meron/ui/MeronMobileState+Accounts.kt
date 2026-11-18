@@ -6,6 +6,7 @@ import jp.nonbili.meron.shared.AccountAliasParams
 import jp.nonbili.meron.shared.AccountAliasesParams
 import jp.nonbili.meron.shared.AccountAvatarParams
 import jp.nonbili.meron.shared.AccountChatWallpaperParams
+import jp.nonbili.meron.shared.AccountColorParams
 import jp.nonbili.meron.shared.AccountFlagParams
 import jp.nonbili.meron.shared.AccountIdParams
 import jp.nonbili.meron.shared.AccountNameParams
@@ -497,6 +498,35 @@ internal fun MeronMobileState.saveAccountSignature(
             reseedUntouchedQuickReply()
         }.onFailure {
             status = trsError("mobile.status.signatureUpdateFailed", it)
+        }
+    }
+}
+
+/** Set or clear (blank) the colour marking an account's rows in mixed lists. */
+internal fun MeronMobileState.saveAccountColor(
+    account: AccountSummary,
+    color: String,
+) {
+    if (!coreLoaded) {
+        status = coreUnavailableMessage
+        return
+    }
+    // Shown at once; the account list the core returns confirms it, or the
+    // failure puts the previous colour back.
+    val previous = coreAccounts
+    coreAccounts = coreAccounts.map { if (it.id == account.id) it.copy(color = color) else it }
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) {
+                val client = MobileMailCommandClient(core)
+                client.setAccountColor(AccountColorParams(account.id, color))
+                client.listAccounts()
+            }
+        }.onSuccess {
+            applyAccounts(it)
+        }.onFailure {
+            coreAccounts = previous
+            status = trsError("mobile.status.accountSettingsFailed", it)
         }
     }
 }

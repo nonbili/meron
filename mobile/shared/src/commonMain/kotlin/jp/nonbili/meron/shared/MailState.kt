@@ -33,6 +33,8 @@ data class AccountSummary(
     val chatWallpaperKind: String = "",
     val chatWallpaperPresetId: String = "",
     val chatWallpaperUrl: String = "",
+    /** Account colour as `#rrggbb`, marking its rows in mixed-account lists; blank for none. */
+    val color: String = "",
     val proxy: ProxySpec = ProxySpec.followApp,
     val signature: SignatureSpec = SignatureSpec.followApp,
 )

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Checklist
@@ -167,6 +168,8 @@ internal fun SettingsScreen(
     onAppLanguageChange: (String) -> Unit,
     showSenderImages: Boolean,
     onToggleSenderImages: () -> Unit,
+    showThreadAvatars: Boolean,
+    onToggleThreadAvatars: () -> Unit,
     darkMailBodies: Boolean,
     onToggleDarkMailBodies: () -> Unit,
     chatFullMessages: Boolean,
@@ -203,6 +206,7 @@ internal fun SettingsScreen(
     onToggleDetectOneTimeCodes: () -> Unit,
     onRemoveRemoteImageSender: (String) -> Unit,
     onSaveAccountSignature: (AccountSummary, SignatureSpec) -> Unit,
+    onSaveAccountColor: (AccountSummary, String) -> Unit,
     onSaveAccountProxy: (AccountSummary, ProxySpec) -> Unit,
     onSaveAccountServerSettings: (AccountSummary, ServerSettingsDraft) -> Unit,
     foldersByAccount: Map<String, List<FolderSummary>>,
@@ -378,6 +382,8 @@ internal fun SettingsScreen(
                     onOpenLanguage = { showLanguagePicker = true },
                     showSenderImages = showSenderImages,
                     onToggleSenderImages = onToggleSenderImages,
+                    showThreadAvatars = showThreadAvatars,
+                    onToggleThreadAvatars = onToggleThreadAvatars,
                     showUnreadBadges = showUnreadBadges,
                     onToggleUnreadBadges = onToggleUnreadBadges,
                     showUnifiedInboxNav = showUnifiedInboxNav,
@@ -531,6 +537,7 @@ internal fun SettingsScreen(
                         onSaveProxy = { spec -> onSaveAccountProxy(account, spec) },
                         onSaveServerSettings = { draft -> onSaveAccountServerSettings(account, draft) },
                         onSaveSignature = { spec -> onSaveAccountSignature(account, spec) },
+                        onSaveColor = { color -> onSaveAccountColor(account, color) },
                         onPickAvatar = { onPickAccountAvatar(account) },
                         onOpenWallpaper = { settingsNavController.navigate(SettingsRoutes.AccountWallpaper) },
                         onMoveUp = { onMoveAccountUp(account) },
@@ -870,6 +877,8 @@ internal fun SettingsGeneralPage(
     onOpenLanguage: () -> Unit,
     showSenderImages: Boolean,
     onToggleSenderImages: () -> Unit,
+    showThreadAvatars: Boolean,
+    onToggleThreadAvatars: () -> Unit,
     showUnreadBadges: Boolean,
     onToggleUnreadBadges: () -> Unit,
     showUnifiedInboxNav: Boolean,
@@ -909,10 +918,10 @@ internal fun SettingsGeneralPage(
     focusProxy: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    // The Network label: Appearance (label + 3 rows), Side navigation (label +
+    // The Network label: Appearance (label + 4 rows), Side navigation (label +
     // 4 rows, plus the 2 alert defaults while the calendar is on) and Kanban
     // (2) come before it on every platform.
-    val proxyIndex = if (calendarEnabled) 12 else 10
+    val proxyIndex = if (calendarEnabled) 13 else 11
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy) proxyIndex else 0)
     SettingsList(modifier.appScrollbar(listState), state = listState) {
         section(tr("settings.pages.appearance"))
@@ -971,6 +980,15 @@ internal fun SettingsGeneralPage(
                 hint = tr("settings.appearance.showSenderImagesHint"),
                 checked = showSenderImages,
                 onToggle = onToggleSenderImages,
+            )
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.AccountCircle,
+                title = tr("settings.appearance.showThreadAvatars"),
+                hint = tr("settings.appearance.showThreadAvatarsHint"),
+                checked = showThreadAvatars,
+                onToggle = onToggleThreadAvatars,
             )
         }
 

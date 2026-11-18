@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from '../../lib/i18n'
 import { setAccountName, setAccountSenderName } from '../../states/accounts'
 import type { Account } from '../../types'
+import { AccountColorRow } from './AccountColorRow'
 import { SettingsGroup, TextRow } from './AccountSettingsRows'
 
 // Meron-only display name and outgoing sender name. The avatar itself is edited
@@ -41,6 +42,7 @@ export function AccountProfileGroup({ account, isRSS }: { account: Account; isRS
           }}
         />
       )}
+      <AccountColorRow account={account} />
     </SettingsGroup>
   )
 }

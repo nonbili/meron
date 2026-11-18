@@ -596,6 +596,16 @@ pub(crate) fn set_mobile_account_chat_wallpaper(
     })
 }
 
+/// Mobile `account.setColor`. A null or empty `color` clears it.
+pub(crate) fn set_mobile_account_color(data_dir: &str, params: &Value) -> Result<Value, String> {
+    let id = req_account_pref_id(params)?;
+    let color = params.get("color").and_then(Value::as_str);
+    with_mobile_db(data_dir, |conn| {
+        store::set_account_color(&conn, &id, color).map_err(|err| err.to_string())?;
+        Ok(json!({ "ok": true }))
+    })
+}
+
 /// Mobile `account.setSignature`. A null `signature` clears the override so the
 /// account follows the app-wide signature again.
 pub(crate) fn set_mobile_account_signature(

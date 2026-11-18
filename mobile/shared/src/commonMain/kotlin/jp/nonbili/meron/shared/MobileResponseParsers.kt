@@ -150,6 +150,7 @@ fun parseAccountListResponse(responseJson: String): List<AccountSummary> {
             chatWallpaperKind = wallpaperJson.findJsonStringProperty("kind").orEmpty(),
             chatWallpaperPresetId = wallpaperJson.findJsonStringProperty("presetId").orEmpty(),
             chatWallpaperUrl = wallpaperJson.findJsonStringProperty("url").orEmpty(),
+            color = item.findJsonStringProperty("color").orEmpty(),
         )
     }
 }

@@ -307,6 +307,10 @@ internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
                 showSenderImages = loadAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, false)
             }
 
+            settingKeyFor(SHOW_THREAD_AVATARS_PREF) -> {
+                showThreadAvatars = loadAppBoolean(prefs, SHOW_THREAD_AVATARS_PREF, true)
+            }
+
             settingKeyFor(DARK_MAIL_BODIES_PREF) -> {
                 darkMailBodies = loadAppBoolean(prefs, DARK_MAIL_BODIES_PREF, false)
             }

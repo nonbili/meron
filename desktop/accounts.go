@@ -463,6 +463,27 @@ func (a *App) accountSetChatWallpaper(payload map[string]any) (any, error) {
 	return map[string]any{"ok": true}, nil
 }
 
+// accountSetColor sets or clears (empty) the account's colour; the engine
+// validates the #rrggbb shape.
+func (a *App) accountSetColor(payload map[string]any) (any, error) {
+	id, _ := payload["id"].(string)
+	if id == "" {
+		id, _ = payload["account_id"].(string)
+	}
+	if id == "" {
+		return nil, errors.New("account id required")
+	}
+	color, _ := payload["color"].(string)
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, a.engineUnavailable()
+	}
+	if _, err := a.sidecar.Call("account.setColor", map[string]any{"account": id, "color": color}); err != nil {
+		return nil, err
+	}
+	a.logf("account.setColor: account=%s color=%s", id, color)
+	return map[string]any{"ok": true}, nil
+}
+
 func (a *App) accountSetRSSSyncInterval(payload map[string]any) (any, error) {
 	id, _ := payload["id"].(string)
 	if id == "" {

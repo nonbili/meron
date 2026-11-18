@@ -20,6 +20,7 @@ type Account struct {
 	ConversationHTML  bool    `json:"conversation_html"`
 	SaveSentCopy      *bool   `json:"save_sent_copy"`
 	ChatWallpaper     any     `json:"chat_wallpaper,omitempty"`
+	Color             string  `json:"color,omitempty"`
 	IncludedInUnified bool    `json:"included_in_unified"`
 	Muted             bool    `json:"muted"`
 	Paused            bool    `json:"paused"`

@@ -86,6 +86,7 @@ internal fun SettingsAccountDetailPage(
     onSaveProxy: (ProxySpec) -> Unit,
     onSaveServerSettings: (ServerSettingsDraft) -> Unit,
     onSaveSignature: (SignatureSpec) -> Unit,
+    onSaveColor: (String) -> Unit,
     onPickAvatar: () -> Unit,
     onOpenWallpaper: () -> Unit,
     onMoveUp: () -> Unit,
@@ -188,7 +189,7 @@ internal fun SettingsAccountDetailPage(
     // be scrolled far from any other row that could host it.
     val encryption = if (isRss) null else rememberAccountEncryption(account.id, account.email)
     encryption?.Dialogs()
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy && !isRss) 9 else 0)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy && !isRss) 10 else 0)
     SettingsList(modifier.appScrollbar(listState), state = listState) {
         item {
             Row(
@@ -245,6 +246,9 @@ internal fun SettingsAccountDetailPage(
                     },
                 )
             }
+        }
+        item {
+            SettingsAccountColorRow(color = account.color, onSelect = onSaveColor)
         }
         section(tr("settings.account.chatBackground"))
         item {

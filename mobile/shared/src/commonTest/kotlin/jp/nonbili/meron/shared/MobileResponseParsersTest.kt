@@ -121,7 +121,7 @@ class MobileResponseParsersTest {
     fun parsesAccountPrefsAndAliases() {
         val accounts =
             parseAccountListResponse(
-                """{"accounts":[{"id":"acc1","email":"me@example.com","display_name":"Me","sender_name":"Sender","avatar_url":"https://example.com/avatar.png","load_remote_images":true,"included_in_unified":false,"muted":true,"paused":true,"conversation_html":false,"rss_sync_interval_minutes":30,"chat_wallpaper":{"kind":"preset","presetId":"grid"},"aliases":[{"email":"alias@example.com","name":"Alias"}]}]}""",
+                """{"accounts":[{"id":"acc1","email":"me@example.com","display_name":"Me","sender_name":"Sender","avatar_url":"https://example.com/avatar.png","load_remote_images":true,"included_in_unified":false,"muted":true,"paused":true,"conversation_html":false,"rss_sync_interval_minutes":30,"chat_wallpaper":{"kind":"preset","presetId":"grid"},"color":"#3b82f6","aliases":[{"email":"alias@example.com","name":"Alias"}]}]}""",
             )
 
         val account = accounts.single()
@@ -137,6 +137,7 @@ class MobileResponseParsersTest {
         assertEquals("Alias", account.aliases.single().name)
         assertEquals("preset", account.chatWallpaperKind)
         assertEquals("grid", account.chatWallpaperPresetId)
+        assertEquals("#3b82f6", account.color)
     }
 
     @Test

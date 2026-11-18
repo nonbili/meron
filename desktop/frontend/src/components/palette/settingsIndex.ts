@@ -31,6 +31,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { page: 'general', titleKey: 'common.theme', keywords: 'appearance dark light color colour mode' },
   { page: 'general', titleKey: 'settings.language.label', keywords: 'locale translation' },
   { page: 'general', titleKey: 'settings.appearance.showSenderImages', keywords: 'avatars pictures photos' },
+  { page: 'general', titleKey: 'settings.appearance.showThreadAvatars', keywords: 'gravatar compact density' },
   {
     page: 'general',
     titleKey: 'settings.appearance.appIconCustom',
@@ -147,6 +148,7 @@ export const ACCOUNT_SETTINGS_INDEX: AccountSettingEntry[] = [
   },
   { titleKey: 'settings.account.displayName', keywords: 'rename name', kinds: ALL_KINDS },
   { titleKey: 'settings.account.senderName', keywords: 'from name', kinds: ['mail'] },
+  { titleKey: 'settings.account.color', keywords: 'colour bar unified label', kinds: ALL_KINDS },
   { titleKey: 'settings.account.chatBackground', keywords: 'wallpaper', kinds: ALL_KINDS },
   { titleKey: 'settings.account.showInUnifiedInbox', kinds: ['mail', 'rss'] },
   { titleKey: 'settings.account.showInSideNav', keywords: 'sidebar rail hide', kinds: ALL_KINDS },

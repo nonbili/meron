@@ -76,6 +76,7 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "account.setAvatar" => Ok(json!({ "ok": true })),
         "account.writeAvatarFile" => Ok(json!({ "url": "" })),
         "account.setChatWallpaper" => Ok(json!({ "ok": true })),
+        "account.setColor" => Ok(json!({ "ok": true })),
         "account.writeChatWallpaperFile" => Ok(json!({ "url": "" })),
         "account.setImages" => Ok(json!({ "ok": true })),
         "account.setConversationHtml" => Ok(json!({ "ok": true })),
@@ -193,6 +194,7 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
             write_mobile_account_media_file(data_dir, &req.params, "avatars")
         }
         "account.setChatWallpaper" => set_mobile_account_chat_wallpaper(data_dir, &req.params),
+        "account.setColor" => set_mobile_account_color(data_dir, &req.params),
         "account.writeChatWallpaperFile" => {
             write_mobile_account_media_file(data_dir, &req.params, "wallpapers")
         }

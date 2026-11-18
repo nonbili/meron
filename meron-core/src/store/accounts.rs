@@ -149,6 +149,10 @@ struct AccountPrefs {
     /// Signature override; unset follows the app-wide signature setting.
     #[serde(deserialize_with = "lenient_pref")]
     signature: Option<AccountSignature>,
+    /// Account colour as `#rrggbb`, marking the account's rows in lists that
+    /// mix accounts; unset shows no colour.
+    #[serde(deserialize_with = "lenient_pref")]
+    color: Option<String>,
 }
 
 impl AccountPrefs {
@@ -210,6 +214,32 @@ impl AccountPrefs {
     fn signature_json(&self) -> serde_json::Value {
         json!(self.signature)
     }
+
+    /// The account colour for the bridge; null when unset or unreadable.
+    fn color_json(&self) -> serde_json::Value {
+        json!(self.color.as_deref().and_then(normalize_account_color))
+    }
+}
+
+/// Normalize an account colour to lowercase `#rrggbb`, or `None` when it is
+/// not one. Shared by every platform's `account.setColor`.
+pub fn normalize_account_color(raw: &str) -> Option<String> {
+    let hex = raw.trim().strip_prefix('#')?;
+    (hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| format!("#{}", hex.to_ascii_lowercase()))
+}
+
+/// Set or clear (`None`, or an empty string) an account's colour. Anything
+/// other than `#rrggbb` is rejected rather than stored.
+pub fn set_account_color(conn: &Connection, id: &str, color: Option<&str>) -> Result<()> {
+    let value = match color.map(str::trim).filter(|c| !c.is_empty()) {
+        None => None,
+        Some(raw) => Some(Value::String(
+            normalize_account_color(raw)
+                .ok_or_else(|| anyhow::anyhow!("account color must be #rrggbb"))?,
+        )),
+    };
+    set_account_pref_json(conn, id, "color", value)
 }
 
 /// Non-secret account metadata persisted on connect, alongside `Creds`.
@@ -923,6 +953,7 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
         let save_sent_copy = p.save_sent_copy();
         let rss_sync_interval_minutes = p.rss_sync_interval_minutes();
         let chat_wallpaper = p.chat_wallpaper_json();
+        let color = p.color_json();
         if engine == "local" {
             out.push(json!({
                 "id": id,
@@ -945,6 +976,7 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
                 "conversation_html": conversation_html,
                 "save_sent_copy": false,
                 "chat_wallpaper": chat_wallpaper,
+                "color": color,
                 "sort_order": sort_order,
             }));
         } else if engine == "rss" {
@@ -968,6 +1000,7 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
                 "conversation_html": conversation_html,
                 "save_sent_copy": save_sent_copy,
                 "chat_wallpaper": chat_wallpaper,
+                "color": color,
                 "rss_sync_interval_minutes": rss_sync_interval_minutes,
                 "sort_order": sort_order,
             }));
@@ -1000,6 +1033,7 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
                 "conversation_html": conversation_html,
                 "save_sent_copy": save_sent_copy,
                 "chat_wallpaper": chat_wallpaper,
+                "color": color,
                 "sort_order": sort_order,
                 "aliases": p.aliases_json(),
                 "signature": p.signature_json(),

@@ -328,6 +328,15 @@ pub(crate) async fn dispatch(
             Ok(json!({ "ok": true }))
         }
 
+        // Set or clear (null/empty) the account colour shown on its rows in
+        // mixed-account lists.
+        "account.setColor" => {
+            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
+            let color = p.get("color").and_then(Value::as_str);
+            store::set_account_color(&engine.db.lock().unwrap(), &id, color)?;
+            Ok(json!({ "ok": true }))
+        }
+
         // Set the account's display name.
         // Point one account at a different proxy than the app-wide setting (or
         // at none). Live sessions keep their sockets; the choice applies as
