@@ -6,7 +6,9 @@ import { mail$, releaseRemovedThread } from './mail'
 import { markUnreadWithUndo } from './mailFlags'
 import {
   archiveThread,
+  bulkArchiveSelected,
   bulkDeleteSelected,
+  bulkRemovalInProgress,
   bulkMoveSelectedToFolder,
   copyThreadToFolder,
   deleteMessage,
@@ -436,6 +438,194 @@ describe('undo after moving a thread', () => {
     expect(ui$.toast.get()).toContain('Thread deleted.')
   })
 
+  it('takes every bulk-deleted row off the list before the first request returns', async () => {
+    mail$.threads.set(['a', 'b', 'c'].map((id) => thread({ thread_id: id })))
+    const items = bulkItems(['a', 'b', 'c'])
+    ui$.bulkSelection.set(Object.fromEntries(items.map((item) => [item.key, item])))
+    let listedDuringFirst: string[] = []
+    let selectedDuringFirst: string[] = []
+    let runningDuringFirst = false
+    ;(window as any).go.main.App.Invoke = (command: string, payload: { thread_id?: string }) => {
+      if (command === 'mail.delete') {
+        if (payload.thread_id === 'a') {
+          listedDuringFirst = mail$.threads.peek().map((item) => item.thread_id)
+          selectedDuringFirst = Object.keys(ui$.bulkSelection.peek())
+          runningDuringFirst = bulkRemovalInProgress()
+          return Promise.resolve({ deleted: 1 })
+        }
+        return Promise.reject('[NOPERM] permission denied')
+      }
+      return Promise.resolve({ threads: mail$.threads.get() })
+    }
+    await bulkDeleteSelected(items)
+    expect(listedDuringFirst).toEqual([])
+    expect(selectedDuringFirst).toEqual([])
+    expect(runningDuringFirst).toBe(true)
+    // The failed thread and the one never sent both come back, selected for a retry.
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['b', 'c'])
+    expect(Object.keys(ui$.bulkSelection.get())).toEqual(['b', 'c'])
+  })
+
+  it('does not put failed bulk-deleted threads into a folder opened meanwhile', async () => {
+    let threadListReads = 0
+    ui$.selectedAccount.set('acc')
+    ui$.selectedFolder.set('INBOX')
+    mail$.threads.set(['a', 'b', 'c'].map((id) => thread({ thread_id: id })))
+    const items = bulkItems(['a', 'b', 'c'])
+    ;(window as any).go.main.App.Invoke = (command: string, payload: { thread_id?: string }) => {
+      if (command === 'mail.delete') {
+        if (payload.thread_id === 'a') {
+          ui$.selectedFolder.set('Sent')
+          mail$.threads.set([thread({ thread_id: 's' })])
+          return Promise.resolve({ deleted: 1 })
+        }
+        return Promise.reject('[NOPERM] permission denied')
+      }
+      if (command === 'mail.threadList') threadListReads++
+      return Promise.resolve({ threads: mail$.threads.get() })
+    }
+    await bulkDeleteSelected(items)
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['s'])
+    expect(ui$.bulkSelection.get()).toEqual({})
+    // Sent is re-read, so a thread it also lists comes back from the server.
+    expect(threadListReads).toBeGreaterThan(0)
+  })
+
+  it('re-reads a board searched meanwhile instead of putting failed cards into its results', async () => {
+    settings$.kanbanBoards.set([{ id: 'board', name: 'Board', columns: [{ accountId: 'acc', folderId: 'INBOX' }] }])
+    kanban$.activeBoardId.set('board')
+    kanban$.threads['acc\nINBOX'].set(['a', 'b'].map((id) => thread({ thread_id: id })))
+    const items = bulkItems(['a', 'b'])
+    const reads: string[] = []
+    try {
+      ;(window as any).go.main.App.Invoke = (command: string, payload: { thread_id?: string; query?: string }) => {
+        if (command === 'mail.delete') {
+          if (payload.thread_id === 'a') {
+            // The search matches neither card.
+            kanban$.searchQuery.set('invoice')
+            kanban$.threads['acc\nINBOX'].set([])
+            return Promise.resolve({ deleted: 1 })
+          }
+          return Promise.reject('[NOPERM] permission denied')
+        }
+        if (command === 'mail.threadList') reads.push(payload.query ?? '')
+        return Promise.resolve({ threads: [], folders: [] })
+      }
+      await bulkDeleteSelected(items)
+      expect(kanban$.threads['acc\nINBOX'].get()).toEqual([])
+      expect(reads).toEqual(['invoice'])
+    } finally {
+      kanban$.searchQuery.set('')
+      kanban$.activeBoardId.set('')
+      settings$.kanbanBoards.set([])
+    }
+  })
+
+  it('does not reselect or reopen cards after their column or board changed mid-batch', async () => {
+    settings$.kanbanBoards.set([
+      { id: 'board', name: 'Board', columns: [{ accountId: 'acc', folderId: 'INBOX' }] },
+      { id: 'other', name: 'Other', columns: [{ accountId: 'acc', folderId: 'Sent' }] },
+    ])
+    kanban$.activeBoardId.set('board')
+    kanban$.threads['acc\nINBOX'].set(['a', 'b'].map((id) => thread({ thread_id: id })))
+    kanban$.paneThreadId.set('b')
+    ui$.selectedThread.set('b')
+    const items = bulkItems(['a', 'b']).map((item) => ({
+      ...item,
+      groupKey: 'kanban:board',
+      surface: 'kanban' as const,
+    }))
+    const switches: Array<() => void> = [
+      // The column now shows another folder.
+      () =>
+        settings$.kanbanBoards.set([
+          { id: 'board', name: 'Board', columns: [{ accountId: 'acc', folderId: 'Archive' }] },
+          { id: 'other', name: 'Other', columns: [{ accountId: 'acc', folderId: 'Sent' }] },
+        ]),
+      () => kanban$.activeBoardId.set('other'),
+    ]
+    try {
+      for (const leave of switches) {
+        ;(window as any).go.main.App.Invoke = (command: string, payload: { thread_id?: string }) => {
+          if (command === 'mail.delete') {
+            if (payload.thread_id === 'a') {
+              leave()
+              return Promise.resolve({ deleted: 1 })
+            }
+            return Promise.reject('[NOPERM] permission denied')
+          }
+          return Promise.resolve({ threads: [], folders: [] })
+        }
+        await bulkDeleteSelected(items)
+        expect(ui$.bulkSelection.get()).toEqual({})
+        expect(kanban$.paneThreadId.get()).toBe('')
+        expect(ui$.selectedThread.get()).not.toBe('b')
+        settings$.kanbanBoards.set([
+          { id: 'board', name: 'Board', columns: [{ accountId: 'acc', folderId: 'INBOX' }] },
+          { id: 'other', name: 'Other', columns: [{ accountId: 'acc', folderId: 'Sent' }] },
+        ])
+        kanban$.activeBoardId.set('board')
+        kanban$.threads['acc\nINBOX'].set(['a', 'b'].map((id) => thread({ thread_id: id })))
+        kanban$.paneThreadId.set('b')
+        ui$.selectedThread.set('b')
+      }
+    } finally {
+      kanban$.activeBoardId.set('')
+      kanban$.paneThreadId.set('')
+      settings$.kanbanBoards.set([])
+    }
+  })
+
+  it('keeps an Inbox card gone once archiving its All Mail copy took it away', async () => {
+    mail$.foldersByAccount.acc.set([{ id: 'All', name: 'All Mail', role: 'archive' } as any])
+    const all = 'acc#All#7'
+    const inbox = 'acc#INBOX#7'
+    mail$.threads.set([thread({ thread_id: all }), thread({ thread_id: inbox })])
+    const items = bulkItems([all, inbox]).map((item) => (item.threadId === all ? { ...item, folderId: 'All' } : item))
+    ui$.bulkSelection.set(Object.fromEntries(items.map((item) => [item.key, item])))
+    try {
+      ;(window as any).go.main.App.Invoke = (command: string, payload: { thread_id?: string }) => {
+        if (command === 'mail.archive') {
+          return Promise.resolve(
+            payload.thread_id === all
+              ? { moved: 1, thread_id: all, source_folder: 'INBOX' }
+              : { already_archived: true },
+          )
+        }
+        return Promise.resolve({ threads: mail$.threads.get(), folders: [] })
+      }
+      await bulkArchiveSelected(items)
+      expect(mail$.threads.get().map((item) => item.thread_id)).toEqual([all])
+      expect(ui$.bulkSelection.get()).toEqual({})
+    } finally {
+      mail$.foldersByAccount.acc.set([])
+    }
+  })
+
+  it('takes every bulk-archived row off the list and reselects the ones that come back', async () => {
+    mail$.threads.set(['a', 'b'].map((id) => thread({ thread_id: id })))
+    const items = bulkItems(['a', 'b'])
+    ui$.bulkSelection.set(Object.fromEntries(items.map((item) => [item.key, item])))
+    let listedDuringFirst: string[] = []
+    let selectedDuringFirst: string[] = []
+    ;(window as any).go.main.App.Invoke = (command: string, payload: { thread_id?: string }) => {
+      if (command === 'mail.archive') {
+        if (payload.thread_id === 'a') {
+          listedDuringFirst = mail$.threads.peek().map((item) => item.thread_id)
+          selectedDuringFirst = Object.keys(ui$.bulkSelection.peek())
+          return Promise.resolve({ moved: 1, thread_id: 'archived-a' })
+        }
+        return Promise.reject('archive failed')
+      }
+      return Promise.resolve({ threads: mail$.threads.get(), folders: [] })
+    }
+    await bulkArchiveSelected(items)
+    expect(listedDuringFirst).toEqual([])
+    expect(selectedDuringFirst).toEqual([])
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['b'])
+    expect(Object.keys(ui$.bulkSelection.get())).toEqual(['b'])
+  })
+
   // A bulk selection can span accounts and folders, so the toast names the
   // mailbox the failed thread came from.
   it('names the mailbox of a bulk delete with an unknown outcome', async () => {
@@ -451,7 +641,7 @@ describe('undo after moving a thread', () => {
     expect(ui$.toast.get()).toContain("Check other / Receipts and that account's Trash before retrying.")
   })
 
-  it('keeps the batch selected until it is done, and a new selection after', async () => {
+  it('leaves selection mode as the batch starts, and keeps a new selection after', async () => {
     mail$.threads.set([thread({ thread_id: 'a' }), thread({ thread_id: 'c' })])
     const items = bulkItems(['a'])
     ui$.bulkSelection.set({ a: items[0] })
@@ -461,7 +651,6 @@ describe('undo after moving a thread', () => {
       if (command === 'mail.delete') return Promise.resolve({ deleted: 1 })
       if (!refreshing) {
         refreshing = true
-        // Shortcuts still act on the batch, not on the next open thread.
         selectedDuringRefresh = Object.keys(ui$.bulkSelection.peek())
         // The user starts a new selection while the list refreshes.
         ui$.bulkSelection.set({ ...ui$.bulkSelection.peek(), c: bulkItems(['c'])[0] })
@@ -469,7 +658,8 @@ describe('undo after moving a thread', () => {
       return Promise.resolve({ threads: mail$.threads.get() })
     }
     await bulkDeleteSelected(items)
-    expect(selectedDuringRefresh).toEqual(['a'])
+    expect(selectedDuringRefresh).toEqual([])
+    expect(bulkRemovalInProgress()).toBe(false)
     expect(Object.keys(ui$.bulkSelection.get())).toEqual(['c'])
   })
 

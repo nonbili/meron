@@ -37,7 +37,7 @@ import {
   archiveThread,
   deleteThread,
   bulkArchiveSelected,
-  bulkDeleteInProgress,
+  bulkRemovalInProgress,
   bulkDeleteSelected,
 } from '../../states/mailMoves'
 import { openComposeTab, openReplyInFullEditor, closeMessageTab, toggleConversationMode } from '../../states/compose'
@@ -219,15 +219,15 @@ function deleteKeyFocusAllowed(): boolean {
 // ui$.selectedThread either way), unlike the other bare shortcuts.
 function handleDeleteKey(key: string, target: EventTarget | null): boolean {
   if (key !== 'Delete' || isTyping(target) || modalOpen() || mailCovered() || !deleteKeyFocusAllowed()) return false
-  // A batch still deleting owns the key: an emptied selection is not a cue to
-  // delete the thread that came into view behind it.
-  if (bulkDeleteInProgress()) return true
   const threadId = activeThreadId()
   const bulkItems = selectedBulkItems()
   if (bulkItems.length > 0) {
     void bulkDeleteSelected(bulkItems)
     return true
   }
+  // A batch still running owns the key: the selection it emptied is not a cue
+  // to delete the thread that came into view behind it.
+  if (bulkRemovalInProgress()) return true
   if (!threadId) return false
   void deleteThread(threadId)
   return true
@@ -469,6 +469,11 @@ export function AppHotkeys() {
             void bulkArchiveSelected(bulkSelected())
             break
           }
+          // Same as Delete: a running batch is not a cue to archive the open thread.
+          if (bulkRemovalInProgress()) {
+            event.preventDefault()
+            break
+          }
           if (!selected()) return
           event.preventDefault()
           void archiveThread(selected())
@@ -494,13 +499,13 @@ export function AppHotkeys() {
           markUnreadWithUndo(selected())
           break
         case 'thread.delete':
-          if (bulkDeleteInProgress()) {
-            event.preventDefault()
-            break
-          }
           if (bulkSelected().length > 0) {
             event.preventDefault()
             void bulkDeleteSelected(bulkSelected())
+            break
+          }
+          if (bulkRemovalInProgress()) {
+            event.preventDefault()
             break
           }
           if (!selected()) return

@@ -9,7 +9,7 @@ import { settings$ } from '../../states/settings'
 import { compose$ } from '../../states/composeState'
 import { accounts$ } from '../../states/accounts'
 import { AppHotkeys } from './AppHotkeys'
-import { bulkDeleteSelected } from '../../states/mailMoves'
+import { bulkArchiveSelected, bulkDeleteSelected } from '../../states/mailMoves'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 
 const original = (window as any).go
@@ -110,6 +110,35 @@ describe('AppHotkeys', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(calls.filter((command) => command === 'mail.delete')).toHaveLength(1)
     finish({ deleted: 1 })
+    await batch
+  })
+
+  it('keeps archive off the open thread while a bulk archive runs', async () => {
+    let finish: (value: unknown) => void = () => {}
+    ;(window as any).go.main.App.Invoke = (command: string) => {
+      calls.push(command)
+      return command === 'mail.archive' ? new Promise((resolve) => (finish = resolve)) : Promise.resolve({})
+    }
+    const batch = bulkArchiveSelected([
+      {
+        key: 'acct#INBOX#8',
+        groupKey: '',
+        threadId: 'acct#INBOX#8',
+        accountId: 'acct',
+        folderId: 'inbox',
+        surface: 'thread-list',
+        kind: 'mail',
+        unread: false,
+        starred: false,
+        draft: false,
+        trash: false,
+      },
+    ])
+    render(<AppHotkeys />)
+    fireEvent.keyDown(document.body, { key: 'e' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(calls.filter((command) => command === 'mail.archive')).toHaveLength(1)
+    finish({ moved: 1, thread_id: 'acct#Archive#8' })
     await batch
   })
 

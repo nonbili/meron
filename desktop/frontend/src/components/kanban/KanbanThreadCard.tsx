@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from 'react'
+import { memo, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { useValue } from '@legendapp/state/react'
@@ -35,6 +35,7 @@ export const KanbanThreadCard = memo(function KanbanThreadCard({
   onBulkRangeSelect,
   onBulkModeSelect,
   onBulkPlainSelect,
+  onBulkContextMenu,
 }: {
   boardId: string
   thread: Message
@@ -50,6 +51,7 @@ export const KanbanThreadCard = memo(function KanbanThreadCard({
   onBulkRangeSelect?: (thread: Message) => void
   onBulkModeSelect?: (thread: Message) => void
   onBulkPlainSelect?: () => void
+  onBulkContextMenu?: (thread: Message, event: ReactMouseEvent) => void
 }) {
   const account = useValue(() => accounts$.get().find((item) => item.id === thread.account_id))
   const moving = useValue(() => kanban$.movingThread.get() === thread.thread_id)
@@ -211,6 +213,7 @@ export const KanbanThreadCard = memo(function KanbanThreadCard({
           if (bulkSelectable) {
             event.preventDefault()
             event.stopPropagation()
+            onBulkContextMenu?.(thread, event)
             return
           }
           onOpenMenu(event, thread, ownerKey)

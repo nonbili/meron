@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react'
 import {
   Archive,
   ChevronRight,
@@ -21,7 +21,7 @@ import { clearBulkSelection, setBulkSelection } from '../../states/ui'
 import { accounts$, isLocalAccountId, isMailFolderAccount } from '../../states/accounts'
 import { mail$ } from '../../states/mail'
 import { bulkMarkSelectedRead, bulkMarkSelectedUnread, bulkStarSelected } from '../../states/mailFlags'
-import { ensureAccountFolders } from '../../states/mailFolders'
+import { deletesForever, ensureAccountFolders } from '../../states/mailFolders'
 import {
   bulkArchiveSelected,
   bulkCopySelectedToFolder,
@@ -34,15 +34,22 @@ import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { FolderMenuTree } from '../menu/FolderMenuTree'
 import { MenuItem } from '../menu/MenuItem'
 
+export type BulkActionBarHandle = {
+  /** Open the bulk actions menu at a viewport point, e.g. a right-click on a row. */
+  openMenuAt: (x: number, y: number) => void
+}
+
 export function BulkActionBar({
   items,
   allItems,
   className,
+  ref,
 }: {
   items: BulkSelectionItem[]
   /** Every selectable row of the surface the bar belongs to, in display order — backs "select all". */
   allItems?: BulkSelectionItem[]
   className?: string
+  ref?: Ref<BulkActionBarHandle>
 }) {
   const { t } = useTranslation()
   const accounts = useValue(accounts$)
@@ -65,6 +72,20 @@ export function BulkActionBar({
     mailItems.length > 0 && mailItems.every((item) => !item.draft && !item.trash && !isLocalAccountId(item.accountId))
   const canMove = mailItems.length > 0 && mailAccounts.length > 0
   const canCopy = mailItems.length > 0 && mailAccounts.length > 0
+  // Mirrors deleteBulkTargets: drafts and Trash-like folders delete forever, the rest move to Trash.
+  const permanentDeletes = mailItems.filter(
+    (item) => item.draft || item.trash || deletesForever(item.accountId, item.folderId),
+  ).length
+  const deleteLabel =
+    permanentDeletes === 0
+      ? t('threads.actions.moveToTrash')
+      : permanentDeletes < mailItems.length
+        ? t('buttons.delete')
+        : mailItems.every((item) => item.draft)
+          ? t('threads.actions.discardDraft')
+          : t('threads.actions.deleteForever')
+
+  useImperativeHandle(ref, () => ({ openMenuAt: (x, y) => setMenu({ x, y }) }), [])
 
   const loadCopyTargetFolders = async () => {
     if (copyLoadRef.current) return
@@ -249,7 +270,7 @@ export function BulkActionBar({
             disabled={!canArchive}
             onClick={() => {
               setMenu(null)
-              void bulkArchiveSelected(mailItems)
+              void bulkArchiveSelected(items)
             }}
           />
           <div
@@ -298,7 +319,7 @@ export function BulkActionBar({
                       onPick={(folder) => {
                         setMenu(null)
                         setMoveOpen(false)
-                        void bulkMoveSelectedToFolder(mailItems, folder.id, account.id)
+                        void bulkMoveSelectedToFolder(items, folder.id, account.id)
                       }}
                     />
                   </div>
@@ -369,12 +390,12 @@ export function BulkActionBar({
           <div className="my-1 border-t border-border" />
           <MenuItem
             icon={<Trash2 size={13} />}
-            label={t('buttons.delete')}
+            label={deleteLabel}
             danger
             disabled={mailItems.length === 0}
             onClick={() => {
               setMenu(null)
-              void bulkDeleteSelected(mailItems)
+              void bulkDeleteSelected(items)
             }}
           />
         </FloatingContextMenu>

@@ -68,7 +68,7 @@ import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { FolderSwitcher } from '../menu/FolderSwitcher'
 import { KanbanThreadCard } from './KanbanThreadCard'
 import { KanbanColumnMinimized } from './KanbanColumnMinimized'
-import { BulkActionBar } from '../threads/BulkActionBar'
+import { BulkActionBar, type BulkActionBarHandle } from '../threads/BulkActionBar'
 import { SearchOptions } from '../search/SearchOptions'
 import { boardWallpaper } from '../../lib/wallpapers'
 import { LOAD_MORE_THRESHOLD, useFillScroller } from '../../lib/useFillScroller'
@@ -307,6 +307,14 @@ function KanbanColumnContent({
   const onBulkModeSelect = useCallback((thread: Message) => {
     toggleBulkSelection(bulkHandlersRef.current.bulkItemFor(thread))
   }, [])
+  const bulkBarRef = useRef<BulkActionBarHandle>(null)
+  // Right-click acts on the selection; an unselected card joins it rather than
+  // replacing cards the user picked one by one.
+  const onBulkContextMenu = useCallback((thread: Message, event: ReactMouseEvent) => {
+    const item = bulkHandlersRef.current.bulkItemFor(thread)
+    if (!ui$.bulkSelection.peek()[item.key]) toggleBulkSelection(item)
+    bulkBarRef.current?.openMenuAt(event.clientX, event.clientY)
+  }, [])
 
   // The board's search effect doesn't watch the filters, so a filter change
   // reloads here with whatever search currently covers this column.
@@ -434,6 +442,7 @@ function KanbanColumnContent({
           {...dragHandleProps(wrapper.dragHandle, true)}
         >
           <BulkActionBar
+            ref={bulkBarRef}
             items={bulkItems}
             allItems={threads.map(bulkItemFor)}
             className="min-h-12 rounded-t-lg border-b border-border bg-transparent"
@@ -647,6 +656,7 @@ function KanbanColumnContent({
                   onBulkRangeSelect={onBulkRangeSelect}
                   onBulkModeSelect={onBulkModeSelect}
                   onBulkPlainSelect={clearBulkSelection}
+                  onBulkContextMenu={onBulkContextMenu}
                 />
               )
             })}

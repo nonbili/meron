@@ -17,7 +17,7 @@ import {
   showUndoToast,
   type BulkSelectionItem,
 } from './ui'
-import { kanban$, kanbanKeyboardCardAfterRemoving, type KanbanCardRef } from './kanban'
+import { getKanbanColumns, kanban$, kanbanKeyboardCardAfterRemoving, type KanbanCardRef } from './kanban'
 import { isLocalSendId, discardPendingSend, cancelUnsentRescue } from './pendingSends'
 import {
   captureKeys,
@@ -206,7 +206,44 @@ function restoreRemovedThread(current: Message[], previous: Message[], threadId:
   )
 }
 
+// Which list mail$.threads holds, so a late rollback can tell it was left.
+function currentListView() {
+  return threadListViewKey(ui$.selectedAccount.peek(), ui$.selectedFolder.peek(), ui$.query.peek(), listFilterKey())
+}
+
+// What the board's columns are showing: a column pointed at another folder, or
+// a search or filter changed since, means their lists were re-read.
+function currentKanbanView() {
+  const boardId = kanban$.activeBoardId.peek()
+  return JSON.stringify([
+    boardId,
+    boardId ? getKanbanColumns(boardId) : [],
+    kanban$.searchQuery.peek().trim(),
+    kanban$.searchScope.peek(),
+    kanban$.globalFilter.peek(),
+    kanban$.globalAttachmentsOnly.peek(),
+    kanban$.filters.peek(),
+    kanban$.attachmentsOnly.peek(),
+  ])
+}
+
+/** Lists a rollback could not put its thread back into, because they now show
+ *  something else; they are re-read instead. */
+type StaleLists = { list: boolean; columns: string[] }
+
+function reloadStaleLists(stale: StaleLists) {
+  // The re-read lists the thread wherever it really is, now that its
+  // suppression is lifted; until then it is missing, not misplaced.
+  if (stale.list) void coalescedBackgroundListRefresh()
+  if (stale.columns.length > 0) void reloadThreadCards(stale.columns)
+}
+
 function removeThreadLocally(threadId: string) {
+  const previousView = currentListView()
+  const previousKanbanView = currentKanbanView()
+  // On a board, opening a card points selectedFolder at its mailbox, so the
+  // list view key moves without the screen changing.
+  const wasOnBoard = !!kanban$.activeBoardId.peek()
   const previousThreads = mail$.threads.get()
   const previousMessages = mail$.messages.get()
   const previousKanbanThreads = captureKeys(kanban$.threads.get(), kanbanKeysWithThread(threadId))
@@ -265,31 +302,47 @@ function removeThreadLocally(threadId: string) {
 
   return {
     complete: () => completeRemovedThread(threadId),
-    rollback: () => {
+    // `deferReload` hands the stale lists back for the caller to re-read once
+    // for a whole batch.
+    rollback: (options: { deferReload?: boolean } = {}): StaleLists => {
       unsuppress()
       // Put this thread back only. Restoring the whole list would resurrect
       // threads archived after this one started, which is what a fast burst
-      // looks like when an earlier move fails.
-      mail$.threads.set(restoreRemovedThread(mail$.threads.get(), previousThreads, threadId))
+      // looks like when an earlier move fails. Another folder, search or
+      // filter may be showing by now (a bulk batch runs for seconds), where
+      // this snapshot does not belong.
+      const stale: StaleLists = { list: false, columns: [] }
+      if (currentListView() === previousView) {
+        mail$.threads.set(restoreRemovedThread(mail$.threads.get(), previousThreads, threadId))
+      } else stale.list = true
       const currentMessages = mail$.messages.get()
       const seenMessages = new Set(currentMessages.map((message) => message.id))
       const missingMessages = previousMessages.filter(
         (message) => message.thread_id === threadId && !seenMessages.has(message.id),
       )
       if (missingMessages.length > 0) mail$.messages.set([...currentMessages, ...missingMessages])
+      const sameBoardView = currentKanbanView() === previousKanbanView
       for (const [key, columnThreads] of previousKanbanThreads) {
         if (!columnThreads) continue
-        kanban$.threads[key].set(restoreRemovedThread(kanban$.threads[key].get() ?? [], columnThreads, threadId))
+        if (sameBoardView) {
+          kanban$.threads[key].set(restoreRemovedThread(kanban$.threads[key].get() ?? [], columnThreads, threadId))
+        } else stale.columns.push(key)
       }
-      // The reader may already have archived the neighbour. Only come back
-      // here when the selection is still the one this removal chose.
-      if (ui$.selectedThread.get() === nextSelected) ui$.selectedThread.set(previousSelected)
-      if (previousPaneThreadId === threadId && kanban$.paneThreadId.get() === nextSelected) {
-        kanban$.paneThreadId.set(previousPaneThreadId)
+      // The reader may already have archived the neighbour, or left for
+      // another view, where this thread is not on screen to open. Only come
+      // back here when the selection is still the one this removal chose.
+      const sameView = previousKanbanView === currentKanbanView() && (wasOnBoard || currentListView() === previousView)
+      if (sameView) {
+        if (ui$.selectedThread.get() === nextSelected) ui$.selectedThread.set(previousSelected)
+        if (previousPaneThreadId === threadId && kanban$.paneThreadId.get() === nextSelected) {
+          kanban$.paneThreadId.set(previousPaneThreadId)
+        }
+        if (keyboardCardLeaves && sameCard(kanban$.keyboardCard.get(), nextKeyboardCard)) {
+          kanban$.keyboardCard.set(previousKeyboardCard)
+        }
       }
-      if (keyboardCardLeaves && sameCard(kanban$.keyboardCard.get(), nextKeyboardCard)) {
-        kanban$.keyboardCard.set(previousKeyboardCard)
-      }
+      if (!options.deferReload) reloadStaleLists(stale)
+      return stale
     },
   }
 }
@@ -428,10 +481,79 @@ export async function copyThreadToFolder(threadId: string, targetAccountId: stri
 /** After an archive in place, the conversation's copies left the Inbox
  * (`sourceFolder`): take its Inbox card off wherever it shows, a Kanban Inbox
  * column for one, while its card in the Archive folder stays. */
+/** Returns the id of the Inbox card it removed, if any. */
 function removeInboxCopyCard(threadId: string, accountId: string | undefined, sourceFolder: string | undefined) {
-  if (!sourceFolder) return
+  if (!sourceFolder) return ''
   const inboxThreadId = threadIdInFolder(threadId, accountId || threadAccountId(threadId), sourceFolder)
-  if (inboxThreadId !== threadId) removeThreadLocally(inboxThreadId).complete()
+  if (inboxThreadId === threadId) return ''
+  removeThreadLocally(inboxThreadId).complete()
+  return inboxThreadId
+}
+
+let bulkRemovalsRunning = 0
+
+/** While a bulk delete, archive or move runs, its selection is already gone:
+ *  a Delete or archive shortcut must not fall back to the thread that came
+ *  into view behind it. */
+export function bulkRemovalInProgress(): boolean {
+  return bulkRemovalsRunning > 0
+}
+
+// A bulk action takes every row off the list and leaves selection mode up
+// front. The server still gets one request at a time, so removing each row just
+// before its own request had them trickle away one round-trip apart, under a
+// selection bar with nothing left to show. `keepsRow` marks rows that stay
+// listed whatever happens, so there is nothing to remove or roll back.
+function beginBulkRemoval(
+  items: BulkSelectionItem[],
+  targets: BulkSelectionItem[],
+  keepsRow: (item: BulkSelectionItem) => boolean = () => false,
+) {
+  const view = currentListView()
+  const board = currentKanbanView()
+  const removals = targets.map((item) => (keepsRow(item) ? null : removeThreadLocally(item.threadId)))
+  const settled = new Set<number>()
+  deselectBulkThreads(items)
+  bulkRemovalsRunning++
+  return {
+    removals,
+    // A target that an earlier request in the batch already took away for good
+    // (archiving a conversation in All Mail clears its Inbox card): its own
+    // request will find nothing to do, and must not bring its card back.
+    settle(threadId: string) {
+      const index = targets.findIndex((item) => item.threadId === threadId)
+      if (index === -1) return
+      removals[index]?.complete()
+      removals[index] = null
+      settled.add(index)
+    },
+    // After a failure at `index`, that thread and the ones not yet sent come
+    // back (latest first, so each rollback's selection check sees the state it
+    // left) and are selected again for a retry — unless the reader has moved
+    // to another view or started a selection elsewhere meanwhile.
+    fail(index: number) {
+      const stale: StaleLists = { list: false, columns: [] }
+      for (const removal of removals.slice(index).reverse()) {
+        const result = removal?.rollback({ deferReload: true })
+        if (!result) continue
+        stale.list ||= result.list
+        stale.columns.push(...result.columns.filter((key) => !stale.columns.includes(key)))
+      }
+      reloadStaleLists(stale)
+      const returned = targets.slice(index).filter((_, offset) => !settled.has(index + offset))
+      if (returned.length === 0 || currentListView() !== view || currentKanbanView() !== board) return
+      const current = ui$.bulkSelection.peek()
+      if (Object.values(current).some((item) => item.groupKey !== returned[0].groupKey)) return
+      ui$.bulkSelection.set({ ...current, ...Object.fromEntries(returned.map((item) => [item.key, item])) })
+      if (!ui$.bulkAnchorKey.peek()) ui$.bulkAnchorKey.set(returned[returned.length - 1].key)
+    },
+    end() {
+      bulkRemovalsRunning--
+      // Nothing selected now: a range anchor left on a row deselected before
+      // the batch would start the next Shift-click from somewhere unexpected.
+      if (Object.keys(ui$.bulkSelection.peek()).length === 0) ui$.bulkAnchorKey.set('')
+    },
+  }
 }
 
 export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
@@ -440,17 +562,17 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
     (item) => !item.draft && !item.trash && !isLocalAccountId(item.accountId),
   )
   if (targets.length === 0) return
-  const rollbacks: Array<() => void> = []
   let completed = 0
   let alreadyArchived = 0
+  const sourceAccountIds = targets.map((item) => findLocalThread(item.threadId)?.account_id)
+  // Threads archived in the Archive folder itself stay listed there (see archiveThread).
+  const batch = beginBulkRemoval(items, targets, (item) => isArchiveFolder(item.folderId, item.accountId))
+  const { removals } = batch
+  let index = 0
   try {
-    for (const item of targets) {
-      const sourceThread = findLocalThread(item.threadId)
-      // Threads archived in the Archive folder itself stay listed there (see
-      // archiveThread): no card leaves, so there is nothing to roll back.
-      const staysListed = isArchiveFolder(item.folderId, item.accountId)
-      const removal = staysListed ? null : removeThreadLocally(item.threadId)
-      rollbacks.push(removal?.rollback ?? (() => {}))
+    for (; index < targets.length; index++) {
+      const item = targets[index]
+      const removal = removals[index]
       const res = await invoke<{ already_archived?: boolean; thread_id?: string; source_folder?: string }>(
         'mail.archive',
         {
@@ -459,7 +581,7 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
       )
       if (res?.already_archived) {
         // Nothing left in the Inbox: nothing to do, and the thread stays put.
-        rollbacks.pop()?.()
+        removal?.rollback()
         completed++
         alreadyArchived++
         continue
@@ -468,26 +590,28 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
       const archivedInPlace = res?.thread_id === item.threadId
       if (archivedInPlace) {
         removal?.rollback()
-        removeInboxCopyCard(item.threadId, item.accountId, res?.source_folder)
+        const inboxThreadId = removeInboxCopyCard(item.threadId, item.accountId, res?.source_folder)
+        if (inboxThreadId) batch.settle(inboxThreadId)
       } else if (removal) removal.complete()
       else if (res?.thread_id) removeThreadLocally(item.threadId).complete()
-      rollbacks.pop()
       completed++
       applyMutationFolderUnreads(res as MutationResult)
-      if (sourceThread?.account_id) void refreshAccountFoldersCache(sourceThread.account_id, false)
+      const sourceAccountId = sourceAccountIds[index]
+      if (sourceAccountId) void refreshAccountFoldersCache(sourceAccountId, false)
     }
     await refreshThreadLocation(undefined, false)
-    clearBulkSelection()
     const archived = targets.length - alreadyArchived
     showToast(archived ? t('mail.toast.archivedCount', { count: archived }) : t('mail.toast.alreadyArchived'))
   } catch (error) {
-    for (const rollback of rollbacks.reverse()) rollback()
+    batch.fail(index)
     const message = mailTransferError(error, t('mail.toast.archiveFailed'))
     showToast(
       completed ? `${message} ${t('mail.transferError.bulkProgress', { completed, total: targets.length })}` : message,
       'error',
     )
     if (completed) void refreshThreadLocation(undefined, false)
+  } finally {
+    batch.end()
   }
 }
 
@@ -500,20 +624,20 @@ export async function bulkMoveSelectedToFolder(
     (item) => (targetAccountId && item.accountId !== targetAccountId) || item.folderId !== targetFolderId,
   )
   if (targets.length === 0) return
-  const rollbacks: Array<() => void> = []
   let completed = 0
+  const batch = beginBulkRemoval(items, targets)
+  const { removals } = batch
+  let index = 0
   try {
-    for (const item of targets) {
-      const removal = removeThreadLocally(item.threadId)
-      rollbacks.push(removal.rollback)
+    for (; index < targets.length; index++) {
+      const item = targets[index]
       const res = await invoke('mail.move', {
         thread_id: item.threadId,
         target_folder_id: targetFolderId,
         ...(targetAccountId ? { target_account_id: targetAccountId } : {}),
       })
       assertMoveAffected(res)
-      removal.complete()
-      rollbacks.pop()
+      removals[index]?.complete()
       completed++
       rememberThreadTransfer({
         action: 'move',
@@ -525,16 +649,17 @@ export async function bulkMoveSelectedToFolder(
     }
     await refreshThreadLocation(targets[0]?.accountId, false)
     if (targetAccountId) void loadFolders(targetAccountId, false)
-    clearBulkSelection()
     showToast(t('mail.toast.movedCount', { count: targets.length }))
   } catch (error) {
-    for (const rollback of rollbacks.reverse()) rollback()
+    batch.fail(index)
     const message = mailTransferError(error, t('mail.toast.moveFailed'))
     showToast(
       completed ? `${message} ${t('mail.transferError.bulkProgress', { completed, total: targets.length })}` : message,
       'error',
     )
     if (completed) void refreshThreadLocation(undefined, false)
+  } finally {
+    batch.end()
   }
 }
 
@@ -571,16 +696,10 @@ export async function bulkCopySelectedToFolder(
   }
 }
 
-// A batch deselects each thread as it goes, so a second Delete while one runs
-// would start at the thread still being deleted and send it twice; on a server
-// that copies to Trash before expunging, that is two Trash copies.
+// One bulk delete at a time: one that fails puts its rest back in the
+// selection, and a second batch started meanwhile could send those twice; on a
+// server that copies to Trash before expunging, that is two Trash copies.
 let bulkDeleteRunning = false
-
-/** While a batch runs, a Delete shortcut must not fall back to the open
- *  thread: the batch may have emptied the selection with threads still to go. */
-export function bulkDeleteInProgress(): boolean {
-  return bulkDeleteRunning
-}
 
 export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
   if (bulkDeleteRunning) {
@@ -615,43 +734,37 @@ async function deleteBulkTargets(items: BulkSelectionItem[]) {
   }
 
   const completed: BulkSelectionItem[] = []
-  let removal: ReturnType<typeof removeThreadLocally> | null = null
-  let failed: BulkSelectionItem | null = null
+  // Read before the rows leave the store.
+  const recoveryIds = targets.map((item) => recoveryDraftIdsInThread(item.threadId))
+  const batch = beginBulkRemoval(items, targets)
+  const { removals } = batch
+  let index = 0
   try {
-    for (const item of targets) {
-      const recoveryIds = recoveryDraftIdsInThread(item.threadId)
-      failed = item
-      removal = removeThreadLocally(item.threadId)
+    for (; index < targets.length; index++) {
+      const item = targets[index]
       const res = await invoke('mail.delete', {
         thread_id: item.threadId,
         ...(item.folderId ? { folder: item.folderId } : {}),
       })
       assertDeleteAffected(res)
-      recoveryIds.forEach(({ id, account }) => forgetStandaloneRecoveryDraft(id, account))
-      removal.complete()
-      removal = null
+      recoveryIds[index].forEach(({ id, account }) => forgetStandaloneRecoveryDraft(id, account))
+      removals[index]?.complete()
       completed.push(item)
       applyMutationFolderUnreads(res as MutationResult)
     }
-    // The selection stays up until the batch is done, so shortcuts keep
-    // acting on it rather than on whichever thread came into view. Then only
-    // the deleted threads leave it: a new selection made meanwhile stays.
     await refreshThreadLocation(undefined, false)
-    deselectBulkThreads(completed)
-    // Nothing selected now: a range anchor left on a row deselected before
-    // the delete would start the next Shift-click from somewhere unexpected.
-    if (Object.keys(ui$.bulkSelection.peek()).length === 0) ui$.bulkAnchorKey.set('')
     showToast(t('mail.toast.deletedCount', { count: targets.length }))
   } catch (error) {
-    // Threads already deleted stay gone and leave the selection, so a retry
-    // carries only the rest; the one that failed comes back.
-    removal?.rollback()
-    deselectBulkThreads(completed)
+    // Threads already deleted stay gone, so a retry carries only the rest.
+    batch.fail(index)
+    const failed = targets[Math.min(index, targets.length - 1)]
     const message = deleteFailedMessage(error, { accountId: failed?.accountId, folderId: failed?.folderId })
     showToast(
       completed.length ? `${message} ${t('mail.toast.deletedCount', { count: completed.length })}.` : message,
       'error',
     )
+  } finally {
+    batch.end()
   }
 }
 
@@ -849,8 +962,7 @@ export async function discardSavedDraftCopy(
 
   const previousThreads = mail$.threads.get()
   const previousMessages = mail$.messages.get()
-  const viewKey = () =>
-    threadListViewKey(ui$.selectedAccount.peek(), ui$.selectedFolder.peek(), ui$.query.peek(), listFilterKey())
+  const viewKey = currentListView
   const previousView = viewKey()
   const discardedDraftMessageId = normalizeMessageId(draft.draftMessageId)
   const withoutDiscardedDraft = (messages: Message[]) =>

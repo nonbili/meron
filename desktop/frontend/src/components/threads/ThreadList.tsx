@@ -55,7 +55,7 @@ import { ThreadActionsMenu } from './ThreadActionsMenu'
 import { ThreadContextMenu, useThreadContextMenu } from './ThreadContextMenu'
 import { ThreadListItem } from './ThreadListItem'
 import { ThreadSearchInput } from './ThreadSearchInput'
-import { BulkActionBar } from './BulkActionBar'
+import { BulkActionBar, type BulkActionBarHandle } from './BulkActionBar'
 
 type ThreadListProps = {
   width?: number
@@ -230,6 +230,7 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   const desktopBulk = isWailsDesktopRuntime() || !!system
   const bulkItems = selectedBulkItems()
   const bulkGroupKey = `thread-list:${selectedAccount}:${selectedFolder}`
+  const bulkBarRef = useRef<BulkActionBarHandle>(null)
   const bulkInThisList =
     desktopBulk && bulkItems.length > 0 && bulkItems.every((item) => item.groupKey === bulkGroupKey)
 
@@ -322,7 +323,12 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
         </div>
       )}
       {bulkInThisList ? (
-        <BulkActionBar items={bulkItems} allItems={filteredThreads.map(bulkItemFor)} className="min-h-12" />
+        <BulkActionBar
+          ref={bulkBarRef}
+          items={bulkItems}
+          allItems={filteredThreads.map(bulkItemFor)}
+          className="min-h-12"
+        />
       ) : (
         // Less padding on the right than the left: the trailing icon buttons carry
         // their own, so px-4 on both sides left the row lopsided.
@@ -569,6 +575,10 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                     if (bulkInThisList) {
                       event.preventDefault()
                       event.stopPropagation()
+                      // Right-click acts on the selection; an unselected row joins it
+                      // rather than replacing rows the user picked one by one.
+                      if (!bulkItems.some((item) => item.key === bulkItem.key)) toggleBulkSelection(bulkItem)
+                      bulkBarRef.current?.openMenuAt(event.clientX, event.clientY)
                       return
                     }
                     threadMenu.open(event, thread)
