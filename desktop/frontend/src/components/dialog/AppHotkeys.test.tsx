@@ -9,6 +9,7 @@ import { settings$ } from '../../states/settings'
 import { compose$ } from '../../states/composeState'
 import { accounts$ } from '../../states/accounts'
 import { AppHotkeys } from './AppHotkeys'
+import { bulkDeleteSelected } from '../../states/mailMoves'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 
 const original = (window as any).go
@@ -71,6 +72,45 @@ describe('AppHotkeys', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(calls.filter((command) => command.startsWith('mail.'))).toEqual([])
     expect(ui$.selectedThread.peek()).toBe('acct#INBOX#7')
+  })
+
+  // A batch may empty the selection with threads still to go; Delete must not
+  // fall back to the thread that came into view behind it.
+  it('keeps Delete off the open thread while a bulk delete runs', async () => {
+    let finish: (value: unknown) => void = () => {}
+    ;(window as any).go.main.App.Invoke = (command: string) => {
+      calls.push(command)
+      return command === 'mail.delete' ? new Promise((resolve) => (finish = resolve)) : Promise.resolve({})
+    }
+    const item = {
+      key: 'acct#INBOX#8',
+      groupKey: '',
+      threadId: 'acct#INBOX#8',
+      accountId: 'acct',
+      folderId: 'inbox',
+      surface: 'thread-list' as const,
+      kind: 'mail' as const,
+      unread: false,
+      starred: false,
+      draft: false,
+      trash: false,
+    }
+    const batch = bulkDeleteSelected([item])
+    const view = render(
+      <>
+        <AppHotkeys />
+        <div data-thread-list>
+          <button>row</button>
+        </div>
+      </>,
+    )
+    const row = view.getByText('row')
+    row.focus()
+    fireEvent.keyDown(row, { key: 'Delete' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(calls.filter((command) => command === 'mail.delete')).toHaveLength(1)
+    finish({ deleted: 1 })
+    await batch
   })
 
   it('keeps mail shortcuts off the mail under the event editor from the panel', async () => {

@@ -86,21 +86,20 @@ func TestSidecarErrorMessage(t *testing.T) {
 
 func TestSidecarCallTimeouts(t *testing.T) {
 	tests := map[string]time.Duration{
-		"account.connect":             45 * time.Second,
-		"messages.thread":             30 * time.Second,
-		"messages.markRead":           30 * time.Second,
-		"messages.markStarred":        30 * time.Second,
-		"messages.markAllRead":        30 * time.Second,
-		"messages.markAllReadUnified": 30 * time.Second,
-		"discard_draft":               30 * time.Second,
-		"folders.list":                15 * time.Second,
-		"folders.delete":              30 * time.Second,
-		"folders.rename":              30 * time.Second,
-		"rss.importOpml":              15 * time.Second,
-		"backup.export":               30 * time.Second,
-		"backup.import":               30 * time.Second,
-		"unknown.sidecarCall":         5 * time.Second,
-		"eml.read":                    2 * time.Minute,
+		"account.list":         5 * time.Second,
+		"app.prefsGet":         5 * time.Second,
+		"rss.thread":           5 * time.Second,
+		"tasks.lists":          5 * time.Second,
+		"tasks.items":          5 * time.Second,
+		"account.connect":      45 * time.Second,
+		"messages.delete":      30 * time.Second,
+		"messages.setTags":     30 * time.Second,
+		"folders.list":         30 * time.Second,
+		"backup.export":        30 * time.Second,
+		"unknown.sidecarCall":  30 * time.Second,
+		"messages.emptyFolder": time.Minute,
+		"messages.move":        2 * time.Minute,
+		"eml.read":             2 * time.Minute,
 	}
 	for method, want := range tests {
 		if got := sidecarCallTimeout(method); got != want {

@@ -296,6 +296,23 @@ export function clearBulkSelection() {
   ui$.bulkAnchorKey.set('')
 }
 
+/** Drop the selected rows of threads an action already took care of, so a
+ *  retry from the bulk bar only carries the ones left. */
+export function deselectBulkThreads(items: BulkSelectionItem[]) {
+  const doneThreads = new Set(items.map((item) => item.threadId))
+  const doneKeys = new Set(items.map((item) => item.key))
+  const current = ui$.bulkSelection.peek()
+  const remaining = Object.entries(current).filter(([, item]) => !doneThreads.has(item.threadId))
+  if (remaining.length !== Object.keys(current).length) ui$.bulkSelection.set(Object.fromEntries(remaining))
+  // Shift-click ranges start from the anchor: when its row is gone (selected
+  // or not when the action ran), start them from a row still selected.
+  const anchorKey = ui$.bulkAnchorKey.peek()
+  const anchor = current[anchorKey]
+  if (doneKeys.has(anchorKey) || (anchor && doneThreads.has(anchor.threadId))) {
+    ui$.bulkAnchorKey.set(remaining.at(-1)?.[0] ?? '')
+  }
+}
+
 export function setBulkSelection(items: BulkSelectionItem[], anchorKey = items.at(-1)?.key ?? '') {
   const groupKey = items.find((item) => item.key === anchorKey)?.groupKey ?? items.at(-1)?.groupKey ?? ''
   const scopedItems = groupKey ? items.filter((item) => item.groupKey === groupKey) : items

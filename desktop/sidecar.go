@@ -448,13 +448,6 @@ func sidecarCallTimeout(method string) time.Duration {
 	// A full-folder STORE + EXPUNGE on a large Trash can take a while.
 	case "messages.emptyFolder", "mcp.prepareDelete", "mcp.delete", "mcp.organize":
 		return 60 * time.Second
-	// Backups derive a key with 600k PBKDF2 rounds, on top of reading or
-	// writing every account, feed and setting.
-	case "backup.export", "backup.import":
-		return 30 * time.Second
-	// Key generation, keyring imports (every key checked) and S2K.
-	case "pgp.account.create", "pgp.account.importKey", "pgp.account.exportSecret", "pgp.peers.importPreview", "pgp.peers.import":
-		return 30 * time.Second
 	// A key lookup asks each source in turn, up to 10s each (WKD tries two hosts).
 	case "pgp.lookup":
 		return 60 * time.Second
@@ -469,16 +462,14 @@ func sidecarCallTimeout(method string) time.Duration {
 	// A snapshot or a restore copies every archived message.
 	case "account.localBackup", "account.localRestore":
 		return 10 * time.Minute
-	case "messages.exportUids":
-		return 30 * time.Second
-	// A token exchange plus the profile, or the profile photo.
-	case "oauth.exchangeCode", "oauth.fetchPhoto":
-		return 30 * time.Second
-	case "messages.read", "messages.thread", "messages.markRead", "messages.markStarred", "messages.markAllRead", "messages.markAllReadUnified", "send", "save_draft", "discard_draft", "folders.delete", "folders.rename":
-		return 30 * time.Second
-	case "folders.list", "folders.create", "messages.recent", "messages.sync", "rss.markRead", "rss.markAllRead", "watch.start", "watch.stop", "account.addRss", "account.addLocal", "feed.add", "rss.importOpml":
-		return 15 * time.Second
-	default:
+	// Reads the app cannot start without, served from the local store and
+	// retried on timeout (invokeRetryingTimeout), so a busy core is noticed fast.
+	case "account.list", "app.prefsGet", "rss.thread", "tasks.lists", "tasks.items":
 		return 5 * time.Second
+	// Anything else may go to a mail, calendar or feed server. The core bounds
+	// its own network I/O (20s connect, 20s+ per protocol step), so the bridge
+	// must not give up first on a slow link.
+	default:
+		return 30 * time.Second
 	}
 }

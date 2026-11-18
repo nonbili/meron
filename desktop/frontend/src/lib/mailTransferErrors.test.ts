@@ -36,6 +36,26 @@ describe('mail transfer errors', () => {
     },
   )
 
+  it('gives an unknown outcome its own hint, and confirmed copies both', () => {
+    const options = { uncertainHint: 'Check this folder and Trash before retrying.' }
+    expect(mailTransferError('sidecar messages.delete timeout after 30s', 'Delete failed', options)).toBe(
+      'Delete failed: The operation timed out before completion could be confirmed. Check this folder and Trash before retrying.',
+    )
+    const copied = mailTransferError(
+      'Move copied messages but could not confirm removal from the source folder: connection lost',
+      'Delete failed',
+      options,
+    )
+    expect(copied).toContain('Check the destination')
+    expect(copied).toMatch(/duplicates\. Check this folder and Trash before retrying\.$/)
+  })
+
+  it('treats an engine exit with the request out as an unknown outcome', () => {
+    expect(mailTransferError('sidecar messages.move error: sidecar exited', 'Move failed')).toBe(
+      'Move failed: The mail engine stopped before completion could be confirmed. Check the destination before retrying; retrying may create duplicates.',
+    )
+  })
+
   it('preserves unfamiliar diagnostics and handles missing error details', () => {
     expect(mailTransferError('server policy: custom restriction', 'Copy failed')).toBe(
       'server policy: custom restriction',

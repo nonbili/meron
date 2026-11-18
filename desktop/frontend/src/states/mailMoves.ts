@@ -1,13 +1,22 @@
 import { threadWindowSession } from '../lib/windowSession'
 import { forgetStandaloneRecoveryDraft } from '../lib/composeWindow'
-import type { Message } from '../types'
+import type { Folder, Message } from '../types'
 import { rememberThreadTransfer } from './recentThreadTransfers'
-import { isLocalAccountId } from './accounts'
+import { accounts$, isLocalAccountId } from './accounts'
+import { accountLabel } from '../lib/kanbanData'
 import { invoke } from '../lib/bridge'
-import { contextualErrorMessage } from '../lib/errors'
+import { contextualErrorMessage, errorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
 import { mailTransferError } from '../lib/mailTransferErrors'
-import { clearBulkSelection, confirmAction, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
+import {
+  clearBulkSelection,
+  confirmAction,
+  deselectBulkThreads,
+  ui$,
+  showToast,
+  showUndoToast,
+  type BulkSelectionItem,
+} from './ui'
 import { kanban$, kanbanKeyboardCardAfterRemoving, type KanbanCardRef } from './kanban'
 import { isLocalSendId, discardPendingSend, cancelUnsentRescue } from './pendingSends'
 import {
@@ -67,6 +76,58 @@ function assertDeleteAffected(res: unknown) {
   if (typeof deleted === 'number' && deleted <= 0) {
     throw new Error('Delete failed: no matching messages found')
   }
+}
+
+type DeleteSource = { accountId?: string; folderId?: string }
+
+/** The account and full folder path a delete came from: the view may not say
+ *  (unified folders, search, a bulk selection across folders), and two folders
+ *  can share a leaf name. */
+function deleteSourceLabel(accountId: string, folderId: string, folder: Folder | undefined) {
+  const name = folderId.toUpperCase() === 'INBOX' ? t('folders.roles.inbox') : folder?.name || folderId
+  const accounts = accounts$.peek()
+  const account = accounts.find((item) => item.id === accountId)
+  // Two accounts may share a display name; their addresses tell them apart.
+  const shared =
+    !!account?.display_name &&
+    accounts.some((item) => item.id !== accountId && item.display_name === account.display_name)
+  return `${shared ? account.email : accountLabel(accountId, accounts)} / ${name}`
+}
+
+/** The account and folder a thread id names (`account#folder#key`), split the
+ *  way the bridge splits it, for a thread no longer in any loaded list. */
+function threadIdSource(threadId: string): DeleteSource {
+  const first = threadId.indexOf('#')
+  const last = threadId.lastIndexOf('#')
+  if (first <= 0 || last <= first) return {}
+  return { accountId: threadId.slice(0, first), folderId: threadId.slice(first + 1, last) }
+}
+
+/** A delete that may have moved mail to Trash is checked in its folder and
+ *  that account's Trash when its outcome is unknown. Which folder the server
+ *  expunges in place rather than moving out of is the server's call (a folder
+ *  named, or even classified, as Trash may not be the one it uses), so only a
+ *  local folder, which has no Trash, goes without the Trash check. */
+function deleteFailedMessage(error: unknown, source: DeleteSource) {
+  const { accountId, folderId } = source
+  let hint = t('mail.transferError.checkDeleted')
+  let permissionReason = t('mail.transferError.deletePermission')
+  if (accountId && folderId) {
+    const folder = [...(mail$.foldersByAccount.peek()?.[accountId] ?? []), ...mail$.folders.peek()].find(
+      (item) => item.account_id === accountId && item.id === folderId,
+    )
+    const mailbox = deleteSourceLabel(accountId, folderId, folder)
+    if (isLocalAccountId(accountId)) {
+      // No server and no Trash: a refusal comes from local storage, in its
+      // own words.
+      hint = ''
+      permissionReason = errorMessage(error, '').replace(/^sidecar \S+ error: /, '')
+    } else {
+      hint = t('mail.transferError.checkDeletedIn', { mailbox })
+      permissionReason = t('mail.transferError.deletePermissionIn', { mailbox })
+    }
+  }
+  return mailTransferError(error, t('mail.toast.deleteFailed'), { uncertainHint: hint, permissionReason })
 }
 
 function assertMoveAffected(res: unknown, label = 'Move') {
@@ -510,7 +571,31 @@ export async function bulkCopySelectedToFolder(
   }
 }
 
+// A batch deselects each thread as it goes, so a second Delete while one runs
+// would start at the thread still being deleted and send it twice; on a server
+// that copies to Trash before expunging, that is two Trash copies.
+let bulkDeleteRunning = false
+
+/** While a batch runs, a Delete shortcut must not fall back to the open
+ *  thread: the batch may have emptied the selection with threads still to go. */
+export function bulkDeleteInProgress(): boolean {
+  return bulkDeleteRunning
+}
+
 export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
+  if (bulkDeleteRunning) {
+    if (uniqueThreadItems(items).length > 0) showToast(t('mail.toast.deleteStillRunning'), 'error')
+    return
+  }
+  bulkDeleteRunning = true
+  try {
+    await deleteBulkTargets(items)
+  } finally {
+    bulkDeleteRunning = false
+  }
+}
+
+async function deleteBulkTargets(items: BulkSelectionItem[]) {
   const targets = uniqueThreadItems(items)
   if (targets.length === 0) return
   const permanentTargets = targets.filter(
@@ -529,12 +614,14 @@ export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
     if (!confirmed) return
   }
 
-  const rollbacks: Array<() => void> = []
+  const completed: BulkSelectionItem[] = []
+  let removal: ReturnType<typeof removeThreadLocally> | null = null
+  let failed: BulkSelectionItem | null = null
   try {
     for (const item of targets) {
       const recoveryIds = recoveryDraftIdsInThread(item.threadId)
-      const removal = removeThreadLocally(item.threadId)
-      rollbacks.push(removal.rollback)
+      failed = item
+      removal = removeThreadLocally(item.threadId)
       const res = await invoke('mail.delete', {
         thread_id: item.threadId,
         ...(item.folderId ? { folder: item.folderId } : {}),
@@ -542,14 +629,29 @@ export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
       assertDeleteAffected(res)
       recoveryIds.forEach(({ id, account }) => forgetStandaloneRecoveryDraft(id, account))
       removal.complete()
+      removal = null
+      completed.push(item)
       applyMutationFolderUnreads(res as MutationResult)
     }
+    // The selection stays up until the batch is done, so shortcuts keep
+    // acting on it rather than on whichever thread came into view. Then only
+    // the deleted threads leave it: a new selection made meanwhile stays.
     await refreshThreadLocation(undefined, false)
-    clearBulkSelection()
+    deselectBulkThreads(completed)
+    // Nothing selected now: a range anchor left on a row deselected before
+    // the delete would start the next Shift-click from somewhere unexpected.
+    if (Object.keys(ui$.bulkSelection.peek()).length === 0) ui$.bulkAnchorKey.set('')
     showToast(t('mail.toast.deletedCount', { count: targets.length }))
   } catch (error) {
-    for (const rollback of rollbacks.reverse()) rollback()
-    showToast(error instanceof Error ? error.message : t('mail.toast.deleteFailed'), 'error')
+    // Threads already deleted stay gone and leave the selection, so a retry
+    // carries only the rest; the one that failed comes back.
+    removal?.rollback()
+    deselectBulkThreads(completed)
+    const message = deleteFailedMessage(error, { accountId: failed?.accountId, folderId: failed?.folderId })
+    showToast(
+      completed.length ? `${message} ${t('mail.toast.deletedCount', { count: completed.length })}.` : message,
+      'error',
+    )
   }
 }
 
@@ -717,7 +819,13 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
     }
   } catch (error) {
     rollback()
-    showToast(error instanceof Error ? error.message : t('mail.toast.deleteFailed'), 'error')
+    showToast(
+      deleteFailedMessage(error, {
+        accountId: sourceThread?.account_id ?? threadIdSource(threadId).accountId,
+        folderId: sourceFolder || threadIdSource(threadId).folderId,
+      }),
+      'error',
+    )
   }
 }
 
@@ -936,7 +1044,13 @@ export async function deleteMessage(message: Message): Promise<boolean> {
       }
       removeKanbanThread(threadId)
     }
-    await reloadThreadCards(kanbanKeys)
+    // The message is gone from here on, so a card reload that fails is not a
+    // failed delete: the next refresh corrects the cards.
+    try {
+      await reloadThreadCards(kanbanKeys)
+    } catch (error) {
+      console.error('Reloading thread cards after a delete failed:', error)
+    }
     const selectedAcc = ui$.selectedAccount.get()
     if (selectedAcc) void loadFolders(selectedAcc, false)
     if (message.account_id && message.account_id !== selectedAcc) {
@@ -945,7 +1059,13 @@ export async function deleteMessage(message: Message): Promise<boolean> {
     return true
   } catch (error) {
     mail$.messages.set(previousMessages)
-    showToast(error instanceof Error ? error.message : t('mail.toast.deleteFailed'), 'error')
+    showToast(
+      deleteFailedMessage(error, {
+        accountId: message.account_id,
+        folderId: message.folder_id,
+      }),
+      'error',
+    )
     return false
   }
 }

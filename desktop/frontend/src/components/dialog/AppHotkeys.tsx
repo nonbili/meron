@@ -33,7 +33,13 @@ import {
   bulkMarkSelectedUnread,
   bulkStarSelected,
 } from '../../states/mailFlags'
-import { archiveThread, deleteThread, bulkArchiveSelected, bulkDeleteSelected } from '../../states/mailMoves'
+import {
+  archiveThread,
+  deleteThread,
+  bulkArchiveSelected,
+  bulkDeleteInProgress,
+  bulkDeleteSelected,
+} from '../../states/mailMoves'
 import { openComposeTab, openReplyInFullEditor, closeMessageTab, toggleConversationMode } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { closeComposeSessionKeepingDraft } from '../../states/composeSessions'
@@ -213,6 +219,9 @@ function deleteKeyFocusAllowed(): boolean {
 // ui$.selectedThread either way), unlike the other bare shortcuts.
 function handleDeleteKey(key: string, target: EventTarget | null): boolean {
   if (key !== 'Delete' || isTyping(target) || modalOpen() || mailCovered() || !deleteKeyFocusAllowed()) return false
+  // A batch still deleting owns the key: an emptied selection is not a cue to
+  // delete the thread that came into view behind it.
+  if (bulkDeleteInProgress()) return true
   const threadId = activeThreadId()
   const bulkItems = selectedBulkItems()
   if (bulkItems.length > 0) {
@@ -485,6 +494,10 @@ export function AppHotkeys() {
           markUnreadWithUndo(selected())
           break
         case 'thread.delete':
+          if (bulkDeleteInProgress()) {
+            event.preventDefault()
+            break
+          }
           if (bulkSelected().length > 0) {
             event.preventDefault()
             void bulkDeleteSelected(bulkSelected())

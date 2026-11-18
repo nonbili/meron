@@ -3,7 +3,16 @@ import { t } from './i18n'
 
 // Backend failures can cross Wails as strings, Errors, or message objects.
 // Keep the original diagnostic in the console; toasts explain what to do next.
-export function mailTransferError(error: unknown, fallback: string): string {
+// `uncertainHint` replaces the destination check for an unknown outcome, for
+// changes like a delete that may have no destination; empty leaves it out.
+// After confirmed copies it follows the duplicates warning, to say where.
+// `permissionReason` words a refusal for a change without a destination. Copies the backend
+// reports having made still get the duplicates warning.
+export function mailTransferError(
+  error: unknown,
+  fallback: string,
+  options: { uncertainHint?: string; permissionReason?: string } = {},
+): string {
   const detail = errorMessage(error, fallback)
   console.error('Mail transfer failed:', detail)
   const lower = detail.toLowerCase()
@@ -20,9 +29,13 @@ export function mailTransferError(error: unknown, fallback: string): string {
   } else if (/\btrycreate\b|\bnonexistent\b|mailbox does not exist|no such (?:mailbox|folder)/.test(lower)) {
     reason = t('mail.transferError.missingFolder')
   } else if (/\bnoperm\b|permission denied|not permitted|access denied/.test(lower)) {
-    reason = t('mail.transferError.permission')
+    reason = options.permissionReason ?? t('mail.transferError.permission')
   } else if (/\bauthenticationfailed\b|authentication failed|login failed|account needs reconnect/.test(lower)) {
     reason = t('mail.transferError.authentication')
+  } else if (/\bsidecar exited\b/.test(lower)) {
+    // The engine quit with the request out: it may have finished it first.
+    reason = t('mail.transferError.engineStopped')
+    uncertain = true
   } else if (/timed? out|timeout/.test(lower)) {
     reason = t('mail.transferError.timeout')
     uncertain = true
@@ -45,8 +58,13 @@ export function mailTransferError(error: unknown, fallback: string): string {
     }
     parts.push(t('mail.transferError.progress', { copied: Number(progress[1]), total: Number(progress[2]) }))
   }
-  if (uncertain || copiedNotRemoved || (progress && Number(progress[1]) > 0)) {
+  if (copiedNotRemoved || (progress && Number(progress[1]) > 0)) {
     parts.push(t('mail.transferError.checkDestination'))
+    // Where to look, when the caller knows better than "the destination".
+    if (options.uncertainHint) parts.push(options.uncertainHint)
+  } else if (uncertain) {
+    const hint = options.uncertainHint ?? t('mail.transferError.checkDestination')
+    if (hint) parts.push(hint)
   }
   return parts.join(' ')
 }
