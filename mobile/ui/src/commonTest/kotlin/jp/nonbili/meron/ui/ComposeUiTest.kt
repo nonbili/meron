@@ -8,6 +8,7 @@ import jp.nonbili.meron.shared.CoreEventStream
 import jp.nonbili.meron.shared.DraftAttachment
 import jp.nonbili.meron.shared.MeronCore
 import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.MessageCrypto
 import jp.nonbili.meron.shared.SignatureMark
 import jp.nonbili.meron.shared.SignaturePlacement
 import jp.nonbili.meron.shared.ThreadSummary
@@ -672,6 +673,43 @@ class ComposeUiTest {
 
         assertEquals("now-known@example.com", state.quickReplyDraftId)
         assertTrue(state.quickReplyDraftSaved)
+    }
+
+    @Test
+    fun quickReplyDoesNotTakeADraftWithoutAReadableBody() {
+        val state = testState()
+        state.coreAccounts = listOf(aliasAccount())
+        state.selectedCoreThread = threadSummary(id = "t1")
+        state.quickReplyThreadId = "t1"
+        val parent = messageBody(id = "m1", folderId = "INBOX")
+        val draft = messageBody(id = "d1", folderId = "Drafts", messageId = "draft-1", fromAddr = "me@example.com")
+
+        // Its body couldn't be fetched, or decrypted on this device: an empty
+        // bar holding its id would save over it, or discard it on Back, unseen.
+        for (unreadable in listOf(draft.copy(bodyMissing = true), draft.copy(crypto = MessageCrypto(encrypted = true, problem = "no_key")))) {
+            state.hydrateQuickReplyFromTailDraft("t1", listOf(parent, unreadable))
+
+            assertEquals("", state.quickReplyDraftId)
+            assertFalse(state.quickReplyDraftSaved)
+        }
+    }
+
+    @Test
+    fun quickReplyLeavesADraftWithABccOrReplyToToTheFullComposer() {
+        val state = testState()
+        state.coreAccounts = listOf(aliasAccount())
+        state.selectedCoreThread = threadSummary(id = "t1")
+        state.quickReplyThreadId = "t1"
+        val parent = messageBody(id = "m1", folderId = "INBOX")
+        val draft = messageBody(id = "d1", folderId = "Drafts", messageId = "draft-1", fromAddr = "me@example.com")
+
+        // The bar would save the draft back without them.
+        for (fuller in listOf(draft.copy(bcc = "hidden@example.com"), draft.copy(replyTo = "elsewhere@example.com"))) {
+            state.hydrateQuickReplyFromTailDraft("t1", listOf(parent, fuller))
+
+            assertEquals("", state.quickReplyDraftId)
+            assertFalse(state.quickReplyDraftSaved)
+        }
     }
 
     @Test

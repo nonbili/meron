@@ -23,7 +23,7 @@ import { getActiveThread, normalizeMessageId } from './mail'
 import { mail$ } from './mailState'
 import { isDraftFolder } from './mailFolders'
 import { LOCAL_SEND_PREFIX } from './pendingSends'
-import { mayQuoteOriginal, ownSentCrypto } from '../lib/crypto'
+import { decryptFailed, mayQuoteOriginal, ownSentCrypto } from '../lib/crypto'
 import { htmlToText, resolveInlineCids } from '../lib/html'
 import { parseMailto } from '../lib/mailto'
 import {
@@ -1086,11 +1086,27 @@ async function openDraftMessageInCompose(draft: Message) {
       return true
     }
   }
+  // A draft whose body couldn't be fetched or decrypted would seed an empty
+  // editor holding the real draft's id: a save would overwrite it with nothing,
+  // ✕ discard it unseen.
+  if (draft.body_missing || decryptFailed(draft.crypto)) {
+    showDraftNotFound()
+    return true
+  }
   const id = openComposeTab(composeFromDraftMessage(draft))
   if (!id) return true
 
   await fetchComposeTabAttachments(id, draft.attachments ?? [], draft.body_html ?? '')
   return true
+}
+
+// The read found no draft behind a Drafts row (a stale card, or the draft is
+// gone). The row is only a list summary: its From is the counterpart and an
+// encrypted draft's subject is the placeholder. A composer seeded from it would
+// still carry the real draft's id, so ✕ would discard that draft and every save
+// would be refused or overwrite it with an empty copy.
+function showDraftNotFound() {
+  showToast(t('compose.toast.couldNotOpenDraft'), 'error')
 }
 
 // Restore a saved server-side Drafts row into the full composer. Drafts are
@@ -1114,10 +1130,13 @@ export async function openDraftCompose(thread: Message) {
       thread_id: thread.thread_id,
       limit: CONVERSATION_PAGE_SIZE,
     })
-    const draft =
-      newestMessage(
-        (result.messages ?? []).filter((message) => isDraftFolder(message.folder_id, message.account_id)),
-      ) ?? thread
+    const draft = newestMessage(
+      (result.messages ?? []).filter((message) => isDraftFolder(message.folder_id, message.account_id)),
+    )
+    if (!draft) {
+      showDraftNotFound()
+      return true
+    }
     // The read can resolve to a copy under a different id; hold that one too for
     // the (synchronous) hop to the tab that now owns it.
     const releaseResolved = reserveOpeningDraft(draft)
@@ -1165,8 +1184,11 @@ export async function openDraftConversationOrCompose(thread: Message) {
       limit: CONVERSATION_PAGE_SIZE,
     })
     const messages = result.messages ?? []
-    const draft =
-      newestMessage(messages.filter((message) => isDraftFolder(message.folder_id, message.account_id))) ?? thread
+    const draft = newestMessage(messages.filter((message) => isDraftFolder(message.folder_id, message.account_id)))
+    if (!draft) {
+      showDraftNotFound()
+      return true
+    }
 
     // A saved reply already open in another window belongs to its editor,
     // even when this Drafts row would normally open the inline conversation.

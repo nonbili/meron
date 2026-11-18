@@ -338,6 +338,69 @@ describe('openThreadTabById', () => {
     expect(calls.filter((call) => call.command === 'mail.threadRead')).toHaveLength(1)
   })
 
+  // The list row is only a summary: for a draft its From is the counterpart and
+  // an encrypted one's subject is the placeholder. When the read can't find the
+  // draft, a composer seeded from the row would carry the real draft's id, so ✕
+  // would discard the draft and every save would be refused or overwrite it.
+  for (const [name, open] of [
+    ['openDraftCompose', openDraftCompose],
+    ['openDraftConversationOrCompose', openDraftConversationOrCompose],
+  ] as const) {
+    it(`${name} opens no composer from the list row when the read finds no draft`, async () => {
+      const row = message({
+        id: 'acc-notification#Drafts#42#99',
+        folder_id: 'Drafts',
+        thread_id: 'acc-notification#Drafts#t.stale',
+        from_addr: 'you@example.com',
+        to: 'you@example.com',
+        subject: '[...]',
+        body: '',
+      })
+      ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+        calls.push({ command, payload })
+        if (command === 'mail.threadRead') return { messages: [] }
+        return {}
+      }
+
+      expect(await open(row)).toBe(true)
+
+      expect(compose$.tabs.get()).toHaveLength(0)
+      expect(ui$.toastTone.get()).toBe('error')
+      expect(ui$.toast.get()).toBe("Couldn't open draft")
+    })
+
+    // The read found the draft but not its body, or couldn't decrypt it: an
+    // editor seeded with nothing would still hold the draft's id, so a save or
+    // ✕ would destroy it.
+    for (const [why, unreadable] of [
+      ['is missing', { body_missing: true }],
+      ['could not be decrypted', { crypto: { encrypted: true, problem: 'no_key' } }],
+    ] as const) {
+      it(`${name} opens no composer for a draft whose body ${why}`, async () => {
+        const draft = message({
+          id: 'acc-notification#Drafts#42#99',
+          folder_id: 'Drafts',
+          thread_id: 'acc-notification#Drafts#99',
+          from_addr: 'you@example.com',
+          to: 'friend@example.com',
+          subject: 'Plans',
+          body: '',
+          ...(unreadable as Partial<Message>),
+        })
+        ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+          calls.push({ command, payload })
+          if (command === 'mail.threadRead') return { messages: [draft] }
+          return {}
+        }
+
+        expect(await open(draft)).toBe(true)
+
+        expect(compose$.tabs.get()).toHaveLength(0)
+        expect(ui$.toast.get()).toBe("Couldn't open draft")
+      })
+    }
+  }
+
   it('opens a Drafts row with a cached ancestor in the conversation view', async () => {
     const ancestor = message({
       id: 'acc-notification#INBOX#42#1',
@@ -955,6 +1018,28 @@ describe('quick reply draft sharing', () => {
     expect(compose$.quickReplyDraftId.get()).toBe('draft-1@example.com')
     expect(compose$.quickReplyDraftSaved.get()).toBe(true)
     expect(compose$.quickReplyFrom.get()).toBe('me@example.com')
+  })
+
+  it.each([
+    ['is missing', { body_missing: true }],
+    ['could not be decrypted', { crypto: { encrypted: true, problem: 'no_key' } }],
+  ])('leaves the quick reply empty and unbound when the tail draft body %s', (_, unreadable) => {
+    ui$.selectedThread.set('t-2')
+    const ancestor = message({ id: 'm1', thread_id: 't-2', folder_id: 'INBOX', date: 1000 })
+    const draft = message({
+      id: 'd1',
+      thread_id: 't-2',
+      folder_id: 'Drafts',
+      from_addr: 'me@example.com',
+      message_id: 'draft-1@example.com',
+      body: '',
+      date: 2000,
+      ...(unreadable as Partial<Message>),
+    })
+
+    mail$.messages.set([ancestor, draft])
+
+    expect(compose$.quickReplyDraftId.get()).toBe('')
   })
 
   // A draft saved encrypted in a plain conversation must not come back as a

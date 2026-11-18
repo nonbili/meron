@@ -917,6 +917,60 @@ pub fn subject_in_branch(subject: &str, encrypted: bool, filter: &str) -> bool {
         || thread_grouping_subject(subject) == filter
 }
 
+/// The messages of a thread that belong to subject branch `filter` (see
+/// [`subject_in_branch`]); `subject_of` gives a message's subject and whether
+/// it is encrypted. Every message when there is no filter.
+pub fn branch_members<T>(
+    items: Vec<T>,
+    filter: Option<&str>,
+    subject_of: impl Fn(&T) -> (&str, bool),
+) -> Vec<T> {
+    let Some(filter) = filter else {
+        return items;
+    };
+    items
+        .into_iter()
+        .filter(|item| {
+            let (subject, encrypted) = subject_of(item);
+            subject_in_branch(subject, encrypted, filter)
+        })
+        .collect()
+}
+
+/// [`branch_members`] for reading a card's conversation.
+///
+/// A card listed while its messages were still encrypted names the placeholder
+/// branch: `[...]` groups as the empty subject, Thunderbird's `...` as itself.
+/// The prefetcher can decrypt them before the list is drawn again, writing back
+/// their real subjects, and then that filter matches none of them. An empty
+/// read would open an empty conversation (or a draft seeded from the list row),
+/// so a placeholder filter that matches nothing reads the whole thread instead.
+///
+/// Reads only: pass every `items` of the thread at once, across all the folders
+/// being read. Actions (flags, tags, move, delete) use [`branch_members`], so a
+/// stale card can't reach the thread's other branches.
+pub fn branch_members_or_thread<T>(
+    items: Vec<T>,
+    filter: Option<&str>,
+    subject_of: impl Fn(&T) -> (&str, bool),
+) -> Vec<T> {
+    if !filter.is_some_and(is_placeholder_branch) {
+        return branch_members(items, filter, subject_of);
+    }
+    let filter = filter.unwrap_or_default();
+    let (members, others): (Vec<T>, Vec<T>) = items.into_iter().partition(|item| {
+        let (subject, encrypted) = subject_of(item);
+        subject_in_branch(subject, encrypted, filter)
+    });
+    if members.is_empty() { others } else { members }
+}
+
+/// Whether `filter` is the branch an encrypted message's placeholder subject
+/// groups into (`[...]` → empty, `...` → `...`).
+fn is_placeholder_branch(filter: &str) -> bool {
+    filter.is_empty() || filter == "..."
+}
+
 /// The branch-aware thread key a list card for `message` carries: the root
 /// thread key joined with the message's grouping subject for branchable
 /// threads, or the bare root for uid:/gmthrid: keys. Every path that mints a

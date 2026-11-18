@@ -6,6 +6,7 @@ import jp.nonbili.meron.shared.CoreEvent
 import jp.nonbili.meron.shared.CoreEventStream
 import jp.nonbili.meron.shared.MeronCore
 import jp.nonbili.meron.shared.MessageBody
+import jp.nonbili.meron.shared.MessageCrypto
 import jp.nonbili.meron.shared.MobileCommand
 import jp.nonbili.meron.shared.ProxySpec
 import jp.nonbili.meron.shared.SendStatus
@@ -563,6 +564,38 @@ class ComposeSaveLifecycleTest {
             withTimeout(5_000) { while (state.composeDraftId != "real-draft@example.com") yield() }
 
             assertTrue(state.composeDraftSaved)
+        }
+
+    @Test
+    fun aDraftWithoutAReadableBodyDoesNotOpenInTheComposer() =
+        runBlocking {
+            val core = SaveCore()
+            val state = state(core, this)
+            val thread =
+                ThreadSummary(id = "thread", accountId = "a", folder = "Drafts", subject = "Subject", sender = "a@example.com")
+            val draft =
+                MessageBody(
+                    id = "draft-row",
+                    folderId = "Drafts",
+                    from = "A",
+                    fromAddr = "a@example.com",
+                    to = "you@example.com",
+                    subject = "Re: Subject",
+                    body = "",
+                    messageId = "real-draft@example.com",
+                )
+
+            // Its body couldn't be fetched, or decrypted on this device: a blank
+            // composer bound to its id would discard it on Back, unseen.
+            for (unreadable in listOf(draft.copy(bodyMissing = true), draft.copy(crypto = MessageCrypto(encrypted = true, problem = "no_key")))) {
+                val generation = state.composeSessionGeneration
+                state.openDraftCompose(unreadable, thread)
+
+                // Turned away before any compose session starts.
+                assertEquals(generation, state.composeSessionGeneration)
+                assertTrue(state.screen != Screen.Compose)
+                assertEquals("", state.composeDraftId)
+            }
         }
 
     @Test

@@ -384,14 +384,11 @@ pub(crate) async fn dispatch(
                 let db = engine.db.lock().unwrap();
                 store::get_thread_headers(&db, &account, &folder, &thread_key)?
             };
-            let headers = headers
-                .into_iter()
-                .filter(|header| match subject_filter.as_deref() {
-                    Some(filter) => {
-                        store::subject_in_branch(&header.subject, header.encrypted, filter)
-                    }
-                    None => true,
+            let headers =
+                store::branch_members_or_thread(headers, subject_filter.as_deref(), |header| {
+                    (&header.subject, header.encrypted)
                 })
+                .into_iter()
                 .map(|header| {
                     json!({
                         "uid": header.uid,

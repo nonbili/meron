@@ -38,18 +38,20 @@ pub fn starred_mutation_targets(
     let mut targets: BTreeMap<String, Vec<u32>> = BTreeMap::new();
     if let Some(key) = thread_key {
         let (root, subject) = split_thread_key(key);
-        let matches_branch = |header: &MessageHeader| {
-            header.uid != 0
-                && subject.as_deref().is_none_or(|subject| {
-                    subject_in_branch(&header.subject, header.encrypted, subject)
-                })
+        let branch = |headers: Vec<MessageHeader>| {
+            let headers = headers
+                .into_iter()
+                .filter(|header| header.uid != 0)
+                .collect();
+            branch_members(headers, subject.as_deref(), |header| {
+                (&header.subject, header.encrypted)
+            })
         };
         if starred {
             // Star the source mailbox's messages and their physical duplicates,
             // not other replies (e.g. Sent) merely sharing the conversation root.
-            let ids = get_thread_headers(conn, account, folder, &root)?
+            let ids = branch(get_thread_headers(conn, account, folder, &root)?)
                 .into_iter()
-                .filter(matches_branch)
                 .map(|header| header.uid)
                 .collect::<Vec<_>>();
             return starred_mutation_targets(conn, account, folder, None, &ids, starred);
@@ -67,9 +69,9 @@ pub fn starred_mutation_targets(
             )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         for location in folders {
-            let ids = get_thread_headers(conn, account, &location, &root)?
+            let ids = branch(get_thread_headers(conn, account, &location, &root)?)
                 .into_iter()
-                .filter(|header| matches_branch(header) && header.starred != starred)
+                .filter(|header| header.starred != starred)
                 .map(|header| header.uid)
                 .collect::<Vec<_>>();
             if !ids.is_empty() {

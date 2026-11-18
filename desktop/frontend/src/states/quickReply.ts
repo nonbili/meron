@@ -4,6 +4,7 @@ import { externalComposeDraft$ } from '../lib/composeWindow'
 import type { Message } from '../types'
 import { contextualErrorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
+import { decryptFailed } from '../lib/crypto'
 import { showToast, ui$ } from './ui'
 import { accounts$, isLocalAccountId, isSendableAccount } from './accounts'
 import { getActiveThread, normalizeMessageId } from './mail'
@@ -573,6 +574,10 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   // back-fills the header, and the next refresh hydrates it properly.
   const tailDraftId = tail.message_id
   if (!tailDraftId) return
+  // Nor one whose body couldn't be fetched or decrypted: the box would show
+  // empty while holding the draft's id, and the first keystroke's autosave
+  // would replace a draft the user never saw.
+  if (tail.body_missing || decryptFailed(tail.crypto)) return
   const normalizedTailDraftId = normalizeMessageId(tailDraftId)
   // Its message already went out; the copy is only waiting on its discard.
   if (sentDraftDiscards.has(normalizedTailDraftId)) return

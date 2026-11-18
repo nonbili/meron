@@ -6494,3 +6494,68 @@ fn encrypting_a_plaintext_store_is_announced_once_before_it_starts() {
     drop(conn);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+// A card listed while its encrypted messages showed the placeholder names the
+// placeholder branch; once they are decrypted that branch matches none of them.
+// Reading such a card takes the whole thread rather than nothing. A titled
+// branch that matches nothing stays empty: it is not stale, just not this
+// thread's. Actions never widen: a stale card must not reach other branches.
+#[test]
+fn a_placeholder_branch_matching_nothing_reads_the_whole_thread() {
+    let subjects = || {
+        vec![
+            ("Sig test again today", false),
+            ("Re: Sig test again today", false),
+        ]
+    };
+    fn subject_of<'a>(item: &'a (&'static str, bool)) -> (&'a str, bool) {
+        (item.0, item.1)
+    }
+    assert_eq!(
+        branch_members_or_thread(subjects(), Some(""), subject_of).len(),
+        2
+    );
+    assert_eq!(
+        branch_members_or_thread(subjects(), Some("..."), subject_of).len(),
+        2
+    );
+    assert!(branch_members_or_thread(subjects(), Some("Lunch"), subject_of).is_empty());
+    assert_eq!(
+        branch_members_or_thread(subjects(), None, subject_of).len(),
+        2
+    );
+    assert!(branch_members(subjects(), Some(""), subject_of).is_empty());
+    assert!(branch_members(subjects(), Some("..."), subject_of).is_empty());
+
+    // While anything still matches the placeholder branch, only that is kept.
+    let mixed = vec![("[...]", true), ("Other topic", false)];
+    assert_eq!(
+        branch_members_or_thread(mixed, Some(""), subject_of),
+        vec![("[...]", true)]
+    );
+}
+
+// Unstarring an empty-subject card walks every folder of its thread; a folder
+// holding only another branch's messages must contribute none of them.
+#[test]
+fn unstarring_an_empty_branch_leaves_other_branches_in_other_folders() {
+    let conn = test_conn();
+    for (folder, uid, subject) in [("INBOX", 1, ""), ("Sent", 7, "Re: Lunch")] {
+        upsert_messages(
+            &conn,
+            "acct",
+            folder,
+            &[MessageHeader {
+                uid,
+                subject: subject.into(),
+                thread_key: "root@example.com".into(),
+                starred: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+    }
+    let key = branch_compound_key("root@example.com", "");
+    let targets = starred_mutation_targets(&conn, "acct", "INBOX", Some(&key), &[], false).unwrap();
+    assert_eq!(targets, BTreeMap::from([("INBOX".into(), vec![1])]));
+}

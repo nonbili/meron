@@ -80,7 +80,7 @@ pub fn thread_page_headers(
     // headers — e.g. a freshly-saved draft) is folder-local, because UIDs are
     // folder-scoped. Spanning folders would match an unrelated message that
     // happens to share UID N elsewhere and render the wrong thread.
-    let mut headers = if thread_key.starts_with("uid:") {
+    let headers = if thread_key.starts_with("uid:") {
         let mut headers = store::get_thread_headers(db, account, folder, thread_key)?;
         // A message opened straight from a notification can have a cached body
         // before its header row is synced; synthesize a header so the read
@@ -103,10 +103,9 @@ pub fn thread_page_headers(
     } else {
         store::get_thread_headers_all_folders(db, account, thread_key)?
     };
-    if let Some(filter) = subject_filter {
-        headers
-            .retain(|header| store::subject_in_branch(&header.subject, header.encrypted, filter));
-    }
+    let headers = store::branch_members_or_thread(headers, subject_filter, |header| {
+        (&header.subject, header.encrypted)
+    });
     let headers = store::collapse_thread_draft_headers(db, account, folder, headers)?;
 
     // `before_cursor` / `limit` are honored as a date-ordered slice so the
@@ -1527,5 +1526,59 @@ mod tests {
         ];
         let cursor = parse_thread_cursor(&thread_cursor(&headers[2])).unwrap();
         assert_eq!(thread_cursor_position(&headers, &cursor), Some(2));
+    }
+
+    // A card minted while an encrypted draft still had the placeholder subject
+    // names the empty branch (`root#`). The prefetcher can decrypt the draft
+    // before the list is redrawn, writing back its real subject; the stale card
+    // must still open that draft, not an empty thread (which the desktop then
+    // fills from the list row: subject `[...]`, From = the recipient).
+    #[test]
+    fn a_card_minted_before_decryption_still_reads_the_decrypted_draft() {
+        let db = crate::store::open_at(":memory:").unwrap();
+        let draft = MessageHeader {
+            uid: 7,
+            folder: "Drafts".to_string(),
+            subject: "[...]".to_string(),
+            from_addr: "me@example.com".to_string(),
+            message_id: "<draft-1@example.com>".to_string(),
+            thread_key: "draft-1@example.com".to_string(),
+            encrypted: true,
+            date: 100,
+            ..Default::default()
+        };
+        crate::store::upsert_messages(&db, "acct", "Drafts", &[draft.clone()]).unwrap();
+        let (root, filter) = crate::store::split_thread_key(&crate::store::card_thread_key(&draft));
+        let read = |db: &rusqlite::Connection| {
+            super::thread_page_headers(
+                db,
+                "acct",
+                "Drafts",
+                &root,
+                filter.as_deref(),
+                Some(50),
+                None,
+            )
+            .unwrap()
+            .0
+            .into_iter()
+            .map(|h| h.uid)
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(read(&db), vec![7], "found before decryption");
+
+        let decrypted = Message {
+            subject: "Sig test again today".to_string(),
+            from_addr: "me@example.com".to_string(),
+            message_id: "<draft-1@example.com>".to_string(),
+            body: "text".to_string(),
+            crypto: Some(crate::openpgp::mime::CryptoStatus {
+                encrypted: true,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        crate::store::save_cached_message(&db, "acct", "Drafts", 7, &decrypted).unwrap();
+        assert_eq!(read(&db), vec![7], "still found by the card minted before");
     }
 }
