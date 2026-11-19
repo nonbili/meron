@@ -34,6 +34,21 @@ enters [`desktop/`](desktop/) for you:
 bun run dev           # wails3 dev
 ```
 
+### Keychain prompts on macOS
+
+The core keeps the store key and account passwords in the keychain, and macOS
+lets a program into each item only once you allow it. `dev:core` and
+`build:core` sign the debug core with a code-signing certificate from your
+keychain so that "Always Allow" lasts across rebuilds; without one, macOS asks
+again after every rebuild, once per item.
+
+Any certificate works, including a self-signed one: in Keychain Access choose
+Certificate Assistant → Create a Certificate…, name it `Meron Dev`, and pick
+Identity Type "Self-Signed Root" and Certificate Type "Code Signing". Set
+`MERON_CODESIGN_IDENTITY` to choose a certificate other than `Meron Dev` or an
+Apple Development one. A throwaway profile can skip the keychain altogether
+with `MERON_KEYRING=off`.
+
 ## Build
 
 ```sh

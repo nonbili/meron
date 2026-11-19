@@ -2,8 +2,8 @@
   "scripts": {
     "predev": "git config core.hooksPath .githooks",
     "dev": "cd desktop && wails3 dev -port 5178",
-    "dev:core": "cargo watch -w meron-core/src -x \"build --manifest-path meron-core/Cargo.toml\"",
-    "build:core": "cargo build --manifest-path meron-core/Cargo.toml",
+    "dev:core": "cargo watch -w meron-core/src -x \"build --manifest-path meron-core/Cargo.toml\" -s \"bun scripts/sign-dev-core.ts\"",
+    "build:core": "cargo build --manifest-path meron-core/Cargo.toml && bun scripts/sign-dev-core.ts",
     "prebuild": "git config core.hooksPath .githooks",
     "build": "bun scripts/build-desktop.ts",
     "build:release": "./scripts/build.sh",
