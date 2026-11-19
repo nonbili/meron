@@ -298,6 +298,36 @@ fn live_round_trip() {
     let after = client.changes(&calendar.url, &delta.sync_token).unwrap();
     assert!(after.removed.contains(&url));
     assert!(client.get(&url).unwrap().is_none());
+    // A calendar made, renamed and recoloured here shows so on the server,
+    // made inside the home even when its URL lacks the trailing slash.
+    let made = client
+        .make_calendar(found.home.trim_end_matches('/'), "Meron test", "#14B8A6")
+        .unwrap();
+    assert!(
+        made.starts_with(&found.home),
+        "{made} not in {}",
+        found.home
+    );
+    client
+        .update_calendar(&made, Some("Meron test renamed"), Some("#8B5CF6"))
+        .unwrap();
+    let listed = client.calendars(&found.home).unwrap();
+    let made_calendar = listed
+        .iter()
+        .find(|c| Url::parse(&c.url).unwrap() == Url::parse(&made).unwrap())
+        .expect("new calendar listed");
+    assert_eq!(made_calendar.name, "Meron test renamed");
+    assert_eq!(made_calendar.color.to_ascii_lowercase(), "#8b5cf6");
+    assert!(made_calendar.supports("VEVENT"));
+    client.delete_calendar(&made).unwrap();
+    assert!(
+        client
+            .calendars(&found.home)
+            .unwrap()
+            .iter()
+            .all(|c| c.url != made_calendar.url)
+    );
+
     // RFC 6578 wants an error for a token the server does not know; Stalwart
     // answers with a full listing instead. Either is something sync handles.
     if let Err(err) = client.changes(&calendar.url, "bogus-token") {

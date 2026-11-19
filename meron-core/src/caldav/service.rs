@@ -47,9 +47,51 @@ pub fn dispatch(engine: &Engine, method: &str, params: &Value) -> Result<Value> 
             flag("enabled").unwrap_or(true),
             flag("discard_unsent").unwrap_or(false),
         ),
+        "caldav.createCalendar" => create_calendar(
+            engine,
+            required("account_id")?,
+            required("name")?,
+            text("color"),
+        ),
+        "caldav.updateCalendar" => update_calendar(
+            engine,
+            required("calendar_id")?,
+            params.get("name").and_then(Value::as_str),
+            params.get("color").and_then(Value::as_str),
+        ),
+        "caldav.deleteCalendar" => delete_calendar(engine, required("calendar_id")?),
+        "caldav.renameAccount" => {
+            let conn = conn()?;
+            let id = required("account_id")?;
+            let mut account = store::account(&conn, id)?
+                .ok_or_else(|| anyhow!("no such CalDAV account: {id}"))?;
+            // An empty name goes back to the server's host, as on adding.
+            account.display_name = match text("display_name").trim() {
+                "" => super::parse_server_url(&account.server_url)?
+                    .host_str()
+                    .unwrap_or(&account.username)
+                    .to_string(),
+                name => name.to_string(),
+            };
+            store::save_account(&conn, &account)?;
+            Ok(json!({ "accounts": accounts_payload(&conn)? }))
+        }
+        "caldav.setSyncInterval" => {
+            let minutes = params
+                .get("minutes")
+                .and_then(Value::as_i64)
+                .ok_or_else(|| anyhow!("missing minutes"))?;
+            let conn = conn()?;
+            store::set_sync_interval(&conn, required("account_id")?, minutes)?;
+            Ok(json!({ "accounts": accounts_payload(&conn)? }))
+        }
         "caldav.sync" => {
             let account = params.get("account_id").and_then(Value::as_str);
-            let report = sync(engine, account)?;
+            let automatic = params
+                .get("automatic")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let report = sync(engine, account, automatic)?;
             Ok(json!({
                 "pulled": report.pulled,
                 "pushed": report.pushed,
@@ -167,7 +209,7 @@ pub fn set_password(engine: &Engine, account_id: &str, password: &str) -> Result
 fn flush_unsent(engine: &Engine, account_id: &str, calendar_id: Option<&str>, discard: bool) {
     let unsent = || -> Result<i64> { store::unsent(&*lock(engine)?, account_id, calendar_id) };
     if !discard && unsent().is_ok_and(|n| n > 0) {
-        let _ = sync(engine, Some(account_id));
+        let _ = sync(engine, Some(account_id), false);
     }
 }
 
@@ -216,15 +258,160 @@ pub fn set_calendar_enabled(
     Ok(json!({ "accounts": accounts_payload(&conn)? }))
 }
 
+/// How long a change to an account's calendars waits for a sync of it to
+/// finish: well inside the desktop's timeout for the call.
+const MUTATION_WAIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// A client for an account, with its stored password.
+fn account_client(engine: &Engine, account: &DavAccount) -> Result<Client> {
+    let password = password(engine, &account.id)?;
+    client(&account.server_url, &account.username, &password)
+}
+
+/// Make a new event calendar on the account's server, and show it here.
+pub fn create_calendar(
+    engine: &Engine,
+    account_id: &str,
+    name: &str,
+    color: &str,
+) -> Result<Value> {
+    let name = name.trim();
+    if name.is_empty() {
+        bail!("a calendar needs a name");
+    }
+    let account = store::account(&*lock(engine)?, account_id)?
+        .ok_or_else(|| anyhow!("no such CalDAV account: {account_id}"))?;
+    let client = account_client(engine, &account)?;
+    // No sync of the account in between: one that listed the calendars
+    // before this one was made would drop it here when it applied.
+    let _sync = SyncGuard::claim_within(engine, account_id, MUTATION_WAIT)
+        .ok_or_else(|| anyhow!("a sync of this account is still running; try again"))?;
+    let home = match account.home.as_str() {
+        "" => client.discover()?.home,
+        home => home.to_string(),
+    };
+    let url = client.make_calendar(&home, name, color.trim())?;
+    // Made: from here on, nothing may report it as not made, or a retry
+    // would make a second. If the server cannot list it right away, it is
+    // shown as made and the next sync fills in the rest.
+    let made = |c: &super::Calendar| super::Url::parse(&c.url).ok() == super::Url::parse(&url).ok();
+    let conn_result = match client.calendars(&home) {
+        // A server may list the new calendar only a moment later.
+        Ok(listed) if listed.iter().any(made) => {
+            store::reconcile_calendars(&*lock(engine)?, account_id, &listed)
+        }
+        _ => store::add_calendar(
+            &*lock(engine)?,
+            account_id,
+            &super::Calendar {
+                url: url.clone(),
+                name: name.to_string(),
+                color: color.trim().to_string(),
+                components: vec!["VEVENT".into()],
+                ..Default::default()
+            },
+        ),
+    };
+    let conn = lock(engine)?;
+    let created = conn_result
+        .ok()
+        .and_then(|calendars| {
+            calendars
+                .into_iter()
+                .find(|c| super::Url::parse(&c.url).ok() == super::Url::parse(&url).ok())
+        })
+        .map(|c| c.id)
+        .unwrap_or_default();
+    Ok(json!({ "calendar_id": created, "accounts": accounts_payload(&conn)? }))
+}
+
+/// Rename or recolour a calendar on its server. A colour the server will
+/// not take (a shared or subscribed calendar) is kept on this device.
+pub fn update_calendar(
+    engine: &Engine,
+    calendar_id: &str,
+    name: Option<&str>,
+    color: Option<&str>,
+) -> Result<Value> {
+    let name = name.map(str::trim);
+    if name == Some("") {
+        bail!("a calendar needs a name");
+    }
+    let color = color.map(str::trim);
+    let (calendar, account) = {
+        let conn = lock(engine)?;
+        let calendar = store::calendar(&conn, calendar_id)?
+            .ok_or_else(|| anyhow!("no such calendar: {calendar_id}"))?;
+        let account = store::account(&conn, &calendar.account)?
+            .ok_or_else(|| anyhow!("no such CalDAV account: {}", calendar.account))?;
+        (calendar, account)
+    };
+    // A sync that listed the calendars before this change, applying after
+    // it, would put the old name or colour back here.
+    let _sync = SyncGuard::claim_within(engine, &account.id, MUTATION_WAIT)
+        .ok_or_else(|| anyhow!("a sync of this account is still running; try again"))?;
+    let refused = if calendar.read_only {
+        true
+    } else {
+        match account_client(engine, &account)?.update_calendar(&calendar.url, name, color) {
+            Ok(()) => false,
+            Err(err) if err.is::<super::PropertyRefused>() => true,
+            Err(err) => return Err(err),
+        }
+    };
+    let conn = lock(engine)?;
+    if refused {
+        if name.is_some() {
+            bail!("this calendar's server does not let it be renamed");
+        }
+        store::set_local_color(&conn, calendar_id, color.unwrap_or_default())?;
+    } else {
+        store::set_calendar_props(&conn, calendar_id, name, color)?;
+    }
+    Ok(json!({ "accounts": accounts_payload(&conn)?, "local": refused }))
+}
+
+/// Delete a calendar on its server, with every event in it, for every
+/// device and everyone it is shared with; then forget it here.
+pub fn delete_calendar(engine: &Engine, calendar_id: &str) -> Result<Value> {
+    let (calendar, account) = {
+        let conn = lock(engine)?;
+        let calendar = store::calendar(&conn, calendar_id)?
+            .ok_or_else(|| anyhow!("no such calendar: {calendar_id}"))?;
+        let account = store::account(&conn, &calendar.account)?
+            .ok_or_else(|| anyhow!("no such CalDAV account: {}", calendar.account))?;
+        (calendar, account)
+    };
+    // A sync halfway through would bring the calendar's events back. Waited
+    // for before the server is asked, and not for long, so a busy account
+    // fails here rather than after the calendar is already gone.
+    let _sync = SyncGuard::claim_within(engine, &account.id, MUTATION_WAIT)
+        .ok_or_else(|| anyhow!("a sync of this account is still running; try again"))?;
+    match account_client(engine, &account)?.delete_calendar(&calendar.url) {
+        Ok(()) => {}
+        Err(err) if err.is::<super::PropertyRefused>() => {
+            bail!("this calendar's server does not let it be deleted")
+        }
+        Err(err) => return Err(err),
+    }
+    let conn = lock(engine)?;
+    store::delete_calendar(&conn, calendar_id)?;
+    Ok(json!({ "accounts": accounts_payload(&conn)? }))
+}
+
 /// Sync one account, or all of them. An account already syncing is waited
 /// for and then synced again, so what was changed before this call is sent.
 /// The report counts what every account did and carries the first failure.
-pub fn sync(engine: &Engine, account_id: Option<&str>) -> Result<Report> {
+///
+/// `automatic`: a sync no one asked for (the calendar opening) leaves out
+/// the accounts set to sync only when asked.
+pub fn sync(engine: &Engine, account_id: Option<&str>, automatic: bool) -> Result<Report> {
     let accounts = store::accounts(&*lock(engine)?)?;
     let mut total = Report::default();
     for account in accounts
         .iter()
         .filter(|a| account_id.is_none_or(|id| a.id == id))
+        .filter(|a| !automatic || a.sync_interval > 0)
     {
         let report = match SyncGuard::claim(engine, &account.id) {
             None => Report {
@@ -264,7 +451,7 @@ pub fn accounts_payload(conn: &rusqlite::Connection) -> Result<Value> {
                 json!({
                     "id": calendar.id,
                     "name": calendar.name,
-                    "color": calendar.color,
+                    "color": calendar.shown_color(),
                     "read_only": calendar.read_only,
                     "enabled": calendar.enabled,
                     "events": calendar.supports("VEVENT"),
@@ -279,6 +466,7 @@ pub fn accounts_payload(conn: &rusqlite::Connection) -> Result<Value> {
             "display_name": account.display_name,
             "last_sync_at": account.last_sync_at,
             "last_error": account.last_error,
+            "sync_interval": account.sync_interval,
             "calendars": calendars,
         }));
     }
@@ -298,7 +486,7 @@ pub fn calendars_payload(conn: &rusqlite::Connection) -> Result<Value> {
             json!({
                 "id": calendar.id,
                 "name": calendar.name,
-                "color": calendar.color,
+                "color": calendar.shown_color(),
                 "writable": !calendar.read_only,
                 "account_id": calendar.account,
                 "account_name": account.map(|a| a.display_name.as_str()).unwrap_or_default(),
@@ -351,7 +539,12 @@ impl<'a> SyncGuard<'a> {
     /// it is still running after the longest a sync should take; only a
     /// claimed guard releases the account.
     fn claim(engine: &'a Engine, account: &str) -> Option<Self> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+        Self::claim_within(engine, account, std::time::Duration::from_secs(300))
+    }
+
+    /// [`claim`](Self::claim), giving up after `wait`.
+    fn claim_within(engine: &'a Engine, account: &str, wait: std::time::Duration) -> Option<Self> {
+        let deadline = std::time::Instant::now() + wait;
         loop {
             let claimed = engine.dav_syncing.lock().ok()?.insert(account.to_string());
             if claimed {

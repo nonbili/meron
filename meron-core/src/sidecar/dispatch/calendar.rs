@@ -83,15 +83,17 @@ pub(crate) async fn dispatch(
     // Only mutations reach here; any surface showing the calendar re-reads.
     emit(out, "calendar.changed", json!({ "method": req.method })).await;
     // An edit to a synced event goes to its server straight away.
-    let synced = [
+    // Only the accounts it touched: one set to sync only when asked is not
+    // asked by an edit elsewhere.
+    let calendars: Vec<&str> = [
         &result["event"]["calendar"],
         &result["restore"]["calendar"],
         &result["moved_from"],
     ]
     .iter()
-    .any(|calendar| calendar.as_str().is_some_and(|c| !c.is_empty()));
-    if synced {
-        super::caldav::spawn_sync(engine.clone(), out.clone(), None);
-    }
+    .filter_map(|calendar| calendar.as_str())
+    .filter(|calendar| !calendar.is_empty())
+    .collect();
+    super::caldav::spawn_sync_for_calendars(engine, out, &calendars);
     Ok(result)
 }

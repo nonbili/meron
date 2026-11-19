@@ -97,6 +97,18 @@ impl fmt::Display for UidConflict {
 
 impl std::error::Error for UidConflict {}
 
+/// The server would not change a calendar's name or colour.
+#[derive(Debug)]
+pub struct PropertyRefused;
+
+impl fmt::Display for PropertyRefused {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("the calendar server does not allow changing this calendar")
+    }
+}
+
+impl std::error::Error for PropertyRefused {}
+
 /// One calendar collection.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Calendar {
@@ -298,6 +310,16 @@ impl Client {
                     .to_string()
             };
             if matches!(status, 301 | 302 | 303 | 307 | 308) {
+                // A 303 points at a result to read, not at somewhere to send
+                // the same write again; and a write is only ever sent where
+                // the user's action named, never to wherever a redirect says.
+                let reads = matches!(method, "GET" | "PROPFIND" | "REPORT");
+                if !reads || status == 303 && method != "GET" {
+                    bail!(
+                        "{method} {} was redirected; not repeating it elsewhere",
+                        redacted(&url)
+                    );
+                }
                 let location = header("location");
                 if location.is_empty() {
                     bail!("{method} {}: redirect without a Location", redacted(&url));
@@ -649,6 +671,108 @@ impl Client {
         }
     }
 
+    /// Create an event calendar in `home`. Returns its URL.
+    pub fn make_calendar(&self, home: &str, name: &str, color: &str) -> Result<String> {
+        // Inside the home, whether or not its URL ends in a slash.
+        let url = as_collection(Url::parse(home)?).join(&format!("{}/", uuid::Uuid::new_v4()))?;
+        let color = match color {
+            "" => String::new(),
+            color => format!("<ic:calendar-color>{}</ic:calendar-color>", escape(color)),
+        };
+        let body = format!(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<c:mkcalendar xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:ic="http://apple.com/ns/ical/"><d:set><d:prop><d:displayname>{}</d:displayname>{color}<c:supported-calendar-component-set><c:comp name="VEVENT"/></c:supported-calendar-component-set></d:prop></d:set></c:mkcalendar>"#,
+            escape(name)
+        );
+        let response = self.send("MKCALENDAR", &url, &[], Some(&body))?;
+        match response.status {
+            200..=299 => Ok(response.url.to_string()),
+            403 | 405 => bail!("this server does not let calendars be created here"),
+            status => bail!(
+                "MKCALENDAR {} answered {status}: {}",
+                redacted(&response.url),
+                response.body.trim()
+            ),
+        }
+    }
+
+    /// Rename or recolour a calendar; `None` leaves that property alone.
+    /// Fails with [`PropertyRefused`] when the server keeps the calendar's
+    /// properties to itself (a shared or subscribed calendar).
+    pub fn update_calendar(
+        &self,
+        calendar: &str,
+        name: Option<&str>,
+        color: Option<&str>,
+    ) -> Result<()> {
+        let url = Url::parse(calendar)?;
+        let mut props = String::new();
+        if let Some(name) = name {
+            props.push_str(&format!("<d:displayname>{}</d:displayname>", escape(name)));
+        }
+        if let Some(color) = color {
+            props.push_str(&format!(
+                "<ic:calendar-color>{}</ic:calendar-color>",
+                escape(color)
+            ));
+        }
+        if props.is_empty() {
+            return Ok(());
+        }
+        let body = format!(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<d:propertyupdate xmlns:d="DAV:" xmlns:ic="http://apple.com/ns/ical/"><d:set><d:prop>{props}</d:prop></d:set></d:propertyupdate>"#
+        );
+        let response = self.send("PROPPATCH", &url, &[], Some(&body))?;
+        match response.status {
+            // Each property has its own status inside; any failure fails all
+            // (RFC 4918 §9.2: the update is atomic).
+            207 => {
+                let ms = parse_multistatus(&response.body)?;
+                let refused = ms.responses.iter().any(|r| {
+                    r.props.is_empty() || r.status.is_some_and(|s| !(200..300).contains(&s))
+                });
+                if refused {
+                    Err(PropertyRefused.into())
+                } else {
+                    Ok(())
+                }
+            }
+            200..=299 => Ok(()),
+            401 => Err(AuthFailed.into()),
+            403 | 405 => Err(PropertyRefused.into()),
+            status => bail!("PROPPATCH {} answered {status}", redacted(&response.url)),
+        }
+    }
+
+    /// Delete a whole calendar, and every event in it, on the server.
+    /// Gone already counts as deleted.
+    pub fn delete_calendar(&self, calendar: &str) -> Result<()> {
+        let url = Url::parse(calendar)?;
+        let response = self.send("DELETE", &url, &[], None)?;
+        match response.status {
+            // Some members could not be deleted (RFC 4918 §9.6.1): the calendar
+            // is still there, with whatever was left in it.
+            207 => {
+                let ms = parse_multistatus(&response.body)?;
+                match ms.responses.iter().find(|r| {
+                    r.status
+                        .is_some_and(|s| !(200..300).contains(&s) && s != 404)
+                }) {
+                    Some(failed) => bail!(
+                        "the server could not delete everything in this calendar ({} answered {})",
+                        failed.href,
+                        failed.status.unwrap_or_default()
+                    ),
+                    None => Ok(()),
+                }
+            }
+            200..=299 | 404 | 410 => Ok(()),
+            403 | 405 => Err(PropertyRefused.into()),
+            status => bail!("DELETE {} answered {status}", redacted(&response.url)),
+        }
+    }
+
     /// Delete an object. Gone already counts as deleted.
     pub fn delete(&self, url: &str, etag: Option<&str>) -> Result<()> {
         let url = Url::parse(url)?;
@@ -780,14 +904,20 @@ pub fn requeue_restored_event(
     )
 }
 
-/// Where a new object with `uid` goes: named after it, as clients do, with
-/// anything unsafe in a path segment encoded.
-fn object_url(calendar: &str, uid: &str) -> Result<String> {
-    let mut url = Url::parse(calendar)?;
+/// `url` as a collection, ending in a slash, so a relative join lands
+/// inside it rather than beside it.
+fn as_collection(mut url: Url) -> Url {
     if !url.path().ends_with('/') {
         let path = format!("{}/", url.path());
         url.set_path(&path);
     }
+    url
+}
+
+/// Where a new object with `uid` goes: named after it, as clients do, with
+/// anything unsafe in a path segment encoded.
+fn object_url(calendar: &str, uid: &str) -> Result<String> {
+    let url = as_collection(Url::parse(calendar)?);
     let segment: String = percent_encoding::utf8_percent_encode(
         &format!("{uid}.ics"),
         percent_encoding::NON_ALPHANUMERIC,

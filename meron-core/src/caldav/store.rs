@@ -68,7 +68,12 @@ pub struct DavAccount {
     pub home: String,
     pub last_sync_at: i64,
     pub last_error: String,
+    /// Minutes between automatic syncs; 0 syncs only when asked.
+    pub sync_interval: i64,
 }
+
+/// Minutes between automatic syncs for an account that has not chosen.
+pub const DEFAULT_SYNC_INTERVAL: i64 = 15;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DavCalendar {
@@ -85,9 +90,22 @@ pub struct DavCalendar {
     /// When every object was last listed and compared, rather than only
     /// the changes a sync token reported.
     pub listed_at: i64,
+    /// A colour chosen here for a calendar whose server would not take it;
+    /// empty otherwise. Wins over `color`.
+    pub local_color: String,
 }
 
 impl DavCalendar {
+    /// The colour its events are drawn in, as far as the server and the
+    /// user have said; empty leaves it to the apps.
+    pub fn shown_color(&self) -> &str {
+        if self.local_color.is_empty() {
+            &self.color
+        } else {
+            &self.local_color
+        }
+    }
+
     pub fn supports(&self, component: &str) -> bool {
         self.components.is_empty()
             || self
@@ -109,8 +127,8 @@ pub struct DavObject {
     pub moved_to: String,
 }
 
-const ACCOUNT_COLUMNS: &str =
-    "id, server_url, username, display_name, home, last_sync_at, last_error";
+const ACCOUNT_COLUMNS: &str = "id, server_url, username, display_name, home, last_sync_at,
+    last_error, json_extract(json, '$.sync_interval')";
 
 fn read_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavAccount> {
     Ok(DavAccount {
@@ -121,6 +139,9 @@ fn read_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavAccount> {
         home: row.get(4)?,
         last_sync_at: row.get(5)?,
         last_error: row.get(6)?,
+        sync_interval: row
+            .get::<_, Option<i64>>(7)?
+            .unwrap_or(DEFAULT_SYNC_INTERVAL),
     })
 }
 
@@ -157,6 +178,14 @@ pub fn save_account(conn: &Connection, account: &DavAccount) -> Result<()> {
     Ok(())
 }
 
+pub fn set_sync_interval(conn: &Connection, id: &str, minutes: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_accounts SET json = json_set(json, '$.sync_interval', ?2) WHERE id = ?1",
+        params![id, minutes.max(0)],
+    )?;
+    Ok(())
+}
+
 pub fn record_sync(conn: &Connection, id: &str, error: &str) -> Result<()> {
     conn.execute(
         "UPDATE dav_accounts SET last_error = ?2,
@@ -178,7 +207,8 @@ pub fn delete_account(conn: &Connection, id: &str) -> Result<()> {
 }
 
 const CALENDAR_COLUMNS: &str = "id, account, url, name, color, components, ctag, sync_token,
-    read_only, enabled, COALESCE(json_extract(json, '$.listed_at'), 0)";
+    read_only, enabled, COALESCE(json_extract(json, '$.listed_at'), 0),
+    COALESCE(json_extract(json, '$.local_color'), '')";
 
 fn read_calendar(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavCalendar> {
     let components: String = row.get(5)?;
@@ -198,6 +228,7 @@ fn read_calendar(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavCalendar> {
         read_only: row.get::<_, i64>(8)? != 0,
         enabled: row.get::<_, i64>(9)? != 0,
         listed_at: row.get(10)?,
+        local_color: row.get(11)?,
     })
 }
 
@@ -269,6 +300,33 @@ pub fn reconcile_calendars(
 
 /// Record a completed pull. `listed`: it compared every object, not only
 /// the reported changes.
+/// Add one calendar the server has just made, leaving the others alone
+/// (unlike [`reconcile_calendars`], which takes the whole list).
+pub fn add_calendar(
+    conn: &Connection,
+    account: &str,
+    calendar: &super::Calendar,
+) -> Result<Vec<DavCalendar>> {
+    let now = now_unix();
+    conn.execute(
+        "INSERT INTO dav_calendars (id, account, url, name, color, components, read_only,
+           sort_order, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0,
+           (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM dav_calendars WHERE account = ?2), ?7, ?7)
+         ON CONFLICT(account, url) DO NOTHING",
+        params![
+            crate::tasks::new_id("cal"),
+            account,
+            calendar.url,
+            calendar.name,
+            calendar.color,
+            calendar.components.join(","),
+            now,
+        ],
+    )?;
+    calendars(conn, account)
+}
+
 pub fn set_synced(
     conn: &Connection,
     id: &str,
@@ -281,6 +339,33 @@ pub fn set_synced(
            json = CASE WHEN ?4 THEN json_set(json, '$.listed_at', ?5) ELSE json END
          WHERE id = ?1",
         params![id, ctag, sync_token, listed, now_unix()],
+    )?;
+    Ok(())
+}
+
+/// What the server now says a calendar is called and coloured, after the
+/// user changed it here. A colour the server took replaces any kept here.
+pub fn set_calendar_props(
+    conn: &Connection,
+    id: &str,
+    name: Option<&str>,
+    color: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_calendars SET name = COALESCE(?2, name), color = COALESCE(?3, color),
+           json = CASE WHEN ?3 IS NULL THEN json ELSE json_remove(json, '$.local_color') END
+         WHERE id = ?1",
+        params![id, name, color],
+    )?;
+    Ok(())
+}
+
+/// A colour for a calendar kept on this device only; empty clears it.
+pub fn set_local_color(conn: &Connection, id: &str, color: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_calendars SET json = CASE WHEN ?2 = '' THEN json_remove(json, '$.local_color')
+           ELSE json_set(json, '$.local_color', ?2) END WHERE id = ?1",
+        params![id, color],
     )?;
     Ok(())
 }
@@ -339,7 +424,7 @@ fn forget_contents(conn: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn delete_calendar(conn: &Connection, id: &str) -> Result<()> {
+pub fn delete_calendar(conn: &Connection, id: &str) -> Result<()> {
     forget_contents(conn, id)?;
     conn.execute("DELETE FROM dav_calendars WHERE id = ?1", params![id])?;
     Ok(())
