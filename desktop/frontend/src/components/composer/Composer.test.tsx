@@ -334,6 +334,56 @@ describe('Composer', () => {
     expect(ui$.toast.get()).toContain('blind@example.com')
   })
 
+  // The rich-text editor binds Cmd/Ctrl+Enter to a line break (TipTap's
+  // HardBreak), and it sees the key before the composer's send shortcut: the
+  // shortcut must send what was typed, without adding a line to it first.
+  it('sends on Ctrl+Enter in the rich-text body without adding a line break', async () => {
+    const tabId = openComposeTab({
+      to: 'x@example.com',
+      subject: 'Hi',
+      html: '<p>Test</p>',
+      rich: true,
+      noSignature: true,
+    })!
+    const view = render(<Composer tabId={tabId} />)
+    const body = await waitFor(() => {
+      const found = view.container.querySelector('.tiptap-body')
+      if (!found) throw new Error('no editor yet')
+      return found
+    })
+    await act(async () => {
+      fireEvent.keyDown(body, { key: 'Enter', code: 'Enter', ctrlKey: true })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    const send = calls.find((c) => c.command === 'mail.send')
+    expect(send).toBeTruthy()
+    expect(send!.payload.html).toContain('Test')
+    expect(send!.payload.html).not.toContain('<br')
+    expect(body.innerHTML).not.toContain('<br')
+  })
+
+  it('keeps Shift+Enter a line break that does not send', async () => {
+    const tabId = openComposeTab({
+      to: 'x@example.com',
+      subject: 'Hi',
+      html: '<p>Test</p>',
+      rich: true,
+      noSignature: true,
+    })!
+    const view = render(<Composer tabId={tabId} />)
+    const body = await waitFor(() => {
+      const found = view.container.querySelector('.tiptap-body')
+      if (!found) throw new Error('no editor yet')
+      return found
+    })
+    await act(async () => {
+      fireEvent.keyDown(body, { key: 'Enter', code: 'Enter', shiftKey: true })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(calls.some((c) => c.command === 'mail.send')).toBe(false)
+    expect(body.innerHTML).toContain('<br')
+  })
+
   it('notes a changed recipient key and asks before sending to it', async () => {
     const base = (window as any).go.main.App.Invoke
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) =>
