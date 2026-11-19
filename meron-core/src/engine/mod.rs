@@ -165,6 +165,13 @@ pub struct Engine {
     /// Platform integration: opens the SQLite store and loads/stores per-account
     /// secrets (OS keychain on desktop, the keyed DB on mobile).
     pub host: Arc<dyn EngineHost>,
+    /// CalDAV passwords seen this run. With `MERON_KEYRING=off` the host
+    /// keeps nothing, and this is where they live until restart, as mail
+    /// passwords do in `accounts`.
+    pub dav_passwords: std::sync::Mutex<HashMap<String, String>>,
+    /// CalDAV accounts with a sync in flight, so overlapping triggers (a
+    /// timer, an edit, a manual refresh) run one at a time.
+    pub dav_syncing: std::sync::Mutex<HashSet<String>>,
 }
 
 /// Platform hooks the [`Engine`] needs but that differ between the desktop
@@ -184,6 +191,15 @@ pub trait EngineHost: Send + Sync {
         account: &str,
         secrets: &secrets::Secrets,
     ) -> anyhow::Result<()>;
+    /// The stored secret of an account that is not a mail account (a CalDAV
+    /// one), from the same place mail secrets live.
+    fn load_secret(&self, _conn: &rusqlite::Connection, _account: &str) -> secrets::Secrets {
+        secrets::Secrets::default()
+    }
+    /// Forget an account's stored secret.
+    fn delete_secret(&self, conn: &rusqlite::Connection, account: &str) -> anyhow::Result<()> {
+        self.store_secret(conn, account, &secrets::Secrets::default())
+    }
 }
 
 /// One idle, reusable session plus when it was last returned to the pool, so
@@ -445,6 +461,8 @@ impl Engine {
             pool: std::sync::Mutex::new(HashMap::new()),
             connect_locks: std::sync::Mutex::new(HashMap::new()),
             host: Arc::from(host),
+            dav_passwords: std::sync::Mutex::new(HashMap::new()),
+            dav_syncing: std::sync::Mutex::new(HashSet::new()),
         }
     }
 

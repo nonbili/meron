@@ -148,6 +148,11 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
 }
 
 pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result<Value, String> {
+    if req.method.starts_with("caldav.") {
+        let engine = crate::ffi::engine_for(data_dir)?;
+        return crate::caldav::service::dispatch(&engine, &req.method, &req.params)
+            .map_err(|err| format!("{err:#}"));
+    }
     if req.method.starts_with("pgp.") {
         let engine = crate::ffi::engine_for(data_dir)?;
         return crate::openpgp::commands::dispatch(&engine, &req.method, &req.params)

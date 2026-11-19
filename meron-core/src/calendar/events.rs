@@ -18,6 +18,7 @@ use rusqlite::Connection;
 use serde_json::{Value, json};
 
 use super::{Invite, Response};
+use crate::caldav;
 use crate::store::{self, CalendarEvent, Task};
 
 const DAY: i64 = 86_400;
@@ -29,6 +30,10 @@ const MAX_OCCURRENCES: usize = 20_000;
 
 /// The repeat rules the editor offers, as `events.rrule` stores them.
 const REPEATS: [&str; 4] = ["daily", "weekly", "monthly", "yearly"];
+
+/// What the editor sends to keep a synced event's own repeat rule, one none
+/// of [`REPEATS`] can say.
+pub const CUSTOM_REPEAT: &str = "custom";
 
 /// What the editor sends to create or change an event made here.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -48,6 +53,14 @@ pub struct EventInput {
     /// `None` keeps the event's alerts; `Some(None)` follows the app-wide
     /// default; otherwise see [`CalendarEvent::alerts`].
     pub alerts: Option<Option<Vec<i64>>>,
+    /// The synced calendar (`dav_calendars.id`) the event goes in; empty for
+    /// this device. `None` leaves an edited event where it is (and creates on
+    /// this device); a different calendar on update moves it there.
+    pub calendar: Option<String>,
+    /// On update, the fields as the editor showed them when it opened. A
+    /// field still equal to them was not edited, so a synced event keeps
+    /// whatever its server changed it to meanwhile instead of the stale value.
+    pub original: Option<Box<EventInput>>,
 }
 
 /// Alerts an event can carry on its own, like Apple Calendar's "Alert" and
@@ -107,6 +120,14 @@ impl EventInput {
                     .as_array()
                     .map(|alerts| alerts.iter().filter_map(Value::as_i64).collect())
             }),
+            calendar: params
+                .get("calendar")
+                .and_then(Value::as_str)
+                .map(|calendar| calendar.trim().to_string()),
+            original: params
+                .get("original")
+                .filter(|original| original.is_object())
+                .map(|original| Box::new(Self::from_params(original))),
         }
     }
 }
@@ -173,14 +194,128 @@ pub fn create_event(conn: &Connection, input: &EventInput) -> Result<Value> {
         ..Default::default()
     };
     apply_input(&mut event, input)?;
+    if let Some(calendar) = input.calendar.as_deref().filter(|c| !c.is_empty()) {
+        let calendar = writable_calendar(conn, calendar)?;
+        caldav::queue_new_event(conn, &calendar, &mut event)?;
+    }
     let saved = store::save_event(conn, &event)?;
     Ok(json!({ "event": event_json(&saved) }))
+}
+
+/// A synced calendar events can be written to, or why not.
+fn writable_calendar(conn: &Connection, id: &str) -> Result<caldav::store::DavCalendar> {
+    let calendar = caldav::store::calendar(conn, id)?
+        .filter(|c| c.enabled)
+        .ok_or_else(|| anyhow!("no such calendar: {id}"))?;
+    if calendar.read_only || !calendar.supports("VEVENT") {
+        return Err(anyhow!("calendar {} is read-only", calendar.name));
+    }
+    Ok(calendar)
 }
 
 /// Change an event made here. An accepted invitation's time and title are the
 /// organizer's, so only its notes and alerts are the user's to edit.
 pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<Value> {
     let mut event = store::event(conn, id)?.ok_or_else(|| anyhow!("no such event: {id}"))?;
+    // A picker left as it opened is not a move, even if the event has since
+    // moved elsewhere (another window, a sync).
+    let opened_in = input
+        .original
+        .as_deref()
+        .and_then(|o| o.calendar.as_deref());
+    let target = match input.calendar.as_deref() {
+        Some(calendar) if Some(calendar) != opened_in => calendar.to_string(),
+        _ => event.calendar.clone(),
+    };
+    let moving = target != event.calendar;
+    if moving && !event.invite_uid.is_empty() {
+        return Err(anyhow!(
+            "an accepted invitation stays in this device's calendar"
+        ));
+    }
+    let destination = match target.as_str() {
+        "" => None,
+        id => Some(writable_calendar(conn, id)?),
+    };
+    if !event.calendar.is_empty() {
+        writable_calendar(conn, &event.calendar)?;
+        let before = event.clone();
+        let mut input = series_input(&event, &unedited_from_store(input, &before));
+        // A server's repeat the editor has no name for ("every Monday and
+        // Wednesday until June") comes back as `custom` to keep it.
+        let keep_custom = before.recurring
+            && before.rrule.is_empty()
+            && input.repeat.trim().eq_ignore_ascii_case(CUSTOM_REPEAT);
+        if keep_custom {
+            input.repeat.clear();
+        }
+        apply_input(&mut event, &input)?;
+        if keep_custom {
+            event.recurring = true;
+        }
+        // A save that moved nothing keeps how the server times the event: a
+        // UTC series must not become one in this device's zone, which DST
+        // would then shift.
+        let same_timing = event.start_at == before.start_at
+            && event.end_at == before.end_at
+            && event.all_day == before.all_day
+            && event.recurring == before.recurring
+            && event.rrule == before.rrule;
+        // A series moved to another time keeps its zone too, UTC included;
+        // only one that starts repeating here takes this device's.
+        let still_a_timed_series =
+            before.recurring && !before.all_day && event.recurring && !event.all_day;
+        if keep_custom || same_timing || still_a_timed_series {
+            event.tzid = before.tzid.clone();
+        }
+        event.ics = caldav::ics::patch(&before.ics, &before, &event);
+        if !moving {
+            let saved = store::save_event(conn, &event)?;
+            caldav::store::mark_changed(conn, &saved.id)?;
+            return Ok(json!({ "event": event_json(&saved) }));
+        }
+        // Moving: deleted from the calendar it leaves, created (with the same
+        // UID) in the one it goes to. Moved on again before that copy was
+        // sent, deletions waiting for it wait for the newest copy instead.
+        let unsent_copy = caldav::store::object_for_event(conn, id)?
+            .filter(|object| object.state == caldav::store::CREATED);
+        match &destination {
+            Some(calendar) => {
+                let source = caldav::store::detach_for_move(conn, id)?;
+                event.calendar = calendar.id.clone();
+                caldav::requeue_restored_event(conn, calendar, &mut event)?;
+                let arrival = caldav::store::object_for_event(conn, id)?;
+                // The old copy goes only once the new one is on its server.
+                if let Some(arrival) = &arrival {
+                    if let Some(source) = &source {
+                        caldav::store::link_move(conn, source, &arrival.url)?;
+                    }
+                    if let Some(copy) = &unsent_copy {
+                        caldav::store::retarget_moves(conn, &copy.url, &arrival.url)?;
+                    }
+                }
+            }
+            // This device repeats only by the rules the editor names.
+            None if event.recurring && event.rrule.is_empty() => {
+                return Err(anyhow!(
+                    "this event repeats by a rule only its calendar server can keep; \
+                     choose a repeat before moving it to this device"
+                ));
+            }
+            None => {
+                caldav::store::detach_for_move(conn, id)?;
+                // Here for good: whatever waited for a copy elsewhere goes.
+                if let Some(copy) = &unsent_copy {
+                    caldav::store::retarget_moves(conn, &copy.url, "")?;
+                }
+                event.calendar.clear();
+                event.ics.clear();
+            }
+        }
+        let saved = store::save_event(conn, &event)?;
+        // The calendar it left has a deletion to send.
+        return Ok(json!({ "event": event_json(&saved), "moved_from": before.calendar }));
+    }
     if event.invite_uid.is_empty() {
         let input = series_input(&event, input);
         apply_input(&mut event, &input)?;
@@ -188,8 +323,45 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
         event.notes = input.notes.trim().to_string();
         apply_alerts(&mut event, input);
     }
+    if let Some(calendar) = &destination {
+        caldav::queue_new_event(conn, calendar, &mut event)?;
+    }
     let saved = store::save_event(conn, &event)?;
     Ok(json!({ "event": event_json(&saved) }))
+}
+
+/// `input` with every field the editor did not change (it still equals
+/// `input.original`) taken from `stored`, the event as it is now: a sync may
+/// have brought a newer version since the editor opened.
+fn unedited_from_store(input: &EventInput, stored: &CalendarEvent) -> EventInput {
+    let Some(original) = input.original.as_deref() else {
+        return input.clone();
+    };
+    let mut out = input.clone();
+    if input.title == original.title {
+        out.title = stored.title.clone();
+    }
+    if input.notes == original.notes {
+        out.notes = stored.notes.clone();
+    }
+    if input.location == original.location {
+        out.location = stored.location.clone();
+    }
+    if (input.start, input.end, input.all_day) == (original.start, original.end, original.all_day) {
+        out.start = stored.start_at;
+        out.end = stored.end_at;
+        out.all_day = stored.all_day;
+        // The series' own times, not an occurrence's.
+        out.occurrence_start = 0;
+    }
+    if input.repeat == original.repeat {
+        out.repeat = if stored.recurring && stored.rrule.is_empty() {
+            CUSTOM_REPEAT.to_string()
+        } else {
+            stored.rrule.clone()
+        };
+    }
+    out
 }
 
 /// An edit made on one occurrence of a repeating event, restated for the
@@ -254,6 +426,10 @@ fn shift_series_start(event: &CalendarEvent, input: &EventInput) -> Option<i64> 
 /// hands it straight back to [`restore_event`].
 pub fn delete_event(conn: &Connection, id: &str) -> Result<Value> {
     let event = store::event(conn, id)?;
+    if let Some(synced) = event.as_ref().filter(|e| !e.calendar.is_empty()) {
+        writable_calendar(conn, &synced.calendar)?;
+        caldav::store::mark_deleted(conn, id)?;
+    }
     store::delete_event(conn, id)?;
     Ok(json!({
         "ok": true,
@@ -266,6 +442,15 @@ pub fn restore_event(conn: &Connection, restore: &Value) -> Result<Value> {
         .map_err(|err| anyhow!("not an event to restore: {err}"))?;
     if event.id.is_empty() {
         return Err(anyhow!("not an event to restore"));
+    }
+    let mut event = event;
+    if !event.calendar.is_empty() {
+        match caldav::store::calendar(conn, &event.calendar)?.filter(|c| c.enabled) {
+            Some(calendar) => caldav::requeue_restored_event(conn, &calendar, &mut event)?,
+            // Its calendar went away meanwhile: keep the event on this device.
+            // Its `ics` still describes it, repeats and all.
+            None => event.calendar.clear(),
+        }
     }
     let saved = store::save_event(conn, &event)?;
     Ok(json!({ "event": event_json(&saved) }))
@@ -656,6 +841,8 @@ pub fn event_json(event: &CalendarEvent) -> Value {
         // `events_payload`).
         "alerts_all_day": event.all_day,
         "source": if event.invite_uid.is_empty() { "event" } else { "invite" },
+        // The synced calendar it belongs to; empty for one on this device.
+        "calendar": event.calendar,
     })
 }
 
@@ -1046,7 +1233,18 @@ fn expansion_tz(ical: &calcard::icalendar::ICalendar, all_day: bool) -> Tz {
 /// rule, timed in the zone it was made in so 09:00 stays 09:00 across DST.
 fn repeat_ics(event: &CalendarEvent) -> String {
     let freq = event.rrule.to_ascii_uppercase();
-    let (dtstart, dtend) = if event.all_day {
+    let (dtstart, dtend) = date_lines(event);
+    format!(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Meron//Meron//EN\r\nBEGIN:VEVENT\r\n\
+         UID:{}\r\n{dtstart}\r\n{dtend}\r\nRRULE:FREQ={freq}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+        event.id
+    )
+}
+
+/// The DTSTART and DTEND lines for an event: dates for an all-day one, wall
+/// time in its zone for a repeating one, UTC otherwise.
+pub(crate) fn date_lines(event: &CalendarEvent) -> (String, String) {
+    if event.all_day {
         let date = |at: i64| {
             chrono::DateTime::from_timestamp(at, 0)
                 .map(|time| time.format("%Y%m%d").to_string())
@@ -1087,12 +1285,7 @@ fn repeat_ics(event: &CalendarEvent) -> String {
                 )
             }
         }
-    };
-    format!(
-        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Meron//Meron//EN\r\nBEGIN:VEVENT\r\n\
-         UID:{}\r\n{dtstart}\r\n{dtend}\r\nRRULE:FREQ={freq}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
-        event.id
-    )
+    }
 }
 
 /// `series_ics` with the occurrence `invite` is about answered: declined, it

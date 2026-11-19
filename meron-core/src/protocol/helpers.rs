@@ -86,6 +86,14 @@ impl crate::engine::EngineHost for MobileHost {
         let blob = serde_json::to_string(secrets)?;
         store::upsert_secret(conn, account, &blob).map_err(|err| anyhow::anyhow!(err))
     }
+
+    fn load_secret(&self, conn: &rusqlite::Connection, account: &str) -> Secrets {
+        load_mobile_secret(conn, account)
+    }
+
+    fn delete_secret(&self, conn: &rusqlite::Connection, account: &str) -> anyhow::Result<()> {
+        store::delete_secret(conn, account)
+    }
 }
 
 pub(crate) fn load_mobile_account_creds(

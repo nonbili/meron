@@ -44,6 +44,7 @@ psl = "2"
 sha2 = "0.11.0"
 chrono = "0.4.44"
 url = "2.5.8"
+percent-encoding = "2"
 uuid = { version = "1.23.1", features = ["v4"] }
 hickory-resolver = { version = "0.26.1", features = ["system-config"] }
 ring = "0.17"

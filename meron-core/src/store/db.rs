@@ -667,7 +667,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 29;
+pub(super) const SCHEMA_VERSION: i64 = 30;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -788,6 +788,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if version < 29 {
         migrate_v29(&tx)?;
+    }
+    if version < 30 {
+        migrate_v30(&tx)?;
     }
     tx.commit()?;
     Ok(())
@@ -1956,5 +1959,24 @@ fn migrate_v28(conn: &Connection) -> Result<()> {
 fn migrate_v29(conn: &Connection) -> Result<()> {
     conn.execute_batch(crate::openpgp::store::DDL)?;
     conn.execute_batch("PRAGMA user_version = 29;")?;
+    Ok(())
+}
+
+/// CalDAV calendars (nonbili/meron#127): the accounts, their calendars, and
+/// which server object each synced event is. See `caldav::store`.
+fn migrate_v30(conn: &Connection) -> Result<()> {
+    conn.execute_batch(crate::caldav::store::DDL)?;
+    let has_calendar: bool = conn.query_row(
+        "SELECT count(*) > 0 FROM pragma_table_info('events') WHERE name = 'calendar'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_calendar {
+        conn.execute_batch("ALTER TABLE events ADD COLUMN calendar TEXT NOT NULL DEFAULT '';")?;
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS events_calendar_idx ON events(calendar) WHERE calendar <> '';
+         PRAGMA user_version = 30;",
+    )?;
     Ok(())
 }

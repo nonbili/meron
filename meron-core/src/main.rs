@@ -74,6 +74,17 @@ impl EngineHost for DesktopHost {
     ) -> anyhow::Result<()> {
         secrets::store(account, secrets)
     }
+
+    fn load_secret(&self, _conn: &rusqlite::Connection, account: &str) -> secrets::Secrets {
+        secrets::load(account).unwrap_or_else(|err| {
+            eprintln!("meron-core: could not load keychain secret for {account}: {err:#}");
+            secrets::Secrets::default()
+        })
+    }
+
+    fn delete_secret(&self, _conn: &rusqlite::Connection, account: &str) -> anyhow::Result<()> {
+        secrets::delete(account)
+    }
 }
 
 /// Tell the bridge the store is being upgraded, so it holds request timeouts and
@@ -149,6 +160,7 @@ async fn main() {
     }
 
     tokio::spawn(poll_notify_folders(engine.clone(), out.clone()));
+    tokio::spawn(sidecar::dispatch::caldav::poll(engine.clone(), out.clone()));
 
     emit(&out, "ready", ready_event()).await;
 

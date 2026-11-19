@@ -7,6 +7,7 @@
 
 pub mod avatar;
 pub mod backup;
+pub mod caldav;
 pub mod calendar;
 pub mod changelog;
 pub mod eml;

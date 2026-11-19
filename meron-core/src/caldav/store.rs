@@ -1,0 +1,504 @@
+//! What the store keeps for CalDAV: the accounts, the calendars each one has,
+//! and for every synced event which server object it is and whether it has
+//! local changes still to send.
+//!
+//! The events themselves are ordinary rows in `events`, marked with the
+//! calendar they came from, so the calendar view, reminders and search treat
+//! them like any other. The password is not here: it lives where mail
+//! passwords do (the OS keychain on desktop, `account_secrets` on mobile).
+
+use anyhow::Result;
+use rusqlite::{Connection, OptionalExtension, params};
+
+use crate::store::now_unix;
+
+pub const DDL: &str = "
+CREATE TABLE IF NOT EXISTS dav_accounts (
+  id           TEXT PRIMARY KEY,
+  server_url   TEXT NOT NULL DEFAULT '',  -- as the user typed it
+  username     TEXT NOT NULL DEFAULT '',
+  display_name TEXT NOT NULL DEFAULT '',
+  home         TEXT NOT NULL DEFAULT '',  -- calendar-home-set, found by discovery
+  last_sync_at INTEGER NOT NULL DEFAULT 0,
+  last_error   TEXT NOT NULL DEFAULT '',
+  json         TEXT NOT NULL DEFAULT '{}',
+  created_at   INTEGER NOT NULL DEFAULT 0,
+  updated_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS dav_calendars (
+  id         TEXT PRIMARY KEY,
+  account    TEXT NOT NULL,
+  url        TEXT NOT NULL,
+  name       TEXT NOT NULL DEFAULT '',
+  color      TEXT NOT NULL DEFAULT '',
+  components TEXT NOT NULL DEFAULT '',     -- comma-separated: VEVENT,VTODO; empty = any
+  ctag       TEXT NOT NULL DEFAULT '',     -- as of the last completed sync
+  sync_token TEXT NOT NULL DEFAULT '',
+  read_only  INTEGER NOT NULL DEFAULT 0,
+  enabled    INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  json       TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (account, url)
+);
+CREATE TABLE IF NOT EXISTS dav_objects (
+  calendar TEXT NOT NULL,
+  url      TEXT NOT NULL,
+  etag     TEXT NOT NULL DEFAULT '',     -- empty: fetch again on the next sync
+  local_id TEXT NOT NULL DEFAULT '',     -- events.id; empty for what is not shown (a VTODO)
+  state    TEXT NOT NULL DEFAULT '',     -- '' in step | created | changed | deleted
+  moved_to TEXT NOT NULL DEFAULT '',     -- a deletion that waits for this URL's create
+  PRIMARY KEY (calendar, url)
+);
+CREATE INDEX IF NOT EXISTS dav_objects_local_idx ON dav_objects(local_id) WHERE local_id <> '';
+";
+
+/// Local edits waiting to be sent.
+pub const CREATED: &str = "created";
+pub const CHANGED: &str = "changed";
+pub const DELETED: &str = "deleted";
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DavAccount {
+    pub id: String,
+    pub server_url: String,
+    pub username: String,
+    pub display_name: String,
+    pub home: String,
+    pub last_sync_at: i64,
+    pub last_error: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DavCalendar {
+    pub id: String,
+    pub account: String,
+    pub url: String,
+    pub name: String,
+    pub color: String,
+    pub components: Vec<String>,
+    pub ctag: String,
+    pub sync_token: String,
+    pub read_only: bool,
+    pub enabled: bool,
+    /// When every object was last listed and compared, rather than only
+    /// the changes a sync token reported.
+    pub listed_at: i64,
+}
+
+impl DavCalendar {
+    pub fn supports(&self, component: &str) -> bool {
+        self.components.is_empty()
+            || self
+                .components
+                .iter()
+                .any(|c| c.eq_ignore_ascii_case(component))
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DavObject {
+    pub calendar: String,
+    pub url: String,
+    pub etag: String,
+    pub local_id: String,
+    pub state: String,
+    /// For a deletion left by a move: the object the event moved to. The
+    /// deletion waits until that one is on its server.
+    pub moved_to: String,
+}
+
+const ACCOUNT_COLUMNS: &str =
+    "id, server_url, username, display_name, home, last_sync_at, last_error";
+
+fn read_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavAccount> {
+    Ok(DavAccount {
+        id: row.get(0)?,
+        server_url: row.get(1)?,
+        username: row.get(2)?,
+        display_name: row.get(3)?,
+        home: row.get(4)?,
+        last_sync_at: row.get(5)?,
+        last_error: row.get(6)?,
+    })
+}
+
+pub fn accounts(conn: &Connection) -> Result<Vec<DavAccount>> {
+    let sql = format!("SELECT {ACCOUNT_COLUMNS} FROM dav_accounts ORDER BY created_at, id");
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], read_account)?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn account(conn: &Connection, id: &str) -> Result<Option<DavAccount>> {
+    let sql = format!("SELECT {ACCOUNT_COLUMNS} FROM dav_accounts WHERE id = ?1");
+    Ok(conn.query_row(&sql, params![id], read_account).optional()?)
+}
+
+pub fn save_account(conn: &Connection, account: &DavAccount) -> Result<()> {
+    let now = now_unix();
+    conn.execute(
+        "INSERT INTO dav_accounts (id, server_url, username, display_name, home, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+         ON CONFLICT(id) DO UPDATE SET
+           server_url = excluded.server_url, username = excluded.username,
+           display_name = excluded.display_name, home = excluded.home,
+           updated_at = excluded.updated_at",
+        params![
+            account.id,
+            account.server_url,
+            account.username,
+            account.display_name,
+            account.home,
+            now
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn record_sync(conn: &Connection, id: &str, error: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_accounts SET last_error = ?2,
+           last_sync_at = CASE WHEN ?2 = '' THEN ?3 ELSE last_sync_at END
+         WHERE id = ?1",
+        params![id, error, now_unix()],
+    )?;
+    Ok(())
+}
+
+/// Remove an account and everything synced from it. The server keeps its
+/// copy; only this device forgets.
+pub fn delete_account(conn: &Connection, id: &str) -> Result<()> {
+    for calendar in calendars(conn, id)? {
+        delete_calendar(conn, &calendar.id)?;
+    }
+    conn.execute("DELETE FROM dav_accounts WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+const CALENDAR_COLUMNS: &str = "id, account, url, name, color, components, ctag, sync_token,
+    read_only, enabled, COALESCE(json_extract(json, '$.listed_at'), 0)";
+
+fn read_calendar(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavCalendar> {
+    let components: String = row.get(5)?;
+    Ok(DavCalendar {
+        id: row.get(0)?,
+        account: row.get(1)?,
+        url: row.get(2)?,
+        name: row.get(3)?,
+        color: row.get(4)?,
+        components: components
+            .split(',')
+            .filter(|c| !c.is_empty())
+            .map(str::to_string)
+            .collect(),
+        ctag: row.get(6)?,
+        sync_token: row.get(7)?,
+        read_only: row.get::<_, i64>(8)? != 0,
+        enabled: row.get::<_, i64>(9)? != 0,
+        listed_at: row.get(10)?,
+    })
+}
+
+pub fn calendars(conn: &Connection, account: &str) -> Result<Vec<DavCalendar>> {
+    let sql = format!(
+        "SELECT {CALENDAR_COLUMNS} FROM dav_calendars WHERE account = ?1 ORDER BY sort_order, name, id"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params![account], read_calendar)?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn all_calendars(conn: &Connection) -> Result<Vec<DavCalendar>> {
+    let sql = format!(
+        "SELECT {CALENDAR_COLUMNS} FROM dav_calendars ORDER BY account, sort_order, name, id"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], read_calendar)?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn calendar(conn: &Connection, id: &str) -> Result<Option<DavCalendar>> {
+    let sql = format!("SELECT {CALENDAR_COLUMNS} FROM dav_calendars WHERE id = ?1");
+    Ok(conn
+        .query_row(&sql, params![id], read_calendar)
+        .optional()?)
+}
+
+/// Bring the account's calendars in line with what the server lists: new ones
+/// are added (enabled), known ones renamed or recoloured, and ones the server
+/// no longer has removed with their events. Sync state is left alone; it
+/// moves only when a sync completes ([`set_synced`]).
+pub fn reconcile_calendars(
+    conn: &Connection,
+    account: &str,
+    listed: &[super::Calendar],
+) -> Result<Vec<DavCalendar>> {
+    let now = now_unix();
+    for (order, calendar) in listed.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO dav_calendars (id, account, url, name, color, components, read_only,
+               sort_order, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
+             ON CONFLICT(account, url) DO UPDATE SET
+               name = excluded.name, color = excluded.color,
+               components = excluded.components, read_only = excluded.read_only,
+               sort_order = excluded.sort_order, updated_at = excluded.updated_at",
+            params![
+                crate::tasks::new_id("cal"),
+                account,
+                calendar.url,
+                calendar.name,
+                calendar.color,
+                calendar.components.join(","),
+                calendar.read_only as i64,
+                order as i64,
+                now,
+            ],
+        )?;
+    }
+    for known in calendars(conn, account)? {
+        if !listed.iter().any(|c| c.url == known.url) {
+            keep_unsent_here(conn, &known.id)?;
+            delete_calendar(conn, &known.id)?;
+        }
+    }
+    calendars(conn, account)
+}
+
+/// Record a completed pull. `listed`: it compared every object, not only
+/// the reported changes.
+pub fn set_synced(
+    conn: &Connection,
+    id: &str,
+    ctag: &str,
+    sync_token: &str,
+    listed: bool,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_calendars SET ctag = ?2, sync_token = ?3,
+           json = CASE WHEN ?4 THEN json_set(json, '$.listed_at', ?5) ELSE json END
+         WHERE id = ?1",
+        params![id, ctag, sync_token, listed, now_unix()],
+    )?;
+    Ok(())
+}
+
+/// Turn a calendar off or on. Off drops its events from this device and
+/// forgets its sync state, so turning it on again starts afresh.
+pub fn set_enabled(conn: &Connection, id: &str, enabled: bool) -> Result<()> {
+    if !enabled {
+        forget_contents(conn, id)?;
+    }
+    conn.execute(
+        "UPDATE dav_calendars SET enabled = ?2 WHERE id = ?1",
+        params![id, enabled as i64],
+    )?;
+    Ok(())
+}
+
+/// The calendar is gone from its server: events created or changed here
+/// that never reached it stay on this device instead of going with it.
+fn keep_unsent_here(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE events SET calendar = '',
+           -- A repeat the editor can name is kept by `rrule`; a server's own
+           -- rule only by the object itself.
+           ics = CASE WHEN recurring <> 0 AND rrule = '' THEN ics ELSE '' END
+         WHERE calendar = ?1 AND id IN (
+           SELECT local_id FROM dav_objects
+           WHERE calendar = ?1 AND state IN (?2, ?3) AND local_id <> '')",
+        params![id, CREATED, CHANGED],
+    )?;
+    Ok(())
+}
+
+fn forget_contents(conn: &Connection, id: &str) -> Result<()> {
+    // Moves into this calendar that never got here are called off: the
+    // calendars they left keep the event, and list everything again on
+    // their next sync to show it once more.
+    conn.execute(
+        "UPDATE dav_calendars SET ctag = '', sync_token = '',
+           json = json_set(json, '$.listed_at', 0)
+         WHERE id IN (SELECT calendar FROM dav_objects WHERE moved_to IN (
+           SELECT url FROM dav_objects WHERE calendar = ?1 AND state = ?2))",
+        params![id, CREATED],
+    )?;
+    conn.execute(
+        "DELETE FROM dav_objects WHERE moved_to IN (
+           SELECT url FROM dav_objects WHERE calendar = ?1 AND state = ?2)",
+        params![id, CREATED],
+    )?;
+    conn.execute("DELETE FROM events WHERE calendar = ?1", params![id])?;
+    conn.execute("DELETE FROM dav_objects WHERE calendar = ?1", params![id])?;
+    conn.execute(
+        "UPDATE dav_calendars SET ctag = '', sync_token = '' WHERE id = ?1",
+        params![id],
+    )?;
+    Ok(())
+}
+
+fn delete_calendar(conn: &Connection, id: &str) -> Result<()> {
+    forget_contents(conn, id)?;
+    conn.execute("DELETE FROM dav_calendars WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+const OBJECT_COLUMNS: &str = "calendar, url, etag, local_id, state, moved_to";
+
+fn read_object(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavObject> {
+    Ok(DavObject {
+        calendar: row.get(0)?,
+        url: row.get(1)?,
+        etag: row.get(2)?,
+        local_id: row.get(3)?,
+        state: row.get(4)?,
+        moved_to: row.get(5)?,
+    })
+}
+
+pub fn objects(conn: &Connection, calendar: &str) -> Result<Vec<DavObject>> {
+    let sql = format!("SELECT {OBJECT_COLUMNS} FROM dav_objects WHERE calendar = ?1");
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params![calendar], read_object)?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn object(conn: &Connection, calendar: &str, url: &str) -> Result<Option<DavObject>> {
+    let sql = format!("SELECT {OBJECT_COLUMNS} FROM dav_objects WHERE calendar = ?1 AND url = ?2");
+    Ok(conn
+        .query_row(&sql, params![calendar, url], read_object)
+        .optional()?)
+}
+
+pub fn object_for_event(conn: &Connection, event_id: &str) -> Result<Option<DavObject>> {
+    let sql = format!("SELECT {OBJECT_COLUMNS} FROM dav_objects WHERE local_id = ?1");
+    Ok(conn
+        .query_row(&sql, params![event_id], read_object)
+        .optional()?)
+}
+
+pub fn pending(conn: &Connection, calendar: &str) -> Result<Vec<DavObject>> {
+    let sql = format!(
+        "SELECT {OBJECT_COLUMNS} FROM dav_objects WHERE calendar = ?1 AND state <> '' ORDER BY url"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params![calendar], read_object)?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn save_object(conn: &Connection, object: &DavObject) -> Result<()> {
+    conn.execute(
+        "INSERT INTO dav_objects (calendar, url, etag, local_id, state, moved_to)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(calendar, url) DO UPDATE SET
+           etag = excluded.etag, local_id = excluded.local_id, state = excluded.state,
+           moved_to = excluded.moved_to",
+        params![
+            object.calendar,
+            object.url,
+            object.etag,
+            object.local_id,
+            object.state,
+            object.moved_to
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn delete_object(conn: &Connection, calendar: &str, url: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM dav_objects WHERE calendar = ?1 AND url = ?2",
+        params![calendar, url],
+    )?;
+    Ok(())
+}
+
+/// Note that a synced event was edited here. One created here and not yet
+/// sent stays `created`.
+pub fn mark_changed(conn: &Connection, event_id: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_objects SET state = ?2 WHERE local_id = ?1 AND state IN ('', ?3)",
+        params![event_id, CHANGED, DELETED],
+    )?;
+    Ok(())
+}
+
+/// Note that a synced event is leaving its calendar for another: like
+/// [`mark_deleted`], but the server object stops naming the event, which is
+/// about to be another object's.
+pub fn detach_for_move(conn: &Connection, event_id: &str) -> Result<Option<DavObject>> {
+    conn.execute(
+        "DELETE FROM dav_objects WHERE local_id = ?1 AND state = ?2",
+        params![event_id, CREATED],
+    )?;
+    let Some(source) = object_for_event(conn, event_id)? else {
+        return Ok(None);
+    };
+    conn.execute(
+        "UPDATE dav_objects SET state = ?3, local_id = '' WHERE calendar = ?1 AND url = ?2",
+        params![source.calendar, source.url, DELETED],
+    )?;
+    Ok(Some(source))
+}
+
+/// Make the deletion a move left at `source` wait for `destination`.
+pub fn link_move(conn: &Connection, source: &DavObject, destination: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_objects SET moved_to = ?3 WHERE calendar = ?1 AND url = ?2",
+        params![source.calendar, source.url, destination],
+    )?;
+    Ok(())
+}
+
+/// Deletions that waited for a copy at `from` wait for `to` instead, or, with
+/// `to` empty, for nothing.
+pub fn retarget_moves(conn: &Connection, from: &str, to: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_objects SET moved_to = ?2 WHERE moved_to = ?1",
+        params![from, to],
+    )?;
+    Ok(())
+}
+
+/// The object at `url`, in whichever calendar holds it.
+pub fn object_at(conn: &Connection, url: &str) -> Result<Option<DavObject>> {
+    let sql = format!("SELECT {OBJECT_COLUMNS} FROM dav_objects WHERE url = ?1 LIMIT 1");
+    Ok(conn.query_row(&sql, params![url], read_object).optional()?)
+}
+
+/// How many events an account's calendars show here.
+pub fn event_count(conn: &Connection, account: &str) -> Result<usize> {
+    Ok(conn.query_row(
+        "SELECT count(*) FROM events WHERE calendar IN
+           (SELECT id FROM dav_calendars WHERE account = ?1)",
+        params![account],
+        |row| row.get::<_, i64>(0),
+    )? as usize)
+}
+
+/// Local changes not yet on the server, in one calendar or (`None`) all of
+/// an account's.
+pub fn unsent(conn: &Connection, account: &str, calendar: Option<&str>) -> Result<i64> {
+    Ok(conn.query_row(
+        "SELECT count(*) FROM dav_objects o JOIN dav_calendars c ON c.id = o.calendar
+         WHERE c.account = ?1 AND (?2 IS NULL OR c.id = ?2) AND o.state <> ''",
+        params![account, calendar],
+        |row| row.get(0),
+    )?)
+}
+
+/// Note that a synced event was deleted here. One never sent is simply
+/// forgotten.
+pub fn mark_deleted(conn: &Connection, event_id: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM dav_objects WHERE local_id = ?1 AND state = ?2",
+        params![event_id, CREATED],
+    )?;
+    conn.execute(
+        "UPDATE dav_objects SET state = ?2 WHERE local_id = ?1",
+        params![event_id, DELETED],
+    )?;
+    Ok(())
+}

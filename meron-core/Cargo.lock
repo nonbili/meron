@@ -2450,6 +2450,7 @@ dependencies = [
  "mailparse",
  "ndk-context",
  "oo7",
+ "percent-encoding",
  "pgp",
  "psl",
  "quick-xml",

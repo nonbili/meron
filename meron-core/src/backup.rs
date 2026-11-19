@@ -306,9 +306,38 @@ pub fn collect(
         settings,
         tags,
         task_lists: collect_task_lists(conn)?,
-        events: store::all_events(conn)?,
+        events: backup_events(conn)?,
         openpgp_keys: crate::openpgp::store::backup_collect(conn, include_secrets)?,
     })
+}
+
+/// The events a backup keeps: those on this device, and those of synced
+/// calendars that exist only here so far (created or changed, not yet sent),
+/// as copies on this device. Everything else in a synced calendar is the
+/// server's to keep; adding the account again brings it back.
+fn backup_events(conn: &Connection) -> Result<Vec<store::CalendarEvent>> {
+    let unsent: std::collections::HashSet<String> = conn
+        .prepare("SELECT local_id FROM dav_objects WHERE state IN (?1, ?2)")?
+        .query_map(
+            params![crate::caldav::store::CREATED, crate::caldav::store::CHANGED],
+            |row| row.get(0),
+        )?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(store::all_events(conn)?
+        .into_iter()
+        .filter(|event| event.calendar.is_empty() || unsent.contains(&event.id))
+        .map(|mut event| {
+            if !event.calendar.is_empty() {
+                event.calendar.clear();
+                // A repeat the editor names is kept by `rrule`; a server's
+                // own rule only by its object.
+                if !(event.recurring && event.rrule.is_empty()) {
+                    event.ics.clear();
+                }
+            }
+            event
+        })
+        .collect())
 }
 
 /// Read every task list and its items. Tasks hold nothing secret — they are

@@ -128,11 +128,15 @@ pub struct CalendarEvent {
     /// Local schedule-change metadata; excluded from backups and undo payloads.
     #[serde(skip)]
     pub reminder_after: i64,
+    /// The CalDAV calendar (`dav_calendars.id`) this event is a copy of; empty
+    /// for one that lives only here. `ics` is then the server's object, which
+    /// edits are written back into.
+    pub calendar: String,
 }
 
 const EVENT_COLUMNS: &str = "id, title, notes, location, start_at, end_at, all_day, recurring,
     rrule, tzid, account, thread_id, message_id, invite_uid, response, ics, created_at, updated_at,
-    recurrence_id, COALESCE(json_extract(json, '$.reminder_after'), created_at), alerts";
+    recurrence_id, COALESCE(json_extract(json, '$.reminder_after'), created_at), alerts, calendar";
 
 fn read_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<CalendarEvent> {
     Ok(CalendarEvent {
@@ -159,6 +163,7 @@ fn read_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<CalendarEvent> {
         alerts: row
             .get::<_, Option<String>>(20)?
             .and_then(|alerts| serde_json::from_str(&alerts).ok()),
+        calendar: row.get(21)?,
     })
 }
 
@@ -260,8 +265,8 @@ pub fn save_event(conn: &Connection, event: &CalendarEvent) -> Result<CalendarEv
     conn.execute(
         "INSERT INTO events (id, title, notes, location, start_at, end_at, all_day, recurring,
            rrule, tzid, account, thread_id, message_id, invite_uid, response, ics, created_at, updated_at,
-           recurrence_id, json, alerts)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?17, ?18, json_object('reminder_after', ?17), ?20)
+           recurrence_id, json, alerts, calendar)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?17, ?18, json_object('reminder_after', ?17), ?20, ?21)
          ON CONFLICT(id) DO UPDATE SET
            title = excluded.title, notes = excluded.notes, location = excluded.location,
            start_at = excluded.start_at, end_at = excluded.end_at, all_day = excluded.all_day,
@@ -270,6 +275,7 @@ pub fn save_event(conn: &Connection, event: &CalendarEvent) -> Result<CalendarEv
            message_id = excluded.message_id, invite_uid = excluded.invite_uid,
            response = excluded.response, ics = excluded.ics, updated_at = excluded.updated_at,
            recurrence_id = excluded.recurrence_id, alerts = excluded.alerts,
+           calendar = excluded.calendar,
            json = CASE WHEN events.start_at <> excluded.start_at OR events.all_day <> excluded.all_day
                          OR events.rrule <> excluded.rrule OR events.tzid <> excluded.tzid OR ?19
                          OR events.alerts IS NOT excluded.alerts
@@ -299,6 +305,7 @@ pub fn save_event(conn: &Connection, event: &CalendarEvent) -> Result<CalendarEv
                 .alerts
                 .as_ref()
                 .map(|alerts| serde_json::to_string(alerts).unwrap_or_default()),
+            event.calendar,
         ],
     )?;
     Ok(self::event(conn, &event.id)?.unwrap_or_else(|| event.clone()))

@@ -3,6 +3,7 @@
 mod accounts;
 mod actions;
 mod backup;
+pub(crate) mod caldav;
 mod calendar;
 mod compose;
 mod feeds;
@@ -88,6 +89,8 @@ pub(crate) async fn dispatch(
         "backup.export" | "backup.import" => backup::dispatch(engine, req, out).await,
 
         m if m.starts_with("pgp.") => openpgp::dispatch(engine, req, out).await,
+
+        m if m.starts_with("caldav.") => caldav::dispatch(engine, req, out).await,
 
         "account.list"
         | "account.connect"
