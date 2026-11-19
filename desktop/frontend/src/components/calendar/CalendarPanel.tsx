@@ -20,6 +20,7 @@ import { IconButton } from '../button/IconButton'
 import { SIDE_PANEL_WIDTH } from '../sidepanel/SidePanelSlide'
 import { sameMonth, useCalendarColor, useCalendarFeed, useVisibleItems } from './CalendarView'
 import { CalendarFilter } from './CalendarFilter'
+import { CalendarSyncButton } from './CalendarSyncButton'
 import { EventEditorDialog } from './EventEditorDialog'
 
 /**
@@ -62,6 +63,7 @@ export function CalendarPanel() {
       <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border pl-3 pr-1.5">
         <CalendarDays size={16} className="shrink-0 text-accent" />
         <h2 className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold text-primary">{t('calendar.title')}</h2>
+        <CalendarSyncButton />
         <CalendarFilter />
         <IconButton
           label={t('calendar.newEvent')}

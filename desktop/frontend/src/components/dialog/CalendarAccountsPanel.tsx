@@ -4,10 +4,17 @@ import { useTranslation } from '../../lib/i18n'
 import { formatThreadDate } from '../../lib/date'
 import { errorMessage } from '../../lib/errors'
 import {
+  SYNC_INTERVALS,
   addCalendarAccount,
+  createCalendar,
+  deleteCalendar,
+  setSyncInterval,
+  updateCalendar,
+  type CalendarAccountCalendar,
   caldav$,
   loadCalendarAccounts,
   removeCalendarAccount,
+  renameCalendarAccount,
   setCalendarEnabled,
   setCalendarPassword,
   syncCalendarAccount,
@@ -16,7 +23,9 @@ import {
 import { useValue } from '@legendapp/state/react'
 import { calendarColor } from '../../states/calendar'
 import { Button } from '../button/Button'
-import { TextInput } from '../field/Field'
+import { SelectInput, TextInput } from '../field/Field'
+import { ColorSwatchPicker } from '../field/ColorSwatchPicker'
+import { COLOR_PRESETS, normalizeHexColor } from '../../lib/colorPresets'
 import { SettingRow, SettingsGroup, Switch } from './AccountSettingsRows'
 
 // Calendars synced from CalDAV servers (Nextcloud, Fastmail, iCloud, …): add
@@ -63,6 +72,7 @@ function AddAccountForm({ onDone }: { onDone: () => void }) {
   const [server, setServer] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const canSubmit = !!server.trim() && !!username.trim() && !!password && !busy
@@ -72,7 +82,12 @@ function AddAccountForm({ onDone }: { onDone: () => void }) {
     setBusy(true)
     setError('')
     try {
-      await addCalendarAccount({ server_url: server.trim(), username: username.trim(), password })
+      await addCalendarAccount({
+        server_url: server.trim(),
+        username: username.trim(),
+        password,
+        display_name: name.trim(),
+      })
       onDone()
     } catch (err) {
       setError(errorMessage(err, t('settings.calendars.addFailed')))
@@ -118,6 +133,13 @@ function AddAccountForm({ onDone }: { onDone: () => void }) {
           onChange={(event) => setPassword(event.target.value)}
         />
         <p className="text-[0.6875rem] text-secondary">{t('settings.calendars.passwordHint')}</p>
+        <TextInput
+          fieldSize="md"
+          placeholder={t('settings.calendars.accountNameOptional')}
+          aria-label={t('settings.calendars.accountName')}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
         {error && <p className="text-xs text-rose-500 select-text">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={onDone} disabled={busy}>
@@ -164,6 +186,11 @@ function AccountCard({ account }: { account: CalendarAccount }) {
 
   return (
     <SettingsGroup title={account.display_name || account.server_url}>
+      <SettingRow
+        title={t('settings.calendars.accountName')}
+        hint={t('settings.calendars.accountNameHint')}
+        control={<AccountName account={account} />}
+      />
       <div className="flex items-center justify-between gap-4 px-3.5 py-2.5">
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-xs text-primary">{account.username}</span>
@@ -214,26 +241,197 @@ function AccountCard({ account }: { account: CalendarAccount }) {
           {passwordError && <p className="text-xs text-rose-500 select-text">{passwordError}</p>}
         </form>
       )}
+      <SettingRow
+        title={t('settings.calendars.syncEvery')}
+        control={
+          <SelectInput
+            aria-label={t('settings.calendars.syncEvery')}
+            value={String(account.sync_interval)}
+            onChange={(event) => void setSyncInterval(account.id, Number(event.target.value))}
+          >
+            {SYNC_INTERVALS.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutes === 0
+                  ? t('settings.calendars.syncManually')
+                  : t('settings.calendars.minutes', { count: minutes })}
+              </option>
+            ))}
+          </SelectInput>
+        }
+      />
       {eventCalendars.map((calendar) => (
-        <SettingRow
-          key={calendar.id}
-          title={calendar.read_only ? `${calendar.name} · ${t('calendar.readOnly')}` : calendar.name}
-          control={
-            <span className="flex items-center gap-3">
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: calendarColor(calendar) }}
-                aria-hidden
-              />
-              <Switch
-                checked={calendar.enabled}
-                label={calendar.name}
-                onChange={() => void setCalendarEnabled(calendar.id, !calendar.enabled)}
-              />
-            </span>
-          }
-        />
+        <CalendarRow key={calendar.id} calendar={calendar} />
       ))}
+      <NewCalendar accountId={account.id} />
     </SettingsGroup>
+  )
+}
+
+/** The account's name, saved when the field is left or Enter pressed. */
+function AccountName({ account }: { account: CalendarAccount }) {
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState(account.display_name)
+  useEffect(() => setDraft(account.display_name), [account.display_name])
+  const save = () => {
+    if (draft.trim() !== account.display_name) void renameCalendarAccount(account.id, draft.trim())
+  }
+  return (
+    <TextInput
+      className="w-48 font-semibold"
+      aria-label={t('settings.calendars.accountName')}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={save}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur()
+      }}
+    />
+  )
+}
+
+/** One calendar: shown or not, and, behind its edit button, its name and
+ * colour, which change on the server too. */
+function CalendarRow({ calendar }: { calendar: CalendarAccountCalendar }) {
+  const { t } = useTranslation()
+  const [editing, setEditing] = useState(false)
+  return (
+    <>
+      <SettingRow
+        title={calendar.read_only ? `${calendar.name} · ${t('calendar.readOnly')}` : calendar.name}
+        control={
+          <span className="flex items-center gap-2">
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded-lg cursor-pointer hover:bg-hover"
+              title={t('settings.calendars.edit')}
+              aria-label={t('settings.calendars.edit')}
+              aria-expanded={editing}
+              onClick={() => setEditing(!editing)}
+            >
+              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: calendarColor(calendar) }} />
+            </button>
+            <Switch
+              checked={calendar.enabled}
+              label={calendar.name}
+              onChange={() => void setCalendarEnabled(calendar.id, !calendar.enabled)}
+            />
+          </span>
+        }
+      />
+      {editing && <CalendarEditor calendar={calendar} onDone={() => setEditing(false)} />}
+    </>
+  )
+}
+
+function CalendarEditor({ calendar, onDone }: { calendar: CalendarAccountCalendar; onDone: () => void }) {
+  const { t } = useTranslation()
+  const [name, setName] = useState(calendar.name)
+  const [error, setError] = useState('')
+  const run = async (changes: { name?: string; color?: string }) => {
+    setError('')
+    try {
+      await updateCalendar(calendar.id, changes)
+      return true
+    } catch (err) {
+      setError(errorMessage(err, t('settings.calendars.saveFailed')))
+      return false
+    }
+  }
+  return (
+    <form
+      className="flex flex-col gap-2.5 px-3.5 py-2.5"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const trimmed = name.trim()
+        if (!trimmed || trimmed === calendar.name) return onDone()
+        void run({ name: trimmed }).then((ok) => ok && onDone())
+      }}
+    >
+      {/* Someone else's calendar keeps its name; its colour can still be
+          chosen, for this device. */}
+      {!calendar.read_only && (
+        <div className="flex items-center gap-2">
+          <TextInput
+            className="flex-1"
+            aria-label={t('settings.calendars.calendarName')}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <Button type="submit" size="sm" disabled={!name.trim()}>
+            {t('buttons.save')}
+          </Button>
+        </div>
+      )}
+      <ColorSwatchPicker
+        label={t('settings.calendars.color')}
+        value={normalizeHexColor(calendar.color) ?? calendarColor(calendar)}
+        onChange={(color) => {
+          if (color) void run({ color })
+        }}
+      />
+      {error && <p className="text-xs text-rose-500 select-text">{error}</p>}
+      <div>
+        <Button variant="danger" size="sm" leftIcon={Trash2} onClick={() => void deleteCalendar(calendar)}>
+          {t('settings.calendars.deleteCalendar')}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+/** Make a calendar on the account's server. */
+function NewCalendar({ accountId }: { accountId: string }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [color, setColor] = useState<string>(COLOR_PRESETS[5].hex)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  if (!open) {
+    return (
+      <div className="px-3.5 py-2">
+        <Button variant="ghost" size="sm" leftIcon={Plus} onClick={() => setOpen(true)}>
+          {t('settings.calendars.newCalendar')}
+        </Button>
+      </div>
+    )
+  }
+  const close = () => {
+    setOpen(false)
+    setName('')
+    setError('')
+  }
+  return (
+    <form
+      className="flex flex-col gap-2.5 px-3.5 py-2.5"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!name.trim() || busy) return
+        setBusy(true)
+        setError('')
+        createCalendar(accountId, name.trim(), color)
+          .then(close)
+          .catch((err) => setError(errorMessage(err, t('settings.calendars.createFailed'))))
+          .finally(() => setBusy(false))
+      }}
+    >
+      <TextInput
+        autoFocus
+        placeholder={t('settings.calendars.calendarName')}
+        aria-label={t('settings.calendars.calendarName')}
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <ColorSwatchPicker label={t('settings.calendars.color')} value={color} onChange={(c) => c && setColor(c)} />
+      {error && <p className="text-xs text-rose-500 select-text">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" size="sm" onClick={close} disabled={busy}>
+          {t('buttons.cancel')}
+        </Button>
+        <Button type="submit" size="sm" disabled={!name.trim() || busy}>
+          {t('settings.calendars.create')}
+        </Button>
+      </div>
+    </form>
   )
 }

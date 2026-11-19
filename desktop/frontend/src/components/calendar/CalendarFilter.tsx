@@ -13,12 +13,13 @@ import { IconButton } from '../button/IconButton'
 import { Checkbox } from '../field/Checkbox'
 import { MenuSurface } from '../menu/MenuSurface'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
+import { clsx } from '../../lib/utils'
 
 /** Which calendars the views draw: this device's events, then each synced
  * calendar under its account, in its colour. Hiding one only leaves it out
  * of the views; it keeps syncing and its alerts still fire. Shown once
  * there is a synced calendar to tell apart from this device's. */
-export function CalendarFilter() {
+export function CalendarFilter({ className }: { className?: string }) {
   const { t } = useTranslation()
   const calendars = useValue(calendar$.calendars)
   const hidden = useValue(calendar$.hiddenCalendars)
@@ -30,17 +31,10 @@ export function CalendarFilter() {
     () => setOpen(false),
   )
   if (calendars.length === 0) return null
-
-  const accounts = new Map<string, { name: string; calendars: SyncedCalendar[] }>()
-  for (const calendar of calendars) {
-    const account = accounts.get(calendar.account_id) ?? { name: calendar.account_name, calendars: [] }
-    account.calendars.push(calendar)
-    accounts.set(calendar.account_id, account)
-  }
   const label = t('calendar.chooseCalendars')
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={clsx('relative', className)}>
       <IconButton
         icon={Layers}
         size="sm"
@@ -55,30 +49,49 @@ export function CalendarFilter() {
         <MenuSurface
           role="dialog"
           aria-label={label}
-          className="absolute right-0 top-full z-50 mt-1 flex max-h-96 w-64 flex-col gap-0.5 overflow-y-auto p-1.5"
+          className="absolute right-0 top-full z-50 mt-1 flex max-h-96 w-64 flex-col overflow-y-auto p-1.5"
         >
-          <CalendarRow
-            name={t('calendar.onThisDevice')}
-            colorClass="bg-accent"
-            shown={!hidden.includes(LOCAL_CALENDAR)}
-            onToggle={() => toggleCalendarShown(LOCAL_CALENDAR)}
-          />
-          {[...accounts.entries()].map(([id, account]) => (
-            <div key={id} className="flex flex-col gap-0.5">
-              <span className="mt-1.5 truncate px-2 text-[0.6875rem] font-semibold text-secondary">{account.name}</span>
-              {account.calendars.map((calendar) => (
-                <CalendarRow
-                  key={calendar.id}
-                  name={calendar.name}
-                  color={calendarColor(calendar)}
-                  shown={!hidden.includes(calendar.id)}
-                  onToggle={() => toggleCalendarShown(calendar.id)}
-                />
-              ))}
-            </div>
-          ))}
+          <CalendarList />
         </MenuSurface>
       )}
+    </div>
+  )
+}
+
+/** This device's events, then each account's calendars under its name, each
+ * with its colour and whether it is shown. */
+export function CalendarList() {
+  const { t } = useTranslation()
+  const calendars = useValue(calendar$.calendars)
+  const hidden = useValue(calendar$.hiddenCalendars)
+  const accounts = new Map<string, { name: string; calendars: SyncedCalendar[] }>()
+  for (const calendar of calendars) {
+    const account = accounts.get(calendar.account_id) ?? { name: calendar.account_name, calendars: [] }
+    account.calendars.push(calendar)
+    accounts.set(calendar.account_id, account)
+  }
+  return (
+    <div className="flex flex-col gap-0.5">
+      <CalendarRow
+        name={t('calendar.onThisDevice')}
+        colorClass="bg-accent"
+        shown={!hidden.includes(LOCAL_CALENDAR)}
+        onToggle={() => toggleCalendarShown(LOCAL_CALENDAR)}
+      />
+      {[...accounts.entries()].map(([id, account]) => (
+        <div key={id} className="flex flex-col gap-0.5">
+          <span className="mt-1.5 truncate px-2 text-[0.6875rem] font-semibold text-secondary">{account.name}</span>
+          {account.calendars.map((calendar) => (
+            <CalendarRow
+              key={calendar.id}
+              name={calendar.name}
+              color={calendarColor(calendar)}
+              shown={!hidden.includes(calendar.id)}
+              onToggle={() => toggleCalendarShown(calendar.id)}
+            />
+          ))}
+        </div>
+      ))}
     </div>
   )
 }

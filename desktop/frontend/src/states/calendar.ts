@@ -291,16 +291,18 @@ export async function loadSyncedCalendars() {
 }
 
 /** Ask the core to sync calendar accounts now, without waiting: changes
- * arrive as `calendar.changed`. Only when there is something to sync. */
+ * arrive as `calendar.changed`. Only when there is something to sync, and
+ * not accounts set to sync only when asked: opening the calendar is not
+ * asking. */
 export function syncCalendarsInBackground() {
   if (calendar$.calendars.peek().length === 0) {
     // The list may not be loaded yet; the core does nothing without accounts.
     void loadSyncedCalendars().then(() => {
-      if (calendar$.calendars.peek().length > 0) void invoke('caldav.sync').catch(() => {})
+      if (calendar$.calendars.peek().length > 0) void invoke('caldav.sync', { automatic: true }).catch(() => {})
     })
     return
   }
-  void invoke('caldav.sync').catch(() => {})
+  void invoke('caldav.sync', { automatic: true }).catch(() => {})
 }
 
 /** The synced calendar an item comes from, if any. */

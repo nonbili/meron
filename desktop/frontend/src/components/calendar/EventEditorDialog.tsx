@@ -6,9 +6,11 @@ import { formatEventRange } from '../../lib/date'
 import { Dialog } from '../dialog/Dialog'
 import { NO_ALERT, alertLabel, alertOptions } from '../../lib/eventAlerts'
 import { useTranslation } from '../../lib/i18n'
+import { clsx } from '../../lib/utils'
 import { copyText, openExternal } from '../../lib/native'
 import {
   calendar$,
+  calendarColor,
   calendarOf,
   createEvent,
   deleteEvent,
@@ -314,6 +316,7 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
   // A subscription or a calendar shared read-only: shown, not changed.
   const readOnly = !!synced && !synced.writable
   const writableCalendars = calendars.filter((calendar) => calendar.writable)
+  const pickedCalendar = calendars.find((calendar) => calendar.id === form.calendar)
   const repeats = item && hasCustomRepeat(item) ? [...REPEATS, CUSTOM_REPEAT] : REPEATS
   const close = () => calendar$.editor.set(null)
 
@@ -460,28 +463,37 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
               {(writableCalendars.length > 0 || !!synced) && (
                 <>
                   <span className={label}>{t('calendar.fields.calendar')}</span>
-                  <SelectInput
-                    wrapperClassName="col-span-2"
-                    aria-label={t('calendar.fields.calendar')}
-                    value={form.calendar}
-                    // Choosing another calendar moves the event there on save.
-                    disabled={readOnly}
-                    onChange={(event) => set('calendar', event.target.value)}
-                  >
-                    {readOnly && synced ? (
-                      <option value={synced.id}>{calendarLabel(synced, t('calendar.readOnly'))}</option>
-                    ) : (
-                      <>
-                        {/* A server's own repeat rule cannot live on this device. */}
-                        {form.repeat !== 'custom' && <option value="">{t('calendar.onThisDevice')}</option>}
-                        {writableCalendars.map((calendar) => (
-                          <option key={calendar.id} value={calendar.id}>
-                            {calendarLabel(calendar, '')}
-                          </option>
-                        ))}
-                      </>
-                    )}
-                  </SelectInput>
+                  <div className="col-span-2 flex min-w-0 items-center gap-2">
+                    {/* The chosen calendar's colour, as its events show: the
+                      picker's own options cannot carry one. */}
+                    <span
+                      className={clsx('h-2.5 w-2.5 shrink-0 rounded-full', !pickedCalendar && 'bg-accent')}
+                      style={pickedCalendar ? { backgroundColor: calendarColor(pickedCalendar) } : undefined}
+                      aria-hidden
+                    />
+                    <SelectInput
+                      wrapperClassName="min-w-0 flex-1"
+                      aria-label={t('calendar.fields.calendar')}
+                      value={form.calendar}
+                      // Choosing another calendar moves the event there on save.
+                      disabled={readOnly}
+                      onChange={(event) => set('calendar', event.target.value)}
+                    >
+                      {readOnly && synced ? (
+                        <option value={synced.id}>{calendarLabel(synced, t('calendar.readOnly'))}</option>
+                      ) : (
+                        <>
+                          {/* A server's own repeat rule cannot live on this device. */}
+                          {form.repeat !== 'custom' && <option value="">{t('calendar.onThisDevice')}</option>}
+                          {writableCalendars.map((calendar) => (
+                            <option key={calendar.id} value={calendar.id}>
+                              {calendarLabel(calendar, '')}
+                            </option>
+                          ))}
+                        </>
+                      )}
+                    </SelectInput>
+                  </div>
                 </>
               )}
             </div>

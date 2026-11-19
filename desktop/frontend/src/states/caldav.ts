@@ -28,11 +28,18 @@ export type CalendarAccount = {
   last_sync_at: number
   /** Why the last sync failed; empty when it did not. */
   last_error: string
+  /** Minutes between automatic syncs; 0 for only when asked. */
+  sync_interval: number
   calendars: CalendarAccountCalendar[]
 }
 
+/** The choices the sync interval offers, in minutes; 0 is manual. */
+export const SYNC_INTERVALS = [5, 15, 30, 60, 0] as const
+
 export const caldav$ = observable({
   accounts: [] as CalendarAccount[],
+  /** A sync asked for from the calendar is running. */
+  syncing: false,
 })
 
 function setAccounts(res: { accounts?: CalendarAccount[] } | null | undefined) {
@@ -55,7 +62,13 @@ export async function loadCalendarAccounts() {
 
 /** Connect to a server and keep the account. Throws, with the server's
  * reason, when it cannot be reached or refuses the password. */
-export async function addCalendarAccount(input: { server_url: string; username: string; password: string }) {
+export async function addCalendarAccount(input: {
+  server_url: string
+  username: string
+  password: string
+  /** Empty names it after the server's host. */
+  display_name?: string
+}) {
   setAccounts(await invoke<{ accounts?: CalendarAccount[] }>('caldav.add', input))
   refreshCalendars()
 }
@@ -118,6 +131,76 @@ export async function setCalendarEnabled(calendarId: string, enabled: boolean) {
     return
   }
   await dropping('caldav.setCalendarEnabled', { calendar_id: calendarId, enabled })
+}
+
+/** Make a new calendar on an account's server. Throws with the server's
+ * reason when it will not. */
+export async function createCalendar(accountId: string, name: string, color: string) {
+  setAccounts(await invoke<AccountsAnswer>('caldav.createCalendar', { account_id: accountId, name, color }))
+  refreshCalendars()
+}
+
+/** Rename or recolour a calendar on its server. A colour the server will not
+ * take is kept on this device, which the answer's `local` says. */
+export async function updateCalendar(calendarId: string, changes: { name?: string; color?: string }) {
+  const res = await invoke<AccountsAnswer & { local?: boolean }>('caldav.updateCalendar', {
+    calendar_id: calendarId,
+    ...changes,
+  })
+  setAccounts(res)
+  refreshCalendars()
+  if (res?.local) showToast(t('settings.calendars.colorKeptHere'))
+}
+
+/** Delete a calendar on its server, after the user confirms: every event in
+ * it goes, everywhere. */
+export async function deleteCalendar(calendar: CalendarAccountCalendar) {
+  const confirmed = await confirmAction({
+    title: t('settings.calendars.deleteCalendar'),
+    message: t('settings.calendars.deleteCalendarConfirm', { name: calendar.name }),
+    confirmLabel: t('settings.calendars.deleteCalendar'),
+    tone: 'danger',
+  })
+  if (!confirmed) return
+  try {
+    setAccounts(await invoke<AccountsAnswer>('caldav.deleteCalendar', { calendar_id: calendar.id }))
+    refreshCalendars()
+  } catch (error) {
+    showToast(errorMessage(error, t('settings.calendars.saveFailed')), 'error')
+  }
+}
+
+/** What the account is called here; empty goes back to the server's host. */
+export async function renameCalendarAccount(accountId: string, name: string) {
+  try {
+    setAccounts(await invoke<AccountsAnswer>('caldav.renameAccount', { account_id: accountId, display_name: name }))
+    void loadSyncedCalendars()
+  } catch (error) {
+    showToast(errorMessage(error, t('settings.calendars.saveFailed')), 'error')
+  }
+}
+
+export async function setSyncInterval(accountId: string, minutes: number) {
+  try {
+    setAccounts(await invoke<AccountsAnswer>('caldav.setSyncInterval', { account_id: accountId, minutes }))
+  } catch (error) {
+    showToast(errorMessage(error, t('settings.calendars.saveFailed')), 'error')
+  }
+}
+
+/** Sync every account now, from the calendar. Failures show on the sync
+ * button and the account's settings, not as a toast. */
+export async function syncAllCalendars() {
+  if (caldav$.syncing.peek()) return
+  caldav$.syncing.set(true)
+  try {
+    await invoke('caldav.sync')
+  } catch {
+    // Recorded on the account.
+  } finally {
+    caldav$.syncing.set(false)
+  }
+  await loadCalendarAccounts()
 }
 
 /** Sync one account now. A failure is recorded on the account, where its

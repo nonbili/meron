@@ -454,7 +454,7 @@ func sidecarCallTimeout(method string) time.Duration {
 	// Adding an account walks discovery: a few PROPFINDs and redirects, 30s
 	// each at most in the core. A retry after a timeout updates the account
 	// it added rather than adding it twice.
-	case "caldav.add", "caldav.setPassword":
+	case "caldav.add", "caldav.setPassword", "caldav.createCalendar", "caldav.updateCalendar", "caldav.deleteCalendar":
 		return 3 * time.Minute
 	// A sync may fetch a whole calendar, and waits for one already running;
 	// turning a calendar off or removing an account first tries to send
