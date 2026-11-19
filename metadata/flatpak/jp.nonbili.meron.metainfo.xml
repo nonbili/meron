@@ -75,6 +75,19 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.5.4" date="2026-11-19">
+      <description>
+        <ul>
+          <li>Add account colour bars and a toggle to hide list avatars</li>
+          <li>Make links clickable in calendar event and task notes</li>
+          <li>Open the bulk action menu on right-click, label delete by its effect, and finish bulk moves in one batch</li>
+          <li>Fold &gt;-prefixed quotes in HTML emails and wrap long URL links mid-line</li>
+          <li>Speed up Kanban card clicks and menus on large boards, and auto-load more threads in short lists</li>
+          <li>Archive conversations from the Archive folder and keep deleted messages out of conversations</li>
+          <li>Open encrypted drafts decrypted after listing and explain failed deletes</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.5.3" date="2026-11-16">
       <description>
         <ul>

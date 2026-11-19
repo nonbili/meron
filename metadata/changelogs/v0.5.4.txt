@@ -1,0 +1,7 @@
+- Add account colour bars and a toggle to hide list avatars
+- Make links clickable in calendar event and task notes
+- Open the bulk action menu on right-click, label delete by its effect, and finish bulk moves in one batch
+- Fold >-prefixed quotes in HTML emails and wrap long URL links mid-line
+- Speed up Kanban card clicks and menus on large boards, and auto-load more threads in short lists
+- Archive conversations from the Archive folder and keep deleted messages out of conversations
+- Open encrypted drafts decrypted after listing and explain failed deletes
