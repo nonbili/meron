@@ -101,7 +101,36 @@ pub fn thread_page_headers(
         }
         headers
     } else {
-        store::get_thread_headers_all_folders(db, account, thread_key)?
+        // Deleting a message moves it to Trash, where its copy keeps the thread
+        // key: read from anywhere else, the conversation leaves those copies
+        // out, or a deleted message comes straight back on the next read
+        // (#180). Read from Trash itself, it shows them. Left out in the query,
+        // so a Trash copy never stands in for a duplicate that stays.
+        //
+        // Every folder that looks like Trash, by flag or by name, counts here:
+        // which of two look-alikes the live delete picks follows the server's
+        // LIST order, which the cache does not keep.
+        let looks_like_trash = |known: &imap::Folder| {
+            store::classify_folder_role(&known.name, known.special_use.as_deref()) == "trash"
+        };
+        let known = store::get_folders(db, account)?;
+        let reading_trash = known
+            .iter()
+            .find(|candidate| candidate.name == folder)
+            .map_or_else(
+                || store::classify_folder_role(folder, None) == "trash",
+                looks_like_trash,
+            );
+        let trash: Vec<String> = if reading_trash {
+            Vec::new()
+        } else {
+            known
+                .iter()
+                .filter(|candidate| looks_like_trash(candidate))
+                .map(|candidate| candidate.name.clone())
+                .collect()
+        };
+        store::get_thread_headers_all_folders(db, account, thread_key, &trash)?
     };
     let headers = store::branch_members_or_thread(headers, subject_filter, |header| {
         (&header.subject, header.encrypted)
@@ -1588,5 +1617,120 @@ mod tests {
         };
         crate::store::save_cached_message(&db, "acct", "Drafts", 7, &decrypted).unwrap();
         assert_eq!(read(&db), vec![7], "still found by the card minted before");
+    }
+
+    // #180: a message deleted from a conversation moves to Trash with its
+    // thread key; read from the Inbox, the conversation must not bring it back.
+    #[test]
+    fn a_conversation_leaves_out_its_copies_in_trash_unless_read_there() {
+        let db = crate::store::open_at(":memory:").unwrap();
+        crate::store::upsert_folders(
+            &db,
+            "acct",
+            &[
+                crate::imap::Folder {
+                    name: "INBOX".to_string(),
+                    ..Default::default()
+                },
+                crate::imap::Folder {
+                    name: "Trash".to_string(),
+                    special_use: Some("trash".to_string()),
+                    ..Default::default()
+                },
+            ],
+        )
+        .unwrap();
+        let message = |uid: u32, date: i64, id: &str| MessageHeader {
+            uid,
+            subject: "Plans".to_string(),
+            from_addr: "ada@example.com".to_string(),
+            message_id: format!("<{id}@example.com>"),
+            thread_key: "root@example.com".to_string(),
+            date,
+            ..Default::default()
+        };
+        crate::store::upsert_messages(&db, "acct", "INBOX", &[message(1, 100, "root")]).unwrap();
+        crate::store::upsert_messages(&db, "acct", "Trash", &[message(9, 200, "reply")]).unwrap();
+        // A self-addressed message: its Sent copy (read) stays, and its unread
+        // copy deleted to Trash must not win the collapse and take it along.
+        crate::store::upsert_messages(
+            &db,
+            "acct",
+            "Sent",
+            &[MessageHeader {
+                seen: true,
+                ..message(3, 150, "self")
+            }],
+        )
+        .unwrap();
+        crate::store::upsert_messages(&db, "acct", "Trash", &[message(8, 150, "self")]).unwrap();
+        let read = |folder: &str| {
+            super::thread_page_headers(
+                &db,
+                "acct",
+                folder,
+                "root@example.com",
+                None,
+                Some(50),
+                None,
+            )
+            .unwrap()
+            .0
+            .into_iter()
+            .map(|h| (h.folder, h.uid))
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            read("INBOX"),
+            vec![("INBOX".to_string(), 1), ("Sent".to_string(), 3)]
+        );
+        assert_eq!(
+            read("Trash"),
+            vec![
+                ("INBOX".to_string(), 1),
+                ("Trash".to_string(), 8),
+                ("Trash".to_string(), 9)
+            ]
+        );
+
+        // No flags, two look-alikes: live delete may pick either (LIST order),
+        // so copies in both stay out of a conversation read elsewhere.
+        crate::store::upsert_folders(
+            &db,
+            "plain",
+            &[
+                crate::imap::Folder {
+                    name: "INBOX".to_string(),
+                    ..Default::default()
+                },
+                crate::imap::Folder {
+                    name: "Bin".to_string(),
+                    ..Default::default()
+                },
+                crate::imap::Folder {
+                    name: "Trash".to_string(),
+                    ..Default::default()
+                },
+            ],
+        )
+        .unwrap();
+        crate::store::upsert_messages(&db, "plain", "INBOX", &[message(1, 100, "root")]).unwrap();
+        crate::store::upsert_messages(&db, "plain", "Bin", &[message(2, 200, "a")]).unwrap();
+        crate::store::upsert_messages(&db, "plain", "Trash", &[message(3, 300, "b")]).unwrap();
+        let plain = super::thread_page_headers(
+            &db,
+            "plain",
+            "INBOX",
+            "root@example.com",
+            None,
+            Some(50),
+            None,
+        )
+        .unwrap()
+        .0
+        .into_iter()
+        .map(|h| h.folder)
+        .collect::<Vec<_>>();
+        assert_eq!(plain, vec!["INBOX".to_string()]);
     }
 }

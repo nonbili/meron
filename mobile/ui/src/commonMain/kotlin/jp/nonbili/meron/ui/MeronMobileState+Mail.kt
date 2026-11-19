@@ -738,13 +738,35 @@ internal fun MeronMobileState.toggleMessageStarred(message: MessageBody) {
     }
 }
 
-internal fun MeronMobileState.deleteMessage(message: MessageBody) {
+internal fun MeronMobileState.deleteMessage(
+    message: MessageBody,
+    /** Leaves the thread view when this was its last message (#180): with
+     * nothing left to show it would spin on an empty thread. */
+    onThreadEmptied: () -> Unit = {},
+) {
     val thread = selectedCoreThread ?: return
     // A thread can span folders (e.g. an INBOX message and its replies in Sent),
     // so delete from the message's own folder, not the thread's nominal folder.
     val messageFolder = message.folderId.ifBlank { thread.folder }
     val messagesBefore = messages
     messages = messages.filterNot { it.id == message.id }
+    // No older page left to load either: the conversation is gone, and its
+    // card leaves the list now, through the removal guard like a thread delete,
+    // so it can't be reopened onto the old message while a slow server works.
+    // Only a message from the card's own folder takes the card along: a Sent
+    // copy deleted here leaves the Inbox copy, and its card, in place.
+    val emptied = messages.isEmpty() && messageCursor.isBlank()
+    val threadsBefore = coreThreads
+    val kanbanBefore = kanbanColumns
+    val cardRemoval =
+        if (emptied && messageFolder == thread.folder) {
+            suppressRemovedThread(thread.id).also {
+                coreThreads = coreThreads.filterNot { it.id == thread.id }
+                kanbanColumns = kanbanColumns.mapValues { (_, column) -> column.copy(threads = column.threads.filterNot { it.id == thread.id }) }
+            }
+        } else {
+            null
+        }
     // Deleting the thread's last draft has to take its "Draft" marker down too.
     // The marker is UI-side state the core's next thread list would rewrite, but
     // returning to the list reloads nothing, so leaving it set keeps the badge
@@ -764,6 +786,7 @@ internal fun MeronMobileState.deleteMessage(message: MessageBody) {
             }
     clearedDraftThreadId?.let { clearThreadDraftEverywhere(it) }
     status = trs("mobile.status.deletingMessage")
+    if (emptied) onThreadEmptied()
     scope.launch {
         runCatching {
             val response =
@@ -781,10 +804,18 @@ internal fun MeronMobileState.deleteMessage(message: MessageBody) {
                 }
             requireCoreOk(response)
         }.onSuccess {
+            cardRemoval?.complete()
             status = trs("mobile.status.deleteComplete")
         }.onFailure {
             Log.w("Mail", "delete message failed", it)
-            messages = messagesBefore
+            // Put the bubble back only while its thread is still the one open:
+            // an emptied thread was left at once, and another may be showing.
+            if (selectedCoreThread?.id == thread.id) messages = messagesBefore
+            cardRemoval?.let { removal ->
+                removal.rollback()
+                coreThreads = removal.filter(threadsBefore)
+                kanbanColumns = kanbanBefore.mapValues { (_, column) -> column.copy(threads = removal.filter(column.threads)) }
+            }
             clearedDraftThreadId?.let { threadId -> markThreadDraftEverywhere(threadId) }
             status = trsError("mail.toast.deleteFailed", it)
         }

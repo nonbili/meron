@@ -1172,10 +1172,14 @@ pub fn get_thread_reference_gaps(
 /// `Message-ID`, the unread copy if any, otherwise the lowest-`id` row. Rows
 /// without a `Message-ID` (e.g. drafts) are never collapsed — a NULL
 /// `Message-ID` never equates in SQL.
+///
+/// Rows in `exclude_folders` take no part, in the collapse either: a copy left
+/// out there must not stand in for one that stays.
 pub fn get_thread_headers_all_folders(
     conn: &Connection,
     account: &str,
     thread_key: &str,
+    exclude_folders: &[String],
 ) -> Result<Vec<MessageHeader>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT m.uid, m.folder, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred, m.thread_key,
@@ -1183,17 +1187,20 @@ pub fn get_thread_headers_all_folders(
          FROM messages m
          WHERE m.account = ?1 AND m.uid <> 0
            AND COALESCE(NULLIF(m.thread_key, ''), 'uid:' || m.uid) = ?2
+           AND m.folder NOT IN (SELECT value FROM json_each(?3))
            AND NOT EXISTS (
              SELECT 1 FROM messages dup
              WHERE dup.account = m.account
                AND COALESCE(NULLIF(dup.thread_key, ''), 'uid:' || dup.uid) = ?2
+               AND dup.folder NOT IN (SELECT value FROM json_each(?3))
                AND COALESCE(json_extract(m.json, '$.message_id'), '') <> ''
                AND json_extract(dup.json, '$.message_id') = json_extract(m.json, '$.message_id')
                AND (dup.seen < m.seen OR (dup.seen = m.seen AND dup.id < m.id))
            )
          ORDER BY m.date ASC, m.uid ASC"),
     )?;
-    let rows = stmt.query_map(params![account, thread_key], |row| {
+    let exclude = serde_json::to_string(exclude_folders)?;
+    let rows = stmt.query_map(params![account, thread_key, exclude], |row| {
         let uid: u32 = row.get(0)?;
         Ok(MessageHeader {
             uid,

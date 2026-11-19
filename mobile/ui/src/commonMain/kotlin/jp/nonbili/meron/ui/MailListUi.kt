@@ -426,31 +426,25 @@ internal fun MailList(
                     val isRss = threadIdIsRss(thread.id)
                     val isRssItem = isRss && thread.threadId.isNotBlank() && thread.threadId != thread.id
                     val dismissState = rememberSwipeToDismissBoxState()
-                    var dismissHandled by remember(thread.id) { mutableStateOf(false) }
-                    LaunchedEffect(dismissState.currentValue) {
-                        if (dismissHandled) return@LaunchedEffect
-                        when (dismissState.currentValue) {
-                            SwipeToDismissBoxValue.StartToEnd -> {
-                                dismissHandled = true
-                                dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                                onArchive(thread)
-                            }
-
-                            SwipeToDismissBoxValue.EndToStart -> {
-                                dismissHandled = true
-                                dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                                if (isRss) pendingFeedRemoval = thread else onDelete(thread)
-                            }
-
-                            SwipeToDismissBoxValue.Settled -> {
-                                dismissHandled = false
-                            }
-                        }
-                    }
+                    val rowScope = rememberCoroutineScope()
                     SwipeToDismissBox(
                         state = dismissState,
                         enableDismissFromStartToEnd = !isRss,
                         enableDismissFromEndToStart = !isRssItem,
+                        // Called once a swipe is released past the threshold, not
+                        // while dragging. An effect keyed on the settled value had
+                        // the snap back cancel it before the action ran, so the
+                        // first swipe did nothing (#180). The row snaps back
+                        // after, so a removal that fails, or a feed removal
+                        // cancelled in its dialog, leaves it swipeable again.
+                        onDismiss = { direction ->
+                            when (direction) {
+                                SwipeToDismissBoxValue.StartToEnd -> onArchive(thread)
+                                SwipeToDismissBoxValue.EndToStart -> if (isRss) pendingFeedRemoval = thread else onDelete(thread)
+                                SwipeToDismissBoxValue.Settled -> Unit
+                            }
+                            rowScope.launch { dismissState.snapTo(SwipeToDismissBoxValue.Settled) }
+                        },
                         backgroundContent = {
                             val direction = dismissState.dismissDirection
                             val deleting = direction == SwipeToDismissBoxValue.EndToStart

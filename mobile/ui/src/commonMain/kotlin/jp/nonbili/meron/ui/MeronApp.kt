@@ -1727,7 +1727,7 @@ private fun MeronMobileScreenContent(
                                             },
                                             onToggleMessageRead = ::toggleMessageRead,
                                             onToggleMessageStarred = ::toggleMessageStarred,
-                                            onDeleteMessage = ::deleteMessage,
+                                            onDeleteMessage = { message -> deleteMessage(message, onThreadEmptied = popAppBack) },
                                             onOpenAttachment = ::openMessageAttachment,
                                             onSaveAttachment = ::saveMessageAttachment,
                                             onShareImageAttachment = ::shareImageAttachment,

@@ -3846,7 +3846,7 @@ fn get_thread_headers_all_folders_sorts_chronologically_by_parsed_date() {
         )
         .unwrap();
 
-    let headers = get_thread_headers_all_folders(&conn, "acct", "topic-key").unwrap();
+    let headers = get_thread_headers_all_folders(&conn, "acct", "topic-key", &[]).unwrap();
     let uids: Vec<u32> = headers.iter().map(|h| h.uid).collect();
     assert_eq!(uids, vec![1, 2, 3]);
 }
@@ -3869,7 +3869,7 @@ fn get_thread_headers_all_folders_dedupes_self_sent_by_message_id() {
         )
         .unwrap();
 
-    let headers = get_thread_headers_all_folders(&conn, "acct", "self-key").unwrap();
+    let headers = get_thread_headers_all_folders(&conn, "acct", "self-key", &[]).unwrap();
     let uids: Vec<u32> = headers.iter().map(|h| h.uid).collect();
     // The self-sent pair collapses to the unread copy when one exists, so the
     // visible bubble can be marked read and clear the thread badge.
@@ -3889,7 +3889,7 @@ fn get_thread_headers_all_folders_keeps_rows_without_message_id() {
         )
         .unwrap();
 
-    let headers = get_thread_headers_all_folders(&conn, "acct", "k").unwrap();
+    let headers = get_thread_headers_all_folders(&conn, "acct", "k", &[]).unwrap();
     let uids: Vec<u32> = headers.iter().map(|h| h.uid).collect();
     assert_eq!(uids, vec![10, 11]);
 }
@@ -6276,7 +6276,7 @@ fn the_encrypted_flag_survives_the_cache() {
         vec![(1, true), (2, false)]
     );
     assert_eq!(
-        flags(get_thread_headers_all_folders(&conn, "acct", "root@example.com").unwrap()),
+        flags(get_thread_headers_all_folders(&conn, "acct", "root@example.com", &[]).unwrap()),
         vec![(1, true), (2, false)]
     );
     let mapped = conn
