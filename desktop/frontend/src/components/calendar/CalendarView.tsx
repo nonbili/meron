@@ -6,13 +6,17 @@ import { useEscapeKey } from '../../lib/useEscapeKey'
 import { settings$ } from '../../states/settings'
 import { useTranslation } from '../../lib/i18n'
 import { clsx } from '../../lib/utils'
+import { isValidColor, withAlpha } from '../../lib/color'
 import {
   calendar$,
+  calendarOf,
   closeCalendar,
   goToToday,
   openCalendarPanel,
   loadCalendar,
+  loadSyncedCalendars,
   openCalendarItem,
+  syncCalendarsInBackground,
   shiftMonth,
   type CalendarItem,
 } from '../../states/calendar'
@@ -151,13 +155,20 @@ export function useCalendarFeed() {
 
   useEffect(() => {
     void loadCalendar()
+    // Opening the calendar is a good moment to catch up with its servers;
+    // what comes in arrives as calendar.changed.
+    syncCalendarsInBackground()
     // Another surface changed the calendar (an invitation answered, the other
-    // window): re-read rather than replay the change.
+    // window, a sync): re-read rather than replay the change.
     const eventsOn = (window as any).runtime?.EventsOn
     // Tasks too: a due task done, moved or deleted in the panel beside it.
     const offs =
       typeof eventsOn === 'function'
-        ? ['calendar.changed', 'tasks.changed'].map((name) => eventsOn(name, () => void loadCalendar()))
+        ? [
+            ...['calendar.changed', 'tasks.changed'].map((name) => eventsOn(name, () => void loadCalendar())),
+            // An account added or a calendar renamed or recoloured.
+            eventsOn('caldav.changed', () => void loadSyncedCalendars()),
+          ]
         : []
     return () => {
       for (const off of offs) if (typeof off === 'function') off()
@@ -177,8 +188,16 @@ export function sameMonth(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
 }
 
+/** The colour a synced calendar asks its events be shown in, if usable. */
+export function useCalendarColor(item: CalendarItem): string | undefined {
+  const calendars = useValue(calendar$.calendars)
+  const color = calendarOf(item, calendars)?.color
+  return color && isValidColor(color) ? color : undefined
+}
+
 function CalendarChip({ item }: { item: CalendarItem }) {
   const { t } = useTranslation()
+  const color = useCalendarColor(item)
   const time = item.all_day
     ? ''
     : new Date(item.start * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -200,11 +219,17 @@ function CalendarChip({ item }: { item: CalendarItem }) {
             : 'text-primary hover:bg-hover',
         item.response === 'tentative' && 'border border-dashed border-accent/60 bg-transparent',
       )}
+      style={color && item.all_day && !task ? { backgroundColor: withAlpha(color, 0.18) } : undefined}
     >
       {task ? (
         <Check size={11} className="shrink-0" />
       ) : (
-        !item.all_day && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+        !item.all_day && (
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+            style={color ? { backgroundColor: color } : undefined}
+          />
+        )
       )}
       {time && <span className="shrink-0 text-secondary tabular-nums">{time}</span>}
       <span className="truncate">{item.title || t('invite.untitled')}</span>

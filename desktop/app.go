@@ -568,6 +568,11 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		if strings.HasPrefix(command, "pgp.") {
 			return a.pgpInvoke(command, payload)
 		}
+		// Synced calendar accounts; the password in caldav.add and
+		// caldav.setPassword is never logged (Invoke logs only the name).
+		if strings.HasPrefix(command, "caldav.") {
+			return a.calendarInvoke(command, payload)
+		}
 		return nil, fmt.Errorf("unknown command: %s", command)
 	}
 }

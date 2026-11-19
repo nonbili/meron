@@ -18,7 +18,7 @@ import {
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 import { SIDE_PANEL_WIDTH } from '../sidepanel/SidePanelSlide'
-import { sameMonth, useCalendarFeed } from './CalendarView'
+import { sameMonth, useCalendarColor, useCalendarFeed } from './CalendarView'
 import { EventEditorDialog } from './EventEditorDialog'
 
 /**
@@ -170,6 +170,7 @@ export function timeSpan(item: CalendarItem, day: Date): string {
 function AgendaRow({ item, day }: { item: CalendarItem; day: Date }) {
   const { t } = useTranslation()
   const task = item.source === 'task'
+  const color = useCalendarColor(item)
   const title = item.title || t('invite.untitled')
   const when = item.all_day ? t('invite.allDay') : timeSpan(item, day)
   return (
@@ -184,6 +185,7 @@ function AgendaRow({ item, day }: { item: CalendarItem; day: Date }) {
           'mt-1 flex h-3 w-1 shrink-0 rounded-full',
           task ? 'bg-emerald-500' : item.response === 'tentative' ? 'border border-dashed border-accent' : 'bg-accent',
         )}
+        style={color && !task && item.response !== 'tentative' ? { backgroundColor: color } : undefined}
       />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="flex min-w-0 items-center gap-1 text-[0.8125rem] text-primary">

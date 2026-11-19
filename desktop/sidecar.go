@@ -451,6 +451,16 @@ func sidecarCallTimeout(method string) time.Duration {
 	// A key lookup asks each source in turn, up to 10s each (WKD tries two hosts).
 	case "pgp.lookup":
 		return 60 * time.Second
+	// Adding an account walks discovery: a few PROPFINDs and redirects, 30s
+	// each at most in the core. A retry after a timeout updates the account
+	// it added rather than adding it twice.
+	case "caldav.add", "caldav.setPassword":
+		return 3 * time.Minute
+	// A sync may fetch a whole calendar, and waits for one already running;
+	// turning a calendar off or removing an account first tries to send
+	// what is unsent.
+	case "caldav.sync", "caldav.remove", "caldav.setCalendarEnabled":
+		return 5 * time.Minute
 	// A batch is a handful of full messages, attachments included.
 	// A copy downloads every message in the thread in full, then APPENDs each
 	// one to the target.

@@ -13,7 +13,20 @@ import { settings$ } from './settings'
 import { closeTasksPanel, openTasksPanel } from './tasks'
 import { showToast, showUndoToast, ui$ } from './ui'
 
-export type CalendarRepeat = '' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+/** `custom` keeps a synced event's own rule, one the other choices cannot
+ * say ("every Monday and Wednesday"); the core never sends it back. */
+export type CalendarRepeat = '' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'
+
+/** A CalDAV calendar events can come from, as `caldav.calendars` lists it. */
+export type SyncedCalendar = {
+  id: string
+  name: string
+  /** `#RRGGBB`, or empty. */
+  color: string
+  writable: boolean
+  account_id: string
+  account_name: string
+}
 
 /** One occurrence in a calendar range, as `calendar.events` shapes it (see
  * meron-core/src/calendar/events.rs). Times are epoch seconds; an all-day
@@ -45,6 +58,9 @@ export type CalendarItem = {
   /** Whether `alerts` count all-day days rather than minutes: the series'
    * kind, which one occurrence of an invitation can differ from. */
   alerts_all_day?: boolean
+  /** The synced calendar (`SyncedCalendar.id`) it comes from; empty for one
+   * on this device. */
+  calendar?: string
 }
 
 /** What the event editor sends, and what it was opened on. */
@@ -62,6 +78,12 @@ export type EventInput = {
   occurrence_start?: number
   /** See [CalendarItem.alerts]. */
   alerts: number[] | null
+  /** The synced calendar it goes in; empty for this device. On update, a
+   * different calendar moves it there; absent leaves it where it is. */
+  calendar?: string
+  /** On update, the input as the editor first showed it. Fields left as
+   * they were keep what a sync brought in meanwhile. */
+  original?: EventInput
 }
 
 export type EventEditor = { mode: 'new'; day: number } | { mode: 'edit'; item: CalendarItem }
@@ -77,6 +99,10 @@ export const calendar$ = observable({
   items: [] as CalendarItem[],
   loading: false,
   editor: null as EventEditor | null,
+  /** Synced calendars shown, for colours and the editor's picker. */
+  calendars: [] as SyncedCalendar[],
+  /** The calendar the last new event went in, offered first for the next. */
+  lastCalendar: '',
 })
 
 let loadSeq = 0
@@ -191,6 +217,7 @@ export async function loadCalendar() {
   const from = Math.min(grid.from, week.from)
   const to = Math.max(grid.to, week.to)
   calendar$.loading.set(true)
+  void loadSyncedCalendars()
   try {
     const res = await invoke<{ events?: CalendarItem[] }>('calendar.events', {
       from,
@@ -203,6 +230,35 @@ export async function loadCalendar() {
   } finally {
     if (seq === loadSeq) calendar$.loading.set(false)
   }
+}
+
+/** Re-read which synced calendars there are. Quiet on failure: the
+ * calendar still shows without their colours. */
+export async function loadSyncedCalendars() {
+  try {
+    const res = await invoke<{ calendars?: SyncedCalendar[] }>('caldav.calendars')
+    calendar$.calendars.set(res?.calendars ?? [])
+  } catch (error) {
+    console.warn('caldav.calendars failed', error)
+  }
+}
+
+/** Ask the core to sync calendar accounts now, without waiting: changes
+ * arrive as `calendar.changed`. Only when there is something to sync. */
+export function syncCalendarsInBackground() {
+  if (calendar$.calendars.peek().length === 0) {
+    // The list may not be loaded yet; the core does nothing without accounts.
+    void loadSyncedCalendars().then(() => {
+      if (calendar$.calendars.peek().length > 0) void invoke('caldav.sync').catch(() => {})
+    })
+    return
+  }
+  void invoke('caldav.sync').catch(() => {})
+}
+
+/** The synced calendar an item comes from, if any. */
+export function calendarOf(item: Pick<CalendarItem, 'calendar'>, calendars: SyncedCalendar[]) {
+  return item.calendar ? calendars.find((calendar) => calendar.id === item.calendar) : undefined
 }
 
 /** Page the month. The panel's agenda follows: to today in the current month,
@@ -237,6 +293,7 @@ export function selectDay(day: Date) {
 export async function createEvent(input: EventInput): Promise<boolean> {
   try {
     await invoke('calendar.create', input)
+    calendar$.lastCalendar.set(input.calendar ?? '')
   } catch (error) {
     showToast(errorMessage(error, t('calendar.saveFailed')), 'error')
     return false
@@ -257,7 +314,8 @@ export async function updateEvent(eventId: string, input: EventInput): Promise<b
 }
 
 /** Delete an event, with an Undo that hands the core back what it removed:
- * the calendar lives only on this device, so a delete is otherwise final. */
+ * an event on this device is otherwise gone for good, and a synced one is
+ * deleted on its server at the next sync. */
 export async function deleteEvent(eventId: string) {
   let restore: unknown = null
   try {

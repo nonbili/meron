@@ -9,13 +9,16 @@ import { useTranslation } from '../../lib/i18n'
 import { copyText, openExternal } from '../../lib/native'
 import {
   calendar$,
+  calendarOf,
   createEvent,
   deleteEvent,
   openEventMail,
   updateEvent,
+  type CalendarItem,
   type CalendarRepeat,
   type EventEditor,
   type EventInput,
+  type SyncedCalendar,
 } from '../../states/calendar'
 import { settings$ } from '../../states/settings'
 import { Button } from '../button/Button'
@@ -23,6 +26,15 @@ import { IconButton } from '../button/IconButton'
 import { Checkbox } from '../field/Checkbox'
 import { LinkifiedText } from '../field/LinkifiedText'
 import { SelectInput, TextInput } from '../field/Field'
+
+const CUSTOM_REPEAT: { value: CalendarRepeat; label: string } = { value: 'custom', label: 'calendar.repeat.custom' }
+
+/** A calendar as the picker names it: with its account, since two accounts
+ * can each have a "Personal". */
+function calendarLabel(calendar: SyncedCalendar, note: string): string {
+  const name = calendar.account_name ? `${calendar.name} (${calendar.account_name})` : calendar.name
+  return note ? `${name} · ${note}` : name
+}
 
 const REPEATS: { value: CalendarRepeat; label: string }[] = [
   { value: '', label: 'calendar.repeat.none' },
@@ -46,6 +58,8 @@ type Form = {
   alert: 'default' | number
   /** A second lead, only alongside a first one; NO_ALERT for none. */
   secondAlert: number
+  /** The synced calendar it is (or goes) in; empty for this device. */
+  calendar: string
 }
 
 /** The form's alert fields for an event's stored alerts. */
@@ -67,6 +81,9 @@ function formAlerts(form: Form): number[] | null {
 function initialForm(editor: EventEditor): Form {
   if (editor.mode === 'new') {
     const day = dateValue(new Date(editor.day))
+    // The calendar the last event went in, while it can still take one.
+    const last = calendar$.lastCalendar.peek()
+    const calendar = calendar$.calendars.peek().some((c) => c.id === last && c.writable) ? last : ''
     return {
       title: '',
       notes: '',
@@ -78,6 +95,7 @@ function initialForm(editor: EventEditor): Form {
       endTime: '10:00',
       repeat: '',
       ...alertFields(null),
+      calendar,
     }
   }
   const { item } = editor
@@ -92,9 +110,15 @@ function initialForm(editor: EventEditor): Form {
     startTime: timeValue(start),
     endDate: item.all_day ? utcDateValue(Math.max(item.start, item.end - 86_400)) : dateValue(end),
     endTime: timeValue(end),
-    repeat: item.repeat,
+    // A synced event repeating by a rule the choices cannot say.
+    repeat: hasCustomRepeat(item) ? 'custom' : item.repeat,
     ...alertFields(item.alerts),
+    calendar: item.calendar ?? '',
   }
+}
+
+function hasCustomRepeat(item: CalendarItem): boolean {
+  return !!item.calendar && item.recurring && !item.repeat
 }
 
 function toInput(form: Form): EventInput {
@@ -109,6 +133,7 @@ function toInput(form: Form): EventInput {
       end: Math.max(start, utcDate(form.endDate)) + 86_400,
       repeat: form.repeat,
       alerts: formAlerts(form),
+      calendar: form.calendar,
     }
   }
   const start = localInstant(form.startDate, form.startTime)
@@ -121,6 +146,7 @@ function toInput(form: Form): EventInput {
     end: Math.max(start, localInstant(form.endDate, form.endTime)),
     repeat: form.repeat,
     alerts: formAlerts(form),
+    calendar: form.calendar,
   }
 }
 
@@ -277,9 +303,18 @@ function NotesField({
 export function EventEditorDialog({ editor }: { editor: EventEditor }) {
   const { t } = useTranslation()
   const [form, setForm] = useState(() => initialForm(editor))
+  // What the fields held when the editor opened, so the core can tell an
+  // edit from a value a sync has since replaced.
+  const [original] = useState(() => toInput(initialForm(editor)))
   const [saving, setSaving] = useState(false)
   const item = editor.mode === 'edit' ? editor.item : null
   const invite = item?.source === 'invite'
+  const calendars = useValue(calendar$.calendars)
+  const synced = item ? calendarOf(item, calendars) : undefined
+  // A subscription or a calendar shared read-only: shown, not changed.
+  const readOnly = !!synced && !synced.writable
+  const writableCalendars = calendars.filter((calendar) => calendar.writable)
+  const repeats = item && hasCustomRepeat(item) ? [...REPEATS, CUSTOM_REPEAT] : REPEATS
   const close = () => calendar$.editor.set(null)
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((current) => ({ ...current, [key]: value }))
@@ -299,14 +334,18 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
       const end = new Date((localInstant(current.endDate, current.endTime) + after - before) * 1000)
       return { ...current, startDate, startTime, endDate: dateValue(end), endTime: timeValue(end) }
     })
-  const canSave = !!parseDateValue(form.startDate) && !saving
+  const canSave = !!parseDateValue(form.startDate) && !saving && !readOnly
 
   const save = async () => {
     if (!canSave) return
     setSaving(true)
     const input = toInput(form)
     const saved = item
-      ? await updateEvent(item.id, { ...input, occurrence_start: item.recurring ? item.start : undefined })
+      ? await updateEvent(item.id, {
+          ...input,
+          occurrence_start: item.recurring ? item.start : undefined,
+          original: { ...original, occurrence_start: item.recurring ? item.start : undefined },
+        })
       : await createEvent(input)
     setSaving(false)
     if (saved) close()
@@ -412,12 +451,39 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
                 value={form.repeat}
                 onChange={(event) => set('repeat', event.target.value as CalendarRepeat)}
               >
-                {REPEATS.map(({ value, label: key }) => (
+                {repeats.map(({ value, label: key }) => (
                   <option key={value} value={value}>
                     {t(key)}
                   </option>
                 ))}
               </SelectInput>
+              {(writableCalendars.length > 0 || !!synced) && (
+                <>
+                  <span className={label}>{t('calendar.fields.calendar')}</span>
+                  <SelectInput
+                    wrapperClassName="col-span-2"
+                    aria-label={t('calendar.fields.calendar')}
+                    value={form.calendar}
+                    // Choosing another calendar moves the event there on save.
+                    disabled={readOnly}
+                    onChange={(event) => set('calendar', event.target.value)}
+                  >
+                    {readOnly && synced ? (
+                      <option value={synced.id}>{calendarLabel(synced, t('calendar.readOnly'))}</option>
+                    ) : (
+                      <>
+                        {/* A server's own repeat rule cannot live on this device. */}
+                        {form.repeat !== 'custom' && <option value="">{t('calendar.onThisDevice')}</option>}
+                        {writableCalendars.map((calendar) => (
+                          <option key={calendar.id} value={calendar.id}>
+                            {calendarLabel(calendar, '')}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </SelectInput>
+                </>
+              )}
             </div>
             <TextInput
               placeholder={t('calendar.fields.location')}
@@ -443,7 +509,7 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
         />
 
         <div className="flex items-center gap-2">
-          {item && (
+          {item && !readOnly && (
             <IconButton
               icon={Trash2}
               label={invite ? t('calendar.removeFromCalendar') : t('buttons.delete')}

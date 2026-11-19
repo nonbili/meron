@@ -74,6 +74,7 @@ import { IconButton } from '../button/IconButton'
 import { NumberRow, SegmentedRow, SettingRow, SettingsGroup, ToggleRow, SelectRow } from './AccountSettingsRows'
 import { supportedI18nLanguages, languageNativeNames, type SupportedI18nLanguage } from '../../lib/i18n'
 import { ThemeSettingsSection } from './ThemeSettingsSection'
+import { CalendarAccountsPanel } from './CalendarAccountsPanel'
 import { FontSettingsSection } from './FontSettingsSection'
 import { AccountProxyCard, ProxySettingsSection } from './ProxySettingsCard'
 import { AccountSignatureCard, SignatureSettingsSection } from './SignatureSettingsCard'
@@ -110,7 +111,7 @@ const SECTIONS: { id: SectionId; labelKey: string; icon: LucideIcon }[] = [
   { id: 'composer', labelKey: 'settings.sections.composer', icon: SquarePen },
   { id: 'rules', labelKey: 'rules.title', icon: ListFilter },
 ]
-const PAGE_IDS = new Set<string>(['messages', 'composer', 'rules', 'mcp', 'encryption'])
+const PAGE_IDS = new Set<string>(['messages', 'composer', 'rules', 'mcp', 'encryption', 'calendars'])
 
 const SEND_SHORTCUT_OPTIONS: { value: SendShortcut; label: string }[] = [
   { value: 'enter', label: sendShortcutLabel('enter') },
@@ -167,6 +168,7 @@ export function SettingsDialog() {
   const selectGeneral = () => ui$.accountSettingsId.set('')
   const selectAccount = (id: string) => ui$.accountSettingsId.set(id)
 
+  const calendarEnabled = useValue(settings$.calendarEnabled)
   const selectedAccount = accounts.find((acc) => acc.id === selected)
   const selectedBoard = !selectedAccount ? boards.find((board) => board.id === selected) : undefined
   // A removed account/board (or a stale id) falls back to General.
@@ -230,6 +232,12 @@ export function SettingsDialog() {
             <Lock size={15} className="shrink-0" />
             <span>{t('crypto.peers.nav')}</span>
           </NavItem>
+          {calendarEnabled && (
+            <NavItem active={activeKey === 'calendars'} onClick={() => selectAccount('calendars')}>
+              <CalendarDays size={15} className="shrink-0" />
+              <span>{t('settings.calendars.nav')}</span>
+            </NavItem>
+          )}
           <BoardGroup boards={boards} activeKey={activeKey} onSelect={selectAccount} />
           <AccountGroup
             label={t('settings.sections.mailAccounts')}
@@ -268,6 +276,8 @@ export function SettingsDialog() {
             <McpSettingsPanel />
           ) : selected === 'encryption' ? (
             <EncryptionSettingsPage />
+          ) : selected === 'calendars' && calendarEnabled ? (
+            <CalendarAccountsPanel />
           ) : selected === 'messages' ? (
             <MessagesSection />
           ) : selected === 'composer' ? (
