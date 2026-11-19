@@ -63,6 +63,17 @@ import {
   type NativeClipboardImage,
 } from './composerHelpers'
 
+// Cmd/Ctrl+Enter sends (Composer's handleSendShortcut), but TipTap binds it to
+// a line break (HardBreak) and to leaving a code block, and the editor sees the
+// key first: the message went out with an extra line. Claiming it in the editor
+// leaves the key to the send shortcut. Shift+Enter still breaks a line.
+const SendShortcutKey = Extension.create({
+  name: 'sendShortcutKey',
+  addKeyboardShortcuts() {
+    return { 'Mod-Enter': () => true }
+  },
+})
+
 // A quoted reply's `<blockquote type="cite">` (see replyQuote) keeps its type
 // through the editor, which would otherwise drop it: that attribute is what
 // tells the conversation view the blockquote is a quote to fold.
@@ -225,6 +236,7 @@ export function useComposer(tabId: string) {
       // names would only go out in the mail, meaning nothing to its recipient.
       ResizableImage.configure({ allowBase64: true }),
       CiteBlockquote,
+      SendShortcutKey,
     ],
     content: initialHtml,
     editorProps: {
