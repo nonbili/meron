@@ -26,16 +26,18 @@ jobs:
             target: x86_64-pc-windows-msvc
             artifact: meron-windows-amd64
             tags: 'embed_sidecar'
+          # macOS ships the sidecar inside the bundle instead (see "package
+          # macOS dmg"), so the bundle's signature covers it.
           - os: macos-15-intel
             platform: darwin/amd64
             target: x86_64-apple-darwin
             artifact: meron-darwin-amd64
-            tags: 'embed_sidecar'
+            tags: ''
           - os: macos-15
             platform: darwin/arm64
             target: aarch64-apple-darwin
             artifact: meron-darwin-arm64
-            tags: 'embed_sidecar'
+            tags: ''
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -198,9 +200,24 @@ jobs:
           mkdir -p dist
           rm -rf "$DMG_ROOT" && mkdir -p "$DMG_ROOT"
 
+          # The core runs from inside the bundle (sidecar.go's bundledSidecarPath),
+          # so the bundle's signature covers it and notarization checks it. The
+          # keychain then knows it as the same program from one release to the
+          # next: no prompts after an update. Extracted to the cache dir, as on
+          # Linux and Windows, it was ad-hoc signed and new to the keychain with
+          # every release, asking once per stored secret.
+          cp desktop/build/sidecar/meron-core "$APP_PATH/Contents/MacOS/meron-core"
+
           if [ -n "${KEYCHAIN_PATH:-}" ] && [ -n "${TEAM_ID:-}" ]; then
             SIGNING_IDENTITY="Developer ID Application: Nonbili Inc. ($TEAM_ID)"
-            codesign --force --options runtime --timestamp --deep \
+            # Inside out: the core with its own fixed identifier and no
+            # entitlements (it needs none of the webview's), then the bundle.
+            # No --deep, which would re-sign the core with the app's.
+            codesign --force --options runtime --timestamp \
+              --identifier jp.nonbili.meron.core \
+              --keychain "$KEYCHAIN_PATH" --sign "$SIGNING_IDENTITY" \
+              "$APP_PATH/Contents/MacOS/meron-core"
+            codesign --force --options runtime --timestamp \
               --entitlements desktop/build/darwin/Entitlements.plist \
               --keychain "$KEYCHAIN_PATH" --sign "$SIGNING_IDENTITY" "$APP_PATH"
             codesign --verify --deep --strict --verbose=4 "$APP_PATH"
