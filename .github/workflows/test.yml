@@ -104,7 +104,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: ./mobile/gradlew -p mobile :shared:allTests :ui:allTests
 
-  # Full-stack suite: Rust sidecar against a Postfix/Dovecot mail server in Docker.
+  # Full-stack suite: Rust sidecar against a Postfix/Dovecot mail server, and
+  # a Stalwart CalDAV server, in Docker.
   integration:
     runs-on: ubuntu-latest
     steps:
@@ -124,6 +125,7 @@ jobs:
       - name: Create desktop/frontend/dist placeholder
         run: mkdir -p desktop/frontend/dist && touch desktop/frontend/dist/placeholder
       - run: docker pull ghcr.io/docker-mailserver/docker-mailserver:16.0.1
+      - run: docker pull stalwartlabs/stalwart:v1.0.3
       - run: cargo build --manifest-path meron-core/Cargo.toml
       - run: go test -tags 'integration gtk3' -v -timeout 10m .
         working-directory: desktop
