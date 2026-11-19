@@ -270,10 +270,16 @@ internal fun MeronMobileState.readCoreThread(
 
             else -> Screen.Mail
         }
+    // The core's role is for the thread's own folder. Opened under a Kanban
+    // column pointed elsewhere, it is read, and deleted, there instead. A
+    // unified column's folder is a role ("trash"), no mailbox of this account,
+    // so the thread keeps its own.
+    val unifiedColumn = (browseSource as? ThreadBrowseSource.KanbanColumn)?.column?.accountId == UNIFIED_ACCOUNT_ID
+    val opensElsewhere = !unifiedColumn && sourceFolder.isNotBlank() && sourceFolder != thread.folder
+    val sourceRole = if (opensElsewhere) cachedFolderRole(thread.accountId, sourceFolder) else thread.folderRole
     val readsDraftThread =
-        !threadIdIsRss(backendThreadId) &&
-            (thread.folderRole == "drafts" || (thread.folderRole == "folder" && (folderIsDrafts(sourceFolder) || folderIsDrafts(thread.folder))))
-    val selectedThread = if (sourceFolder.isNotBlank() && sourceFolder != thread.folder) thread.copy(folder = sourceFolder) else thread
+        !threadIdIsRss(backendThreadId) && (thread.folderRole == "drafts" || sourceRole == "drafts")
+    val selectedThread = if (opensElsewhere) thread.copy(folder = sourceFolder, folderRole = sourceRole) else thread
     selectedCoreThread = selectedThread
     threadBrowseSource = browseSource
     messages = initialPage?.messages.orEmpty()

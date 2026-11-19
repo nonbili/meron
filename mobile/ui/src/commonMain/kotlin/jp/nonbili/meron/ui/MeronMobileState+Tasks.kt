@@ -19,6 +19,8 @@ import jp.nonbili.meron.shared.TaskSummary
 import jp.nonbili.meron.shared.TaskUpdateParams
 import jp.nonbili.meron.shared.ThreadReadParams
 import jp.nonbili.meron.shared.ThreadSummary
+import jp.nonbili.meron.shared.folderIsDrafts
+import jp.nonbili.meron.shared.folderIsTrash
 import jp.nonbili.meron.shared.parseNotificationThreadId
 import jp.nonbili.meron.shared.parseTaskListsResponse
 import jp.nonbili.meron.shared.parseTaskRestorePayload
@@ -283,12 +285,14 @@ internal fun MeronMobileState.openLinkedThread(
                 status = trs("tasks.mailNotFound")
                 return@onSuccess
             }
+            val folder = newest.folderId.ifBlank { parsed?.folder.orEmpty() }
             readCoreThread(
                 ThreadSummary(
                     id = threadId,
                     threadId = threadId,
                     accountId = accountId,
-                    folder = newest.folderId.ifBlank { parsed?.folder.orEmpty() },
+                    folder = folder,
+                    folderRole = newest.folderRole.ifBlank { cachedFolderRole(accountId, folder) },
                     subject = newest.subject,
                     sender = newest.fromAddr.ifBlank { newest.from },
                     dateEpochSeconds = newest.dateEpochSeconds,
@@ -299,6 +303,21 @@ internal fun MeronMobileState.openLinkedThread(
         }
     }
 }
+
+/** The core's role for [folder] from the cached folder list, for a thread with
+ * no card of its own there to carry one (a Kanban hit opened under its column's
+ * folder, a linked thread whose read reply named no role). Delete labels and the
+ * draft editor go by it; before the folders load, the name is all there is. */
+internal fun MeronMobileState.cachedFolderRole(
+    accountId: String,
+    folder: String,
+): String =
+    foldersByAccount[accountId]?.firstOrNull { it.name == folder }?.role
+        ?: when {
+            folderIsDrafts(folder) -> "drafts"
+            folderIsTrash(folder) -> "trash"
+            else -> "folder"
+        }
 
 /** A due date as `YYYY-MM-DD` for the edit field, blank when there is none. */
 internal fun formatTaskDueInput(epochSeconds: Long): String = if (epochSeconds <= 0) "" else formatDate(epochSeconds * 1000, DateStyle.IsoDate)

@@ -67,7 +67,7 @@ pub(crate) async fn dispatch(
                 })
                 .await?;
 
-            let folder = imap::Folder {
+            let mut folder = imap::Folder {
                 name,
                 display_name,
                 delimiter: None,
@@ -76,6 +76,9 @@ pub(crate) async fn dispatch(
             {
                 let db = engine.db.lock().unwrap();
                 store::upsert_folders(&db, &account, std::slice::from_ref(&folder))?;
+                // The role the next folder list will give it (the account's
+                // only "Trash" is its Trash), so the client need not guess.
+                folder.role = store::folder_role(&db, &account, &folder.name)?;
             }
             Ok(json!({ "folders": serde_json::to_value(vec![folder])? }))
         }

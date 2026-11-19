@@ -494,6 +494,7 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
             MessageBody(
                 id = id,
                 folderId = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
+                folderRole = item.findJsonStringProperty("folder_role").orEmpty(),
                 from = fromName.ifBlank { fromAddr },
                 to = recipients("to"),
                 cc = recipients("cc"),

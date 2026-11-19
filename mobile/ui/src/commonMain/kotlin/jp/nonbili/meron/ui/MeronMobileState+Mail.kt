@@ -1684,7 +1684,7 @@ internal fun MeronMobileState.deleteThread(thread: ThreadSummary) {
         removesThread = true,
         action = { delete(ThreadActionParams(threadId = thread.id, folderId = thread.folder)) },
         update = { threads -> threads.filterNot { it.id == thread.id } },
-        undoMessage = trs(threadDeletedStatusKey(thread.folder, thread.folderRole), mapOf("count" to 1)),
+        undoMessage = trs(threadDeletedStatusKey(thread.folderRole), mapOf("count" to 1)),
         onUndo = { response -> restoreThread(thread, threadsSnapshot, kanbanSnapshot, response) },
     )
 }

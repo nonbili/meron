@@ -175,7 +175,7 @@ pub fn get_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
         let name = row.get::<_, String>(0)?;
         let special_use = row.get::<_, Option<String>>(2)?;
         Ok(Folder {
-            role: classify_folder_role(&name, special_use.as_deref()).to_string(),
+            role: String::new(),
             display_name: crate::utf7::decode(&name),
             name,
             delimiter: row.get(1)?,
@@ -184,7 +184,15 @@ pub fn get_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
             notify: row.get(4)?,
         })
     })?;
-    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    let mut folders = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    let roles: Vec<&str> = folders
+        .iter()
+        .map(|folder| resolve_folder_role(&folder.name, folder.special_use.as_deref(), &folders))
+        .collect();
+    for (folder, role) in folders.iter_mut().zip(roles) {
+        folder.role = role.to_string();
+    }
+    Ok(folders)
 }
 
 /// Opt a folder in to (or out of) live sync and new-mail notifications.
@@ -341,6 +349,57 @@ pub fn classify_folder_role(name: &str, special_use: Option<&str>) -> &'static s
     }
 }
 
+/// The one folder of an account that holds `role` ("drafts" or "trash") in the
+/// cached list, as `imap::find_trash_folder` / `find_drafts_folder` pick it
+/// live: the one the server flags with it, or else one whose name says so.
+/// Delete expunges in place only there (`engine::delete_to_trash`) and moves
+/// mail from anywhere else to it. The cache keeps no LIST order, so where
+/// several folders tie this takes the first by name.
+pub fn role_folder<'a>(folders: &'a [Folder], role: &str) -> Option<&'a str> {
+    let first = |matches: &dyn Fn(&Folder) -> bool| {
+        folders
+            .iter()
+            .filter(|folder| matches(folder))
+            .map(|folder| folder.name.as_str())
+            .min()
+    };
+    first(&|folder| folder.special_use.as_deref() == Some(role)).or_else(|| {
+        first(&|folder| classify_folder_role(&folder.name, folder.special_use.as_deref()) == role)
+    })
+}
+
+/// [`classify_folder_role`] within the account's `folders`: a folder that only
+/// looks like Drafts or Trash by name, beside the one that holds the role (a
+/// plain "Trash" beside Gmail's "[Gmail]/Trash"), is an ordinary folder, as it
+/// is to delete. A folder the server flags keeps its role whatever else does,
+/// and with no other folder cached in the role the name stands.
+pub fn resolve_folder_role(
+    name: &str,
+    special_use: Option<&str>,
+    folders: &[Folder],
+) -> &'static str {
+    let role = classify_folder_role(name, special_use);
+    if matches!(role, "drafts" | "trash")
+        && special_use != Some(role)
+        && role_folder(folders, role).is_some_and(|holder| holder != name)
+    {
+        return "folder";
+    }
+    role
+}
+
+fn role_lookup_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
+    let mut stmt = conn.prepare("SELECT name, special_use FROM folders WHERE account = ?1")?;
+    let rows = stmt.query_map(params![account], |row| {
+        Ok(Folder {
+            name: row.get(0)?,
+            special_use: row.get(1)?,
+            ..Default::default()
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 /// The account's folder for a special-use role, or `None` when it has none.
 ///
 /// Backs the unified view's folder switcher: "Sent" there means each account's
@@ -354,7 +413,7 @@ pub fn folder_for_role(conn: &Connection, account: &str, role: &str) -> Result<O
     }
     Ok(get_folders(conn, account)?
         .into_iter()
-        .find(|folder| classify_folder_role(&folder.name, folder.special_use.as_deref()) == role)
+        .find(|folder| folder.role == role)
         .map(|folder| folder.name))
 }
 
@@ -427,5 +486,10 @@ pub fn folder_role(conn: &Connection, account: &str, folder: &str) -> Result<Str
         )
         .optional()?
         .flatten();
-    Ok(classify_folder_role(folder, special_use.as_deref()).to_string())
+    let role = classify_folder_role(folder, special_use.as_deref());
+    if !matches!(role, "drafts" | "trash") {
+        return Ok(role.to_string());
+    }
+    let folders = role_lookup_folders(conn, account)?;
+    Ok(resolve_folder_role(folder, special_use.as_deref(), &folders).to_string())
 }

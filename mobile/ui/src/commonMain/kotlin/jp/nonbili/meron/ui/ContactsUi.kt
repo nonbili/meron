@@ -111,7 +111,6 @@ import jp.nonbili.meron.shared.ContactSuggestion
 import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.MeronCore
 import jp.nonbili.meron.shared.ThreadSummary
-import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.formatContactSuggestion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -854,7 +853,7 @@ private fun ContactThreadRow(
     val showAvatar = LocalShowThreadAvatars.current
     val accountColor = account?.let { accountColorOrNull(it.color) }
     val badgeAccount = account.takeIf { accountColor == null }
-    val hasDraft = thread.hasDraft || thread.folderRole == "drafts" || (thread.folderRole == "folder" && folderIsDrafts(thread.folder))
+    val hasDraft = thread.hasDraft || thread.folderRole == "drafts"
     val draftBadge = tr("chat.draft")
     val rowBackground =
         if (unread) {

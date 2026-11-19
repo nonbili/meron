@@ -217,7 +217,9 @@ pub fn list_contacts(
     // Resolve metadata once, not once per contact. Folder roles can change
     // after messages were cached, so exclusion belongs on the read side, not
     // in the participant triggers. Missing metadata still uses name heuristics.
-    let mut folder_roles = HashMap::new();
+    // Roles as `folder_role` resolves them, account by account, so the
+    // directory hides the same folders a contact's thread history does.
+    let mut account_folders: HashMap<String, Vec<crate::imap::Folder>> = HashMap::new();
     let mut folders = conn.prepare("SELECT account, name, special_use FROM folders")?;
     for row in folders.query_map([], |row| {
         Ok((
@@ -227,8 +229,22 @@ pub fn list_contacts(
         ))
     })? {
         let (account, name, special_use) = row?;
-        let role = super::classify_folder_role(&name, special_use.as_deref());
-        folder_roles.insert((account, name), role);
+        account_folders
+            .entry(account)
+            .or_default()
+            .push(crate::imap::Folder {
+                name,
+                special_use,
+                ..Default::default()
+            });
+    }
+    let mut folder_roles = HashMap::new();
+    for (account, folders) in &account_folders {
+        for folder in folders {
+            let role =
+                super::resolve_folder_role(&folder.name, folder.special_use.as_deref(), folders);
+            folder_roles.insert((account.clone(), folder.name.clone()), role);
+        }
     }
     let account_filter = if account.is_empty() {
         "?1 = ''"
@@ -262,9 +278,13 @@ pub fn list_contacts(
     let mut tallies: HashMap<String, Tally> = HashMap::new();
     for row in rows {
         let (key, addr, name, count, last_date, account, folder) = row?;
+        let folders = account_folders
+            .get(&account)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
         let role = folder_roles
-            .entry((account, folder.clone()))
-            .or_insert_with(|| super::classify_folder_role(&folder, None));
+            .entry((account.clone(), folder.clone()))
+            .or_insert_with(|| super::resolve_folder_role(&folder, None, folders));
         if matches!(*role, "junk" | "trash") {
             continue;
         }

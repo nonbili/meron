@@ -209,8 +209,6 @@ import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.attachmentToDraftAttachment
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import jp.nonbili.meron.shared.detectReplyFromIdentity
-import jp.nonbili.meron.shared.folderIsDrafts
-import jp.nonbili.meron.shared.folderIsTrash
 import jp.nonbili.meron.shared.formatContactSuggestion
 import jp.nonbili.meron.shared.formatSendIdentity
 import jp.nonbili.meron.shared.forwardableAttachments
@@ -635,7 +633,7 @@ internal fun MailRow(
     val showAvatar = LocalShowThreadAvatars.current
     val accountColor = account?.let { accountColorOrNull(it.color) }
     val badgeAccount = account.takeIf { accountColor == null }
-    val hasDraft = thread.hasDraft || thread.folderRole == "drafts" || (thread.folderRole == "folder" && folderIsDrafts(thread.folder))
+    val hasDraft = thread.hasDraft || thread.folderRole == "drafts"
     val draftBadge = tr("chat.draft")
     val primaryText = if (unread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
     // A read subject sits a step darker than its sender, so the line worth

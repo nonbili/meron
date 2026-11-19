@@ -244,7 +244,7 @@ internal fun ThreadScreen(
     modifier: Modifier = Modifier,
 ) {
     val isRss = thread?.let { threadIdIsRss(it.id) } ?: false
-    val deleteLabel = tr(thread?.let { threadDeleteActionKey(it.folder, it.folderRole) } ?: "threads.actions.moveToTrash")
+    val deleteLabel = tr(thread?.let { threadDeleteActionKey(it.folderRole) } ?: "threads.actions.moveToTrash")
     val chat = LocalChatColors.current
     val services = LocalPlatformServices.current
     var searchOpen by remember(thread?.id) { mutableStateOf(false) }

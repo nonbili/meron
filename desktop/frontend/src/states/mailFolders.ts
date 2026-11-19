@@ -115,9 +115,14 @@ function looksLikeTrashName(value: string): boolean {
   return ['trash', 'bin', 'deleted items', 'deleted messages', '[gmail]/trash'].includes(value.trim().toLowerCase())
 }
 
+// The core gives the trash role only to the folder its delete empties in place
+// (a localized "Papierkorb" included, a plain "Trash" beside Gmail's
+// "[Gmail]/Trash" not), so its role wins over the name. The name list is only
+// for folder metadata that carries no role.
 export function isTrashFolder(folder?: Pick<Folder, 'id' | 'name' | 'role'> | null): boolean {
   if (!folder) return false
-  return folder.role === 'trash' || looksLikeTrashName(folder.id) || looksLikeTrashName(folder.name)
+  if (folder.role) return folder.role === 'trash'
+  return looksLikeTrashName(folder.id) || looksLikeTrashName(folder.name)
 }
 
 export function isTrashFolderId(accountId: string, folderId: string): boolean {
@@ -126,7 +131,7 @@ export function isTrashFolderId(accountId: string, folderId: string): boolean {
   const folder = [...accountFolders, ...selectedFolders].find(
     (item) => item.account_id === accountId && item.id === folderId,
   )
-  return isTrashFolder(folder) || looksLikeTrashName(folderId)
+  return folder ? isTrashFolder(folder) : looksLikeTrashName(folderId)
 }
 
 // Whether deleting mail here removes it for good: in Trash, and anywhere in

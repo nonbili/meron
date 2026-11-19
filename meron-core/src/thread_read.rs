@@ -6,7 +6,7 @@
 //! parse their own id formats and decide how a finished background fetch is
 //! announced (sidecar event vs FFI event callback).
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -431,6 +431,9 @@ pub async fn read_thread_page(
     // Looked at after any fill above was started, so a placeholder this read
     // returns says whether its body is on the way.
     let filling = engine.body_fetches.lock().unwrap().clone();
+    // Each message's folder role, as thread cards carry it: a client that
+    // opens the thread by link has no card, and labels its delete by this.
+    let mut folder_roles: HashMap<String, String> = HashMap::new();
     for (header, slot) in headers.iter().zip(slots) {
         let mut cached = slot.cached;
         if let Some(message) = cached.as_mut() {
@@ -456,6 +459,11 @@ pub async fn read_thread_page(
             &mine,
             &ours,
         );
+        let folder_role = folder_roles.entry(slot.folder.clone()).or_insert_with(|| {
+            store::folder_role(&engine.db.lock().unwrap(), account, &slot.folder)
+                .unwrap_or_else(|_| "folder".to_string())
+        });
+        message["folder_role"] = json!(folder_role);
         // The one-time code of a received verification mail, which clients
         // offer for copying. Only looked for when the user switched it on.
         if detect_codes && message["outgoing"] != json!(true) {

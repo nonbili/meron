@@ -8,8 +8,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.ThreadSummary
-import jp.nonbili.meron.shared.folderIsDrafts
-import jp.nonbili.meron.shared.folderIsTrash
 import jp.nonbili.meron.shared.threadIdIsRss
 
 // How long after open the list keeps re-anchoring to the target message while
@@ -210,14 +208,14 @@ internal fun threadMessageSearchText(message: MessageBody): String =
         message.attachments.joinToString(" ") { it.filename },
     ).joinToString(" ").lowercase()
 
-/** The catalog key naming what deleting a thread in [folder] does. */
-internal fun threadDeleteActionKey(
-    folder: String,
-    folderRole: String = "folder",
-): String =
-    when {
-        folderRole == "drafts" || (folderRole == "folder" && folderIsDrafts(folder)) -> "threads.actions.discardDraft"
-        folderRole == "trash" || (folderRole == "folder" && folderIsTrash(folder)) -> "threads.actions.deleteForever"
+/** The catalog key naming what deleting a thread in a folder of [folderRole]
+ * does. The core gives the drafts and trash roles only to the folders its
+ * delete empties in place, localized names included, so a folder's name is no
+ * guide: "Projects/Trash" is plain, and deleting there moves to Trash. */
+internal fun threadDeleteActionKey(folderRole: String): String =
+    when (folderRole) {
+        "drafts" -> "threads.actions.discardDraft"
+        "trash" -> "threads.actions.deleteForever"
         else -> "threads.actions.moveToTrash"
     }
 
@@ -229,7 +227,7 @@ internal fun threadsDeleteActionKey(threads: List<ThreadSummary>): String? {
     val keys =
         threads
             .filterNot { threadIdIsRss(it.backendThreadId()) }
-            .map { threadDeleteActionKey(it.folder, it.folderRole) }
+            .map { threadDeleteActionKey(it.folderRole) }
             .toSet()
     return when {
         keys.isEmpty() -> null
@@ -239,12 +237,10 @@ internal fun threadsDeleteActionKey(threads: List<ThreadSummary>): String? {
     }
 }
 
-/** The catalog key for having deleted a thread in [folder]; takes a `count`. */
-internal fun threadDeletedStatusKey(
-    folder: String,
-    folderRole: String = "folder",
-): String =
-    when (threadDeleteActionKey(folder, folderRole)) {
+/** The catalog key for having deleted a thread in a folder of [folderRole];
+ * takes a `count`. */
+internal fun threadDeletedStatusKey(folderRole: String): String =
+    when (threadDeleteActionKey(folderRole)) {
         "threads.actions.discardDraft" -> "mail.toast.draftDiscarded"
         "threads.actions.deleteForever" -> "mail.toast.deletedCount"
         else -> "mail.toast.threadMovedToTrash"

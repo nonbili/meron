@@ -203,6 +203,8 @@ enum class SendStatus {
 data class MessageBody(
     val id: String,
     val folderId: String = "",
+    /** The core's role for [folderId]; blank when the reply carried none. */
+    val folderRole: String = "",
     val from: String,
     val to: String,
     val cc: String = "",

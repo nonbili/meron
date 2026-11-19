@@ -902,20 +902,31 @@ pub async fn list_folders(session: &mut Session) -> Result<Vec<Folder>> {
     let mut stream = session.list(Some(""), Some("*")).await.context("LIST")?;
     while let Some(item) = stream.next().await {
         let name = item.context("LIST item")?;
-        let special_use = name.attributes().iter().find_map(|attr| {
-            use async_imap::imap_proto::NameAttribute;
-            match attr {
-                NameAttribute::Drafts => Some("drafts"),
-                NameAttribute::Sent => Some("sent"),
-                NameAttribute::Trash => Some("trash"),
-                NameAttribute::Junk => Some("junk"),
-                NameAttribute::Archive => Some("archive"),
-                NameAttribute::All => Some("all"),
-                NameAttribute::Flagged => Some("flagged"),
-                _ => None,
-            }
-            .map(str::to_string)
-        });
+        // One role is stored per mailbox. \Flagged (a virtual "starred" view)
+        // yields to a real role listed beside it, so a `(\Flagged \Trash)`
+        // Trash is still the Trash `find_trash_folder` resolves.
+        let special_use = name
+            .attributes()
+            .iter()
+            .find_map(|attr| {
+                use async_imap::imap_proto::NameAttribute;
+                match attr {
+                    NameAttribute::Drafts => Some("drafts"),
+                    NameAttribute::Sent => Some("sent"),
+                    NameAttribute::Trash => Some("trash"),
+                    NameAttribute::Junk => Some("junk"),
+                    NameAttribute::Archive => Some("archive"),
+                    NameAttribute::All => Some("all"),
+                    _ => None,
+                }
+            })
+            .or_else(|| {
+                name.attributes()
+                    .iter()
+                    .any(|attr| matches!(attr, async_imap::imap_proto::NameAttribute::Flagged))
+                    .then_some("flagged")
+            })
+            .map(str::to_string);
         out.push(Folder {
             display_name: crate::utf7::decode(name.name()),
             name: name.name().to_string(),

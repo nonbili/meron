@@ -431,6 +431,76 @@ fn folder_role_assignment_uses_special_use_then_name_fallback() {
 }
 
 #[test]
+fn only_the_folder_delete_empties_in_place_holds_the_trash_role() {
+    let folder = |name: &str, special_use: Option<&str>| Folder {
+        name: name.to_string(),
+        special_use: special_use.map(str::to_string),
+        ..Default::default()
+    };
+
+    // The server flags Gmail's Trash: a plain "Trash" beside it is a folder
+    // like any other, where delete moves mail to "[Gmail]/Trash".
+    let conn = test_conn();
+    upsert_folders(
+        &conn,
+        "gmail",
+        &[
+            folder("Trash", None),
+            folder("[Gmail]/Trash", Some("trash")),
+            folder("Projects/Trash", None),
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        folder_role(&conn, "gmail", "[Gmail]/Trash").unwrap(),
+        "trash"
+    );
+    assert_eq!(folder_role(&conn, "gmail", "Trash").unwrap(), "folder");
+    assert_eq!(
+        folder_role(&conn, "gmail", "Projects/Trash").unwrap(),
+        "folder"
+    );
+    assert_eq!(
+        folder_for_role(&conn, "gmail", "trash").unwrap().as_deref(),
+        Some("[Gmail]/Trash")
+    );
+    let roles: BTreeMap<String, String> = get_folders(&conn, "gmail")
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.name, f.role))
+        .collect();
+    assert_eq!(roles["Trash"], "folder");
+    assert_eq!(roles["[Gmail]/Trash"], "trash");
+
+    // No flags (the server lacks SPECIAL-USE): names decide, localized ones
+    // included, and of two look-alikes the first by name holds the role.
+    upsert_folders(
+        &conn,
+        "plain",
+        &[
+            folder("Trash", None),
+            folder("Papierkorb", None),
+            folder("INBOX", None),
+        ],
+    )
+    .unwrap();
+    assert_eq!(folder_role(&conn, "plain", "Papierkorb").unwrap(), "trash");
+    assert_eq!(folder_role(&conn, "plain", "Trash").unwrap(), "folder");
+
+    // Nothing cached for the account: the name alone stands.
+    assert_eq!(folder_role(&conn, "fresh", "Trash").unwrap(), "trash");
+
+    let folders = [
+        folder("Drafts", None),
+        folder("Entw&APw-rfe", Some("drafts")),
+        folder("Trash", None),
+    ];
+    assert_eq!(role_folder(&folders, "drafts"), Some("Entw&APw-rfe"));
+    assert_eq!(role_folder(&folders, "trash"), Some("Trash"));
+    assert_eq!(resolve_folder_role("Drafts", None, &folders), "folder");
+}
+
+#[test]
 fn draft_thread_keys_detects_special_use_and_name_fallback() {
     let conn = test_conn();
     upsert_folders(

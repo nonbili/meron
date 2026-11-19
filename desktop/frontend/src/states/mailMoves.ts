@@ -1133,20 +1133,22 @@ export async function deleteMessage(message: Message): Promise<boolean> {
   mail$.messages.set(nextMessages)
 
   try {
-    const res = await invoke('mail.delete', {
+    const res = await invoke<{ permanent?: boolean; trash?: string } & MutationResult>('mail.delete', {
       thread_id: threadId,
       message_ids: [message.id],
       folder: message.folder_id,
     })
     if (!isDraft) assertDeleteAffected(res)
     forgetStandaloneRecoveryDraft(message.message_id, message.account_id)
-    applyMutationFolderUnreads(res as MutationResult)
+    applyMutationFolderUnreads(res)
+    // Say what the core did, not what the folder list predicted: the list
+    // can be stale, and only the reply names the Trash it went to.
     showToast(
-      isDraft
-        ? t('mail.toast.draftDiscarded')
-        : forever
-          ? t('mail.toast.deletedCount', { count: 1 })
-          : t('mail.toast.messageMovedToTrash'),
+      res?.trash && !res.permanent
+        ? t('mail.toast.messageMovedToTrash')
+        : isDraft
+          ? t('mail.toast.draftDiscarded')
+          : t('mail.toast.deletedCount', { count: 1 }),
     )
     // No messages left from this thread: drop the now-empty conversation.
     if (!nextMessages.some((item) => item.thread_id === threadId)) {
