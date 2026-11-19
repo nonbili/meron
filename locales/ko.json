@@ -149,6 +149,7 @@
   "buttons.send": "보내기",
   "buttons.undo": "실행 취소",
   "calendar.addToCalendar": "캘린더에 추가",
+  "calendar.chooseCalendars": "표시할 캘린더",
   "calendar.alert.allDayDays": "{count, plural, one {{count}일 전(오전 9시)} other {{count}일 전(오전 9시)}}",
   "calendar.alert.allDayOnDay": "당일(오전 9시)",
   "calendar.alert.allDayWeek": "1주 전(오전 9시)",

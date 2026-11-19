@@ -149,6 +149,7 @@
   "buttons.send": "إرسال",
   "buttons.undo": "تراجع",
   "calendar.addToCalendar": "إضافة إلى التقويم",
+  "calendar.chooseCalendars": "إظهار التقويمات",
   "calendar.alert.allDayDays": "{count, plural, one {قبل {count} يوم (9 صباحًا)} other {قبل {count} يوم (9 صباحًا)}}",
   "calendar.alert.allDayOnDay": "في يوم الحدث (9 صباحًا)",
   "calendar.alert.allDayWeek": "قبل أسبوع (9 صباحًا)",

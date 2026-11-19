@@ -149,6 +149,7 @@
   "buttons.send": "Verzenden",
   "buttons.undo": "Ongedaan maken",
   "calendar.addToCalendar": "Toevoegen aan agenda",
+  "calendar.chooseCalendars": "Agenda’s tonen",
   "calendar.alert.allDayDays": "{count, plural, one {{count} dag van tevoren (09:00 uur)} other {{count} dagen van tevoren (09:00 uur)}}",
   "calendar.alert.allDayOnDay": "Op de dag zelf (09:00 uur)",
   "calendar.alert.allDayWeek": "1 week van tevoren (09:00 uur)",

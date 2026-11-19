@@ -6,10 +6,12 @@ import { useEscapeKey } from '../../lib/useEscapeKey'
 import { settings$ } from '../../states/settings'
 import { useTranslation } from '../../lib/i18n'
 import { clsx } from '../../lib/utils'
-import { isValidColor, withAlpha } from '../../lib/color'
+import { withAlpha } from '../../lib/color'
 import {
   calendar$,
+  calendarColor,
   calendarOf,
+  visibleItems,
   closeCalendar,
   goToToday,
   openCalendarPanel,
@@ -23,6 +25,7 @@ import {
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 import { EventEditorDialog } from './EventEditorDialog'
+import { CalendarFilter } from './CalendarFilter'
 
 /** How many items a day cell lists before folding the rest into "+N more". */
 const VISIBLE_PER_DAY = 3
@@ -33,7 +36,7 @@ const VISIBLE_PER_DAY = 3
 export function CalendarView() {
   const { t } = useTranslation()
   const month = new Date(useValue(calendar$.month))
-  const items = useValue(calendar$.items)
+  const items = useVisibleItems()
   const editor = useValue(calendar$.editor)
   const [expandedDay, setExpandedDay] = useState<number | null>(null)
 
@@ -58,6 +61,7 @@ export function CalendarView() {
         </Button>
         <IconButton label={t('calendar.previousMonth')} icon={ChevronLeft} size="sm" onClick={() => shiftMonth(-1)} />
         <IconButton label={t('calendar.nextMonth')} icon={ChevronRight} size="sm" onClick={() => shiftMonth(1)} />
+        <CalendarFilter />
         <Button
           size="sm"
           leftIcon={Plus}
@@ -188,11 +192,19 @@ export function sameMonth(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
 }
 
-/** The colour a synced calendar asks its events be shown in, if usable. */
+/** The colour a synced calendar's events are drawn in; none (the accent)
+ * for this device's. */
 export function useCalendarColor(item: CalendarItem): string | undefined {
   const calendars = useValue(calendar$.calendars)
-  const color = calendarOf(item, calendars)?.color
-  return color && isValidColor(color) ? color : undefined
+  const calendar = calendarOf(item, calendars)
+  return calendar ? calendarColor(calendar) : undefined
+}
+
+/** The loaded items of the calendars shown. */
+export function useVisibleItems(): CalendarItem[] {
+  const items = useValue(calendar$.items)
+  const hidden = useValue(calendar$.hiddenCalendars)
+  return useMemo(() => visibleItems(items, hidden), [items, hidden])
 }
 
 function CalendarChip({ item }: { item: CalendarItem }) {

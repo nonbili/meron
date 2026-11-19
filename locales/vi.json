@@ -149,6 +149,7 @@
   "buttons.send": "Gửi",
   "buttons.undo": "Hoàn tác",
   "calendar.addToCalendar": "Thêm vào lịch",
+  "calendar.chooseCalendars": "Hiển thị lịch",
   "calendar.alert.allDayDays": "{count, plural, one {{count} ngày trước (9 giờ sáng)} other {{count} ngày trước (9 giờ sáng)}}",
   "calendar.alert.allDayOnDay": "Trong ngày (9 giờ sáng)",
   "calendar.alert.allDayWeek": "1 tuần trước (9 giờ sáng)",

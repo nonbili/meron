@@ -18,7 +18,8 @@ import {
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 import { SIDE_PANEL_WIDTH } from '../sidepanel/SidePanelSlide'
-import { sameMonth, useCalendarColor, useCalendarFeed } from './CalendarView'
+import { sameMonth, useCalendarColor, useCalendarFeed, useVisibleItems } from './CalendarView'
+import { CalendarFilter } from './CalendarFilter'
 import { EventEditorDialog } from './EventEditorDialog'
 
 /**
@@ -31,7 +32,7 @@ export function CalendarPanel() {
   const { t } = useTranslation()
   const month = new Date(useValue(calendar$.month))
   const selected = new Date(useValue(calendar$.day))
-  const items = useValue(calendar$.items)
+  const items = useVisibleItems()
   const editor = useValue(calendar$.editor)
 
   const weekStart = useMemo(() => firstDayOfWeek(), [])
@@ -61,6 +62,7 @@ export function CalendarPanel() {
       <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border pl-3 pr-1.5">
         <CalendarDays size={16} className="shrink-0 text-accent" />
         <h2 className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold text-primary">{t('calendar.title')}</h2>
+        <CalendarFilter />
         <IconButton
           label={t('calendar.newEvent')}
           icon={Plus}

@@ -149,6 +149,7 @@
   "buttons.send": "Enviar",
   "buttons.undo": "Deshacer",
   "calendar.addToCalendar": "Añadir al calendario",
+  "calendar.chooseCalendars": "Mostrar calendarios",
   "calendar.alert.allDayDays": "{count, plural, one {{count} día antes (9 a. m.)} other {{count} días antes (9 a. m.)}}",
   "calendar.alert.allDayOnDay": "El mismo día (9 a. m.)",
   "calendar.alert.allDayWeek": "1 semana antes (9 a. m.)",

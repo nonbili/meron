@@ -149,6 +149,7 @@
   "buttons.send": "Gönder",
   "buttons.undo": "Geri al",
   "calendar.addToCalendar": "Takvime ekle",
+  "calendar.chooseCalendars": "Takvimleri göster",
   "calendar.alert.allDayDays": "{count, plural, one {{count} gün önce (09.00)} other {{count} gün önce (09.00)}}",
   "calendar.alert.allDayOnDay": "Etkinlik günü (09.00)",
   "calendar.alert.allDayWeek": "1 hafta önce (09.00)",

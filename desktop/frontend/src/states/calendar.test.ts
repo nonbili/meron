@@ -12,6 +12,10 @@ import {
   selectDay,
   shiftMonth,
   toggleCalendarPanel,
+  calendarColor,
+  visibleItems,
+  LOCAL_CALENDAR,
+  type CalendarItem,
 } from './calendar'
 import { openTasksPanel } from './tasks'
 
@@ -172,5 +176,24 @@ describe('the event editor', () => {
     setCalendarEnabled(false)
     expect(calendar$.editor.get()).toBeNull()
     setCalendarEnabled(true)
+  })
+})
+
+describe('calendar visibility', () => {
+  const item = (source: CalendarItem['source'], calendar = ''): CalendarItem =>
+    ({ id: `${source}-${calendar}`, key: `${source}-${calendar}`, source, calendar }) as CalendarItem
+
+  it('hides the events of hidden calendars, never tasks', () => {
+    const items = [item('event'), item('invite'), item('event', 'cal-work'), item('task')]
+    expect(visibleItems(items, []).length).toBe(4)
+    expect(visibleItems(items, [LOCAL_CALENDAR]).map((i) => i.id)).toEqual(['event-cal-work', 'task-'])
+    expect(visibleItems(items, ['cal-work']).map((i) => i.id)).toEqual(['event-', 'invite-', 'task-'])
+  })
+
+  it('a calendar without a colour gets a steady preset', () => {
+    expect(calendarColor({ id: 'cal-1', color: '#0082C9' })).toBe('#0082c9')
+    const picked = calendarColor({ id: 'cal-1', color: '' })
+    expect(picked).toMatch(/^#[0-9a-f]{6}$/)
+    expect(calendarColor({ id: 'cal-1', color: '' })).toBe(picked)
   })
 })

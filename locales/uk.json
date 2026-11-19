@@ -149,6 +149,7 @@
   "buttons.send": "Надіслати",
   "buttons.undo": "Скасувати дію",
   "calendar.addToCalendar": "Додати до календаря",
+  "calendar.chooseCalendars": "Показати календарі",
   "calendar.alert.allDayDays": "{count, plural, one {За {count} день (о 9:00)} few {За {count} дні (о 9:00)} many {За {count} днів (о 9:00)} other {За {count} дня (о 9:00)}}",
   "calendar.alert.allDayOnDay": "У день події (о 9:00)",
   "calendar.alert.allDayWeek": "За 1 тиждень (о 9:00)",

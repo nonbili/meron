@@ -8,6 +8,7 @@ import { openThreadTabById } from './compose'
 import { compose$ } from './composeState'
 import { mail$ } from './mailState'
 import { persistedField } from '../lib/sessionPref'
+import { COLOR_PRESETS, normalizeHexColor } from '../lib/colorPresets'
 import { isNarrowWindow } from '../lib/useNarrowWindow'
 import { settings$ } from './settings'
 import { closeTasksPanel, openTasksPanel } from './tasks'
@@ -103,7 +104,46 @@ export const calendar$ = observable({
   calendars: [] as SyncedCalendar[],
   /** The calendar the last new event went in, offered first for the next. */
   lastCalendar: '',
+  /** Calendars left out of the views ([LOCAL_CALENDAR] for this device's
+   * events). Only what is drawn: hidden events stay synced and alert. */
+  hiddenCalendars: [] as string[],
 })
+
+/** How [calendar$.hiddenCalendars] names the events that live on this
+ * device: local ones and accepted invitations. */
+export const LOCAL_CALENDAR = 'local'
+
+/** The key an item is shown or hidden by. Tasks have none: they follow the
+ * Tasks setting, not a calendar. */
+export function calendarKey(item: Pick<CalendarItem, 'source' | 'calendar'>): string | null {
+  if (item.source === 'task') return null
+  return item.calendar || LOCAL_CALENDAR
+}
+
+/** `items` without those of hidden calendars. */
+export function visibleItems(items: CalendarItem[], hidden: string[]): CalendarItem[] {
+  if (hidden.length === 0) return items
+  return items.filter((item) => {
+    const key = calendarKey(item)
+    return key === null || !hidden.includes(key)
+  })
+}
+
+export function toggleCalendarShown(key: string) {
+  const hidden = calendar$.hiddenCalendars.peek()
+  calendar$.hiddenCalendars.set(hidden.includes(key) ? hidden.filter((k) => k !== key) : [...hidden, key])
+}
+
+/** The colour a synced calendar's events are drawn in: its own, or for a
+ * calendar without one a preset picked by its id, so it stays the same from
+ * one session to the next and differs from its neighbours'. */
+export function calendarColor(calendar: Pick<SyncedCalendar, 'id' | 'color'>): string {
+  const own = normalizeHexColor(calendar.color)
+  if (own) return own
+  let hash = 0
+  for (const ch of calendar.id) hash = (hash * 31 + ch.charCodeAt(0)) | 0
+  return COLOR_PRESETS[Math.abs(hash) % COLOR_PRESETS.length].hex
+}
 
 let loadSeq = 0
 
@@ -121,11 +161,18 @@ const panelOpenSession = persistedField(ui$.calendarPanelOpen, 'session_calendar
   typeof raw === 'boolean' ? raw : undefined,
 )
 
+// Which calendars are shown is how the user set up their view, kept across
+// restarts like the open panel.
+const hiddenCalendarsSession = persistedField(calendar$.hiddenCalendars, 'session_calendar_hidden', (raw) =>
+  Array.isArray(raw) ? raw.filter((key): key is string => typeof key === 'string') : undefined,
+)
+
 /** Prefs keys this module owns; boot requests them in its single prefsGet. */
-export const CALENDAR_SESSION_KEYS = [panelOpenSession.key]
+export const CALENDAR_SESSION_KEYS = [panelOpenSession.key, hiddenCalendarsSession.key]
 
 export function restoreCalendarSession(prefs: Record<string, unknown>) {
   if (prefs.calendar_enabled === false) return
+  hiddenCalendarsSession.restore(prefs)
   panelOpenSession.restore(prefs)
   if (ui$.calendarPanelOpen.peek()) openCalendarPanel()
 }

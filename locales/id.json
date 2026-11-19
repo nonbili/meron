@@ -149,6 +149,7 @@
   "buttons.send": "Kirim",
   "buttons.undo": "Urungkan",
   "calendar.addToCalendar": "Tambahkan ke kalender",
+  "calendar.chooseCalendars": "Tampilkan kalender",
   "calendar.alert.allDayDays": "{count, plural, one {{count} hari sebelumnya (09.00)} other {{count} hari sebelumnya (09.00)}}",
   "calendar.alert.allDayOnDay": "Pada hari acara (09.00)",
   "calendar.alert.allDayWeek": "1 minggu sebelumnya (09.00)",

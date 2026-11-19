@@ -149,6 +149,7 @@
   "buttons.send": "Senden",
   "buttons.undo": "Rückgängig",
   "calendar.addToCalendar": "Zum Kalender hinzufügen",
+  "calendar.chooseCalendars": "Kalender anzeigen",
   "calendar.alert.allDayDays": "{count, plural, one {{count} Tag vorher (9 Uhr)} other {{count} Tage vorher (9 Uhr)}}",
   "calendar.alert.allDayOnDay": "Am Tag (9 Uhr)",
   "calendar.alert.allDayWeek": "1 Woche vorher (9 Uhr)",

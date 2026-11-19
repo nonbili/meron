@@ -149,6 +149,7 @@
   "buttons.send": "送信",
   "buttons.undo": "元に戻す",
   "calendar.addToCalendar": "カレンダーに追加",
+  "calendar.chooseCalendars": "表示するカレンダー",
   "calendar.alert.allDayDays": "{count, plural, one {{count} 日前（午前 9 時）} other {{count} 日前（午前 9 時）}}",
   "calendar.alert.allDayOnDay": "当日（午前 9 時）",
   "calendar.alert.allDayWeek": "1 週間前（午前 9 時）",

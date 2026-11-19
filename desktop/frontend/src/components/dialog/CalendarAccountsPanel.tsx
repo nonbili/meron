@@ -14,6 +14,7 @@ import {
   type CalendarAccount,
 } from '../../states/caldav'
 import { useValue } from '@legendapp/state/react'
+import { calendarColor } from '../../states/calendar'
 import { Button } from '../button/Button'
 import { TextInput } from '../field/Field'
 import { SettingRow, SettingsGroup, Switch } from './AccountSettingsRows'
@@ -219,9 +220,11 @@ function AccountCard({ account }: { account: CalendarAccount }) {
           title={calendar.read_only ? `${calendar.name} · ${t('calendar.readOnly')}` : calendar.name}
           control={
             <span className="flex items-center gap-3">
-              {calendar.color && (
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: calendar.color }} aria-hidden />
-              )}
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: calendarColor(calendar) }}
+                aria-hidden
+              />
               <Switch
                 checked={calendar.enabled}
                 label={calendar.name}

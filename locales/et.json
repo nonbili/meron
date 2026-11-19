@@ -149,6 +149,7 @@
   "buttons.send": "Saada",
   "buttons.undo": "Võta tagasi",
   "calendar.addToCalendar": "Lisa kalendrisse",
+  "calendar.chooseCalendars": "Kuva kalendrid",
   "calendar.alert.allDayDays": "{count, plural, one {{count} päev enne (kell 9)} other {{count} päeva enne (kell 9)}}",
   "calendar.alert.allDayOnDay": "Sündmuse päeval (kell 9)",
   "calendar.alert.allDayWeek": "1 nädal enne (kell 9)",

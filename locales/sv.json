@@ -149,6 +149,7 @@
   "buttons.send": "Skicka",
   "buttons.undo": "Ångra",
   "calendar.addToCalendar": "Lägg till i kalendern",
+  "calendar.chooseCalendars": "Visa kalendrar",
   "calendar.alert.allDayDays": "{count, plural, one {{count} dag före (kl. 9)} other {{count} dagar före (kl. 9)}}",
   "calendar.alert.allDayOnDay": "Samma dag (kl. 9)",
   "calendar.alert.allDayWeek": "1 vecka före (kl. 9)",

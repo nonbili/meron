@@ -149,6 +149,7 @@
   "buttons.send": "Αποστολή",
   "buttons.undo": "Αναίρεση",
   "calendar.addToCalendar": "Προσθήκη στο ημερολόγιο",
+  "calendar.chooseCalendars": "Εμφάνιση ημερολογίων",
   "calendar.alert.allDayDays": "{count, plural, one {{count} ημέρα πριν (9 π.μ.)} other {{count} ημέρες πριν (9 π.μ.)}}",
   "calendar.alert.allDayOnDay": "Την ημέρα (9 π.μ.)",
   "calendar.alert.allDayWeek": "1 εβδομάδα πριν (9 π.μ.)",
