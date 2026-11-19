@@ -1,0 +1,6 @@
+- Add account colour bars and a toggle to hide list avatars
+- Make links clickable in calendar event and task notes
+- Fold "> " quotes in HTML bodies and wrap long URL links
+- Fix swipe delete and archive in mail lists
+- Fix opening encrypted drafts from the message list
+- Improve Trash/Drafts folder detection and bulk delete labels
