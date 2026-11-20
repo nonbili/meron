@@ -196,7 +196,7 @@ describe('Composer', () => {
       }
     })
 
-    it(`pastes macOS image files ${rich ? 'inline' : 'as attachments'} without reading the clipboard`, async () => {
+    it(`pastes a macOS image exposed in both clipboard lists once ${rich ? 'inline' : 'as an attachment'}`, async () => {
       const restorePlatform = mockPlatform('MacIntel')
       const read = spyOn(navigator.clipboard, 'read').mockResolvedValue([])
       const bridge = spyOn((window as any).go.main.App, 'Invoke').mockImplementation(async (command: string) => {
@@ -211,7 +211,13 @@ describe('Composer', () => {
         fireEvent.paste(body, {
           clipboardData: {
             files: [new File(['image'], 'pasted.png', { type: 'image/png' })],
-            items: [],
+            items: [
+              {
+                kind: 'file',
+                type: 'image/png',
+                getAsFile: () => new File(['image'], 'pasted.png', { type: 'image/png' }),
+              },
+            ],
             types: ['Files'],
             getData: () => '',
           },
@@ -219,7 +225,10 @@ describe('Composer', () => {
         await waitFor(() => expect(draftOf(id)?.attachments).toHaveLength(1))
         expect(draftOf(id)?.attachments[0].filename).toBe('pasted.png')
         expect(!!draftOf(id)?.attachments[0].inlineId).toBe(rich)
-        if (rich) await waitFor(() => expect(bodyHtml()).toContain('/media/pasted.png'))
+        if (rich) {
+          await waitFor(() => expect(view.container.querySelectorAll('.tiptap-body img')).toHaveLength(1))
+          expect(bodyHtml()).toContain('/media/pasted.png')
+        }
         expect(read).not.toHaveBeenCalled()
       } finally {
         bridge.mockRestore()

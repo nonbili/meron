@@ -1,4 +1,5 @@
 import { invoke } from '../../lib/bridge'
+import { extractClipboardImages as extractImages } from '../composer/composerHelpers'
 
 const COMPOSER_PASTE_DEBUG = true
 
@@ -42,28 +43,7 @@ export function extractClipboardImages(data: DataTransfer | null): File[] {
         }))
       : [],
   })
-  const images: File[] = []
-  const seen = new Set<File>()
-
-  const add = (file: File | null) => {
-    if (!file || !file.type.toLowerCase().startsWith('image/') || seen.has(file)) return
-    seen.add(file)
-    images.push(file)
-  }
-
-  if (data.files && data.files.length > 0) {
-    for (let i = 0; i < data.files.length; i++) add(data.files[i])
-  }
-  if (data.items) {
-    for (let i = 0; i < data.items.length; i++) {
-      const item = data.items[i]
-      if (item.kind === 'file' && item.type.toLowerCase().startsWith('image/')) {
-        add(item.getAsFile())
-      }
-    }
-  }
-
-  return images
+  return extractImages(data)
 }
 
 // Async Clipboard API read — WebKitGTK often omits images from the sync event.

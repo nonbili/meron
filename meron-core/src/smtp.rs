@@ -271,6 +271,8 @@ pub fn build_message(
     reply_to: &str,
     message_id: &str,
 ) -> Result<Vec<u8>> {
+    use mail_builder::{headers::content_type::ContentType, mime::MimePart};
+
     let to_list = parse_addrs(to);
     let cc_list = parse_addrs(cc);
     let bcc_list = parse_addrs(bcc);
@@ -297,12 +299,6 @@ pub fn build_message(
         builder = builder.reply_to(reply_to_pairs);
     }
 
-    builder = if html.is_empty() {
-        builder.text_body(body)
-    } else {
-        builder.html_body(html).text_body(body)
-    };
-
     if !cc_list.is_empty() {
         let cc_pairs: Vec<(String, String)> = cc_list.iter().map(|s| split_name_addr(s)).collect();
         builder = builder.cc(cc_pairs);
@@ -328,20 +324,56 @@ pub fn build_message(
         builder = builder.references(refs_refs.as_slice());
     }
 
+    let mut related = Vec::new();
+    let mut mixed = Vec::new();
     for att in attachments {
         // A decode failure must fail the whole build: silently dropping the
         // attachment would send the message without its file and report success.
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(&att.data)
             .with_context(|| format!("decode attachment {:?}", att.filename))?;
-        if !att.inline_id.trim().is_empty() {
-            builder = builder.inline(&att.mime, att.inline_id.trim(), bytes);
+        let part = MimePart::new(&att.mime, bytes);
+        let cid = att.inline_id.trim();
+        if cid.is_empty() {
+            mixed.push(part.attachment(&att.filename));
         } else {
-            builder = builder.attachment(&att.mime, &att.filename, bytes);
+            let part = part.inline().cid(cid);
+            if html.is_empty() {
+                mixed.push(part);
+            } else {
+                related.push(part);
+            }
         }
     }
 
-    builder.write_to_vec().context("build MIME message")
+    let plain = MimePart::new("text/plain", body);
+    let body = if html.is_empty() {
+        plain
+    } else {
+        let html = MimePart::new("text/html", html);
+        let html = if related.is_empty() {
+            html
+        } else {
+            // The HTML root and its CID resources belong to the same alternative.
+            related.insert(0, html);
+            MimePart::new(
+                ContentType::new("multipart/related").attribute("type", "text/html"),
+                related,
+            )
+        };
+        MimePart::new("multipart/alternative", vec![plain, html])
+    };
+    let body = if mixed.is_empty() {
+        body
+    } else {
+        mixed.insert(0, body);
+        MimePart::new("multipart/mixed", mixed)
+    };
+
+    builder
+        .body(body)
+        .write_to_vec()
+        .context("build MIME message")
 }
 
 pub async fn send(
@@ -1148,7 +1180,8 @@ mod tests {
         // every `cid:` rewritten to the served `/media/<key>` path, so a
         // message sent from Meron renders its inline images in Meron too.
         use base64::Engine as _;
-        let atts = vec![
+        use mailparse::MailHeaderMap as _;
+        let mut atts = vec![
             super::AttachmentInput {
                 filename: "pasted-image-1.png".into(),
                 mime: "image/png".into(),
@@ -1180,6 +1213,66 @@ mod tests {
             "",
         )
         .expect("build_message");
+
+        let mime = mailparse::parse_mail(&raw).unwrap();
+        assert_eq!(mime.ctype.mimetype, "multipart/alternative");
+        assert_eq!(mime.subparts.len(), 2);
+        assert_eq!(mime.subparts[0].ctype.mimetype, "text/plain");
+        let related = &mime.subparts[1];
+        assert_eq!(related.ctype.mimetype, "multipart/related");
+        assert_eq!(related.ctype.params["type"], "text/html");
+        assert_eq!(related.subparts.len(), 3);
+        assert_eq!(related.subparts[0].ctype.mimetype, "text/html");
+        assert_eq!(related.subparts[0].get_body().unwrap().trim_end(), html);
+        for (part, att) in related.subparts[1..].iter().zip(&atts) {
+            assert_eq!(part.ctype.mimetype, "image/png");
+            assert_eq!(
+                part.headers.get_first_value("Content-Disposition").unwrap(),
+                "inline"
+            );
+            assert_eq!(
+                part.headers.get_first_value("Content-ID").unwrap(),
+                format!("<{}>", att.inline_id)
+            );
+        }
+
+        atts.push(super::AttachmentInput {
+            filename: "notes.txt".into(),
+            mime: "text/plain".into(),
+            data: "bm90ZXM=".into(),
+            inline_id: String::new(),
+        });
+        let mixed_raw = build_message(
+            "Alice",
+            "alice@example.com",
+            "bob@example.com",
+            "",
+            "",
+            false,
+            "Subject",
+            "plain fallback",
+            html,
+            &atts,
+            "",
+            "",
+            "",
+            "",
+        )
+        .unwrap();
+        let mixed = mailparse::parse_mail(&mixed_raw).unwrap();
+        assert_eq!(mixed.ctype.mimetype, "multipart/mixed");
+        assert_eq!(mixed.subparts.len(), 2);
+        assert_eq!(mixed.subparts[0].ctype.mimetype, "multipart/alternative");
+        assert_eq!(
+            mixed.subparts[0].subparts[1].ctype.mimetype,
+            "multipart/related"
+        );
+        let disposition = mixed.subparts[1].get_content_disposition();
+        assert_eq!(
+            disposition.disposition,
+            mailparse::DispositionType::Attachment
+        );
+        assert_eq!(disposition.params["filename"], "notes.txt");
 
         let root =
             std::env::temp_dir().join(format!("meron-inline-roundtrip-{}", std::process::id()));

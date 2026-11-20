@@ -193,6 +193,9 @@ export function extractClipboardImages(data: DataTransfer | null): File[] {
   if (data.files && data.files.length > 0) {
     for (let i = 0; i < data.files.length; i++) add(data.files[i])
   }
+  // Both lists can expose the same image as distinct File objects. Use items
+  // only as a fallback, not as a second source for the same transfer.
+  if (out.length > 0) return out
   if (data.items) {
     for (let i = 0; i < data.items.length; i++) {
       const item = data.items[i]
