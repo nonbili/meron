@@ -57,6 +57,60 @@ impl fmt::Display for AuthFailed {
 
 impl std::error::Error for AuthFailed {}
 
+/// Google throttled this account. Stop the whole sync, not just one object.
+#[derive(Debug)]
+struct RateLimited {
+    retry_after: Option<i64>,
+}
+
+impl fmt::Display for RateLimited {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Google Calendar is rate limiting sync. Pending edits will be kept for retry.")
+    }
+}
+
+impl std::error::Error for RateLimited {}
+
+// Bound server-supplied delays so an invalid header can't disable sync forever.
+const MAX_RETRY_AFTER_SECS: i64 = 24 * 60 * 60;
+
+fn retry_after_seconds(value: &str, now: i64) -> Option<i64> {
+    let value = value.trim();
+    if !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()) {
+        return Some(
+            value
+                .parse::<i64>()
+                .unwrap_or(i64::MAX)
+                .min(MAX_RETRY_AFTER_SECS),
+        );
+    }
+    chrono::DateTime::parse_from_rfc2822(value)
+        .ok()
+        .map(|date| {
+            date.timestamp()
+                .saturating_sub(now)
+                .clamp(0, MAX_RETRY_AFTER_SECS)
+        })
+}
+
+fn google_quota_error(body: &str) -> bool {
+    // Google can return a 403 for quota, permissions, or an expired DAV
+    // sync token. Only known quota reasons should pause the account.
+    let body = body.to_ascii_lowercase();
+    [
+        "ratelimitexceeded",
+        "quotaexceeded",
+        "dailylimitexceeded",
+        "rate-limit-exceeded",
+        "quota-exceeded",
+        "rate limit exceeded",
+        "quota exceeded",
+        "calendar usage limits exceeded",
+    ]
+    .iter()
+    .any(|reason| body.contains(reason))
+}
+
 /// The sync token handed to `sync-collection` is no longer valid (RFC 6578
 /// §3.2): start over with a full listing.
 #[derive(Debug)]
@@ -354,6 +408,12 @@ impl Client {
                     .unwrap_or_default()
                     .to_string()
             };
+            let rate_limited = || RateLimited {
+                retry_after: retry_after_seconds(&header("retry-after"), crate::store::now_unix()),
+            };
+            if self.google && status == 429 {
+                return Err(rate_limited().into());
+            }
             if matches!(status, 301 | 302 | 303 | 307 | 308) {
                 // A 303 points at a result to read, not at somewhere to send
                 // the same write again; and a write is only ever sent where
@@ -376,12 +436,16 @@ impl Client {
             }
             let etag = header("etag");
             let location = header("location");
+            let throttle = (self.google && status == 403).then(rate_limited);
             let body = response
                 .body_mut()
                 .with_config()
                 .limit(MAX_BODY_BYTES)
                 .read_to_string()
                 .with_context(|| format!("read {method} {}", redacted(&url)))?;
+            if let Some(throttle) = throttle.filter(|_| google_quota_error(&body)) {
+                return Err(throttle.into());
+            }
             if status == 401 {
                 if self.google {
                     bail!(

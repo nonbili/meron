@@ -570,17 +570,31 @@ pub fn sync(engine: &Engine, account_id: Option<&str>, automatic: bool) -> Resul
                 error: "a sync of this account is still running".into(),
                 ..Default::default()
             },
-            Some(_guard) => match account_client(engine, account) {
-                Ok(client) => sync::sync_account(&*engine.db, &client, &account.id),
-                Err(err) => {
-                    let error = format!("{err:#}");
-                    let _ = store::record_sync(&*lock(engine)?, &account.id, &error);
+            Some(_guard) => {
+                // A sync we waited for may have been throttled. Re-read under
+                // the guard before making even a token refresh request.
+                let Some(account) = store::account(&*lock(engine)?, &account.id)? else {
+                    continue;
+                };
+                if let Some(error) = account.cooldown_error(crate::store::now_unix()) {
                     Report {
                         error,
                         ..Default::default()
                     }
+                } else {
+                    match account_client(engine, &account) {
+                        Ok(client) => sync::sync_account(&*engine.db, &client, &account.id),
+                        Err(err) => {
+                            let error = format!("{err:#}");
+                            let _ = store::record_sync(&*lock(engine)?, &account.id, &error);
+                            Report {
+                                error,
+                                ..Default::default()
+                            }
+                        }
+                    }
                 }
-            },
+            }
         };
         total.pulled += report.pulled;
         total.pushed += report.pushed;

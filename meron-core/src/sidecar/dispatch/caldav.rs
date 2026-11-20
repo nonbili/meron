@@ -130,20 +130,22 @@ pub(crate) async fn poll(engine: Arc<Engine>, out: Writer) {
     // When each account was last synced by this loop. Kept here rather than
     // taken from `last_sync_at`, which only moves on success: a failing
     // account would otherwise be retried every tick.
-    let mut last_run: HashMap<String, std::time::Instant> = HashMap::new();
+    let mut last_run: HashMap<String, (std::time::Instant, i64)> = HashMap::new();
     loop {
         let accounts =
             meron_core::caldav::store::accounts(&engine.db.lock().unwrap()).unwrap_or_default();
+        let now = meron_core::store::now_unix();
         for account in accounts {
-            if account.sync_interval <= 0 {
+            if account.sync_interval <= 0 || account.cooling_down(now) {
                 continue;
             }
             let interval = Duration::from_secs(account.sync_interval as u64 * 60);
-            let due = last_run
-                .get(&account.id)
-                .is_none_or(|at| at.elapsed() >= interval);
+            let due = last_run.get(&account.id).is_none_or(|(at, timestamp)| {
+                at.elapsed() >= interval
+                    || (*timestamp < account.retry_at && account.retry_at <= now)
+            });
             if due {
-                last_run.insert(account.id.clone(), std::time::Instant::now());
+                last_run.insert(account.id.clone(), (std::time::Instant::now(), now));
                 spawn_sync(engine.clone(), out.clone(), Some(account.id));
             }
         }

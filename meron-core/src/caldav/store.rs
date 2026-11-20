@@ -71,6 +71,24 @@ pub struct DavAccount {
     pub last_error: String,
     /// Minutes between automatic syncs; 0 syncs only when asked.
     pub sync_interval: i64,
+    /// Unix deadline for a Google throttle, shared by all sync entry points.
+    pub retry_at: i64,
+    pub throttle_count: u32,
+}
+
+impl DavAccount {
+    /// Discard implausible deadlines after a backward system clock jump.
+    pub fn cooling_down(&self, now: i64) -> bool {
+        let remaining = self.retry_at.saturating_sub(now);
+        (1..=super::MAX_RETRY_AFTER_SECS).contains(&remaining)
+    }
+
+    pub(super) fn cooldown_error(&self, now: i64) -> Option<String> {
+        self.cooling_down(now).then(|| {
+            let minutes = (self.retry_at - now + 59) / 60;
+            format!("{} Try again in about {minutes} min.", self.last_error)
+        })
+    }
 }
 
 /// Minutes between automatic syncs for an account that has not chosen.
@@ -129,7 +147,8 @@ pub struct DavObject {
 }
 
 const ACCOUNT_COLUMNS: &str = "id, server_url, username, display_name, home, last_sync_at,
-    last_error, json_extract(json, '$.sync_interval'), json_extract(json, '$.google')";
+    last_error, json_extract(json, '$.sync_interval'), json_extract(json, '$.google'),
+    json_extract(json, '$.retry_at'), json_extract(json, '$.throttle_count')";
 
 fn read_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavAccount> {
     Ok(DavAccount {
@@ -144,6 +163,8 @@ fn read_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavAccount> {
         sync_interval: row
             .get::<_, Option<i64>>(7)?
             .unwrap_or(DEFAULT_SYNC_INTERVAL),
+        retry_at: row.get::<_, Option<i64>>(9)?.unwrap_or(0),
+        throttle_count: row.get::<_, Option<u32>>(10)?.unwrap_or(0),
     })
 }
 
@@ -191,11 +212,24 @@ pub fn set_sync_interval(conn: &Connection, id: &str, minutes: i64) -> Result<()
 }
 
 pub fn record_sync(conn: &Connection, id: &str, error: &str) -> Result<()> {
+    record_sync_with_retry(conn, id, error, 0, 0)
+}
+
+pub(super) fn record_sync_with_retry(
+    conn: &Connection,
+    id: &str,
+    error: &str,
+    retry_at: i64,
+    throttle_count: u32,
+) -> Result<()> {
     conn.execute(
         "UPDATE dav_accounts SET last_error = ?2,
-           last_sync_at = CASE WHEN ?2 = '' THEN ?3 ELSE last_sync_at END
+           last_sync_at = CASE WHEN ?2 = '' THEN ?3 ELSE last_sync_at END,
+           json = CASE WHEN ?4 > 0 THEN json_set(json, '$.retry_at', ?4, '$.throttle_count', ?5)
+                       WHEN ?2 = '' THEN json_remove(json, '$.retry_at', '$.throttle_count')
+                       ELSE json_remove(json, '$.retry_at') END
          WHERE id = ?1",
-        params![id, error, now_unix()],
+        params![id, error, now_unix(), retry_at, throttle_count],
     )?;
     Ok(())
 }
@@ -344,6 +378,11 @@ pub fn set_synced(
          WHERE id = ?1",
         params![id, ctag, sync_token, listed, now_unix()],
     )?;
+    Ok(())
+}
+
+pub(super) fn invalidate_ctag(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute("UPDATE dav_calendars SET ctag = '' WHERE id = ?1", [id])?;
     Ok(())
 }
 

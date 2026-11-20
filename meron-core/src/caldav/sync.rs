@@ -15,12 +15,13 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};
+use rand::Rng as _;
 use rusqlite::Connection;
 
 use super::store::{self, CHANGED, CREATED, DELETED, DavCalendar, DavObject};
 use super::{
-    AuthFailed, Calendar, Client, Entry, PreconditionFailed, SyncTokenInvalid, UidConflict,
-    Written, ics,
+    AuthFailed, Calendar, Client, Entry, PreconditionFailed, RateLimited, SyncTokenInvalid,
+    UidConflict, Written, ics,
 };
 use crate::store as db;
 
@@ -71,15 +72,43 @@ impl Report {
     }
 }
 
-/// Sync every enabled calendar of `account`. A calendar that fails does not
-/// stop the others. The first failure is in the report and recorded on the
-/// account for the UI.
+/// Sync every enabled calendar of `account`. Ordinary calendar failures do not
+/// stop the others, but throttling stops the whole account. Record the error
+/// on the account for the UI.
 pub fn sync_account(db: &impl Db, client: &Client, account_id: &str) -> Report {
     let mut report = Report::default();
-    if let Err(err) = sync_calendars(db, client, account_id, &mut report) {
+    let result = db
+        .with(|conn| store::account(conn, account_id))
+        .and_then(|account| account.ok_or_else(|| anyhow!("no such CalDAV account: {account_id}")));
+    let account = match result {
+        Ok(account) => account,
+        Err(err) => {
+            report.fail(err);
+            return report;
+        }
+    };
+    if let Some(error) = account.cooldown_error(db::now_unix()) {
+        report.error = error;
+        return report;
+    }
+
+    let mut retry_at = 0;
+    let mut throttle_count = 0;
+    if let Err(err) = sync_calendars(db, client, &account, &mut report) {
+        if let Some(throttle) = err.downcast_ref::<RateLimited>() {
+            throttle_count = account.throttle_count.saturating_add(1);
+            let base = 30_i64 << (throttle_count - 1).min(5); // 30s to 16m
+            let delay = (base + rand::thread_rng().gen_range(0..=base / 4))
+                .max(throttle.retry_after.unwrap_or(0));
+            retry_at = db::now_unix().saturating_add(delay);
+            // The throttle takes priority over any earlier object error.
+            report.error.clear();
+        }
         report.fail(err);
     }
-    if let Err(err) = db.with(|conn| store::record_sync(conn, account_id, &report.error)) {
+    if let Err(err) = db.with(|conn| {
+        store::record_sync_with_retry(conn, account_id, &report.error, retry_at, throttle_count)
+    }) {
         report.fail(err);
     }
     report
@@ -104,19 +133,17 @@ struct Pushed {
     /// Writes the server refused because its copy changed, which was
     /// fetched in their place.
     conflicts: usize,
-    /// The first object that could not be sent; the rest were tried.
+    /// A throttle (stopping the pass), or the first ordinary object failure.
     error: Option<anyhow::Error>,
 }
 
 fn sync_calendars(
     db: &impl Db,
     client: &Client,
-    account_id: &str,
+    account: &store::DavAccount,
     report: &mut Report,
 ) -> Result<()> {
-    let account = db
-        .with(|conn| store::account(conn, account_id))?
-        .ok_or_else(|| anyhow!("no such CalDAV account: {account_id}"))?;
+    let account_id = &account.id;
     let listed = if account.google {
         vec![client.primary_calendar()?]
     } else if account.home.is_empty() {
@@ -171,6 +198,9 @@ fn sync_calendars(
                         needs_pull.insert(calendar.id.clone());
                     }
                     if let Some(err) = pushed.error {
+                        if err.is::<RateLimited>() {
+                            return Err(err);
+                        }
                         report.fail(err.context(format!("calendar {}", calendar.name)));
                     }
                 }
@@ -195,8 +225,8 @@ fn sync_calendars(
         report.add(done);
         match result {
             Ok(()) => {}
-            // A wrong password fails every calendar the same way.
-            Err(err) if err.is::<AuthFailed>() => return Err(err),
+            // Neither an auth failure nor a throttle is calendar-specific.
+            Err(err) if err.is::<AuthFailed>() || err.is::<RateLimited>() => return Err(err),
             Err(err) => report.fail(err.context(format!("calendar {}", calendar.name))),
         }
     }
@@ -238,8 +268,11 @@ fn sync_calendar(
     };
     report.pushed += pushed.sent;
     report.pulled += pushed.conflicts;
-    // An edit the server refuses stays queued; the pull goes ahead.
+    // An edit the server refuses stays queued; pull unless we're throttled.
     if let Some(err) = pushed.error {
+        if err.is::<RateLimited>() {
+            return Err(err);
+        }
         report.fail(err);
     }
     let remote_ctag = remote.map(|r| r.ctag.as_str()).unwrap_or_default();
@@ -320,7 +353,9 @@ fn sync_calendar(
     // return the rewritten version's etag in response to the PUT.
     let to_fetch: Vec<String> = changed
         .iter()
-        .filter(|entry| (google && !quiet) || !is_current(&known, entry))
+        .filter(|entry| {
+            (google && (!quiet || calendar.ctag.is_empty())) || !is_current(&known, entry)
+        })
         .map(|entry| entry.url.clone())
         .collect();
     let fetched = if to_fetch.is_empty() {
@@ -377,6 +412,10 @@ fn push(
             Ok(Sent::Conflict) => pushed.conflicts += 1,
             Ok(Sent::Waiting) => {}
             Err(err) if err.is::<AuthFailed>() => return Err(err),
+            Err(err) if err.is::<RateLimited>() => {
+                pushed.error = Some(err);
+                break;
+            }
             // One object the server refuses does not hold up the others.
             Err(err) => {
                 pushed.error.get_or_insert(err);
@@ -516,7 +555,14 @@ fn push_write(
     }
     match client.put(&row.url, &event.ics, if create { None } else { etag }) {
         Ok(written) => {
-            db.with(|conn| complete_write(conn, &row, &event.ics, written))?;
+            db.with(|conn| {
+                if client.google {
+                    // If we get throttled before the pull, still fetch Google's
+                    // rewritten copy on the next sync, even at the PUT's etag.
+                    store::invalidate_ctag(conn, &calendar.id)?;
+                }
+                complete_write(conn, &row, &event.ics, written)
+            })?;
             Ok(Sent::Done)
         }
         // Server wins: its copy replaces the edit here, now.

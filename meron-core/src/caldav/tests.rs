@@ -491,6 +491,8 @@ fn google_sync_writes_events_to_the_server_assigned_url() {
     );
     assert_eq!(crate::store::all_events(&conn).unwrap().len(), 1);
 
+    input.title = "Intermediate planning".into();
+    events::update_event(&conn, id, &input).unwrap();
     input.title = "Updated planning".into();
     events::update_event(&conn, id, &input).unwrap();
     assert_eq!(synced(&conn, &client).pushed, 1);
@@ -523,10 +525,129 @@ fn google_sync_writes_events_to_the_server_assigned_url() {
     assert!(edit.starts_with(&format!("PUT {location} ")));
     assert!(edit.to_ascii_lowercase().contains("if-match: \"1\""));
     assert!(edit.contains("SUMMARY:Updated planning"));
+    assert!(!edit.contains("SUMMARY:Intermediate planning"));
     assert!(edit.contains("RRULE:FREQ=WEEKLY"));
     let delete = &requests[16];
     assert!(delete.starts_with(&format!("DELETE {location} ")));
     assert!(delete.to_ascii_lowercase().contains("if-match: \"3\""));
+}
+
+#[test]
+fn google_throttle_pauses_the_queue_until_the_stored_deadline() {
+    use crate::calendar::events::{self, EventInput};
+    use std::time::Duration;
+
+    let (client, listener) = google_fixture();
+    let (conn, calendar) = google_store(&client, false);
+    for title in ["a", "b", "c"] {
+        let event = events::create_event(
+            &conn,
+            &EventInput {
+                title: title.into(),
+                start: 1_795_251_600,
+                end: 1_795_255_200,
+                calendar: Some(calendar.id.clone()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let id = event["event"]["id"].as_str().unwrap();
+        let mut object = store::object_for_event(&conn, id).unwrap().unwrap();
+        store::delete_object(&conn, &calendar.id, &object.url).unwrap();
+        object.url = format!("{}/{title}.ics", client.server);
+        object.etag = "\"1\"".into();
+        object.state = store::CHANGED.into();
+        store::save_object(&conn, &object).unwrap();
+    }
+
+    let received = serve_google(
+        listener,
+        vec![
+            ("207 Multi-Status", "".into(), google_properties("one")),
+            ("204 No Content", "ETag: \"2\"\r\n".into(), "".into()),
+            ("429 Too Many Requests", "Retry-After: 120\r\n".into(), "".into()),
+            ("207 Multi-Status", "".into(), google_properties("two")),
+            ("204 No Content", "ETag: \"2\"\r\n".into(), "".into()),
+            ("204 No Content", "ETag: \"2\"\r\n".into(), "".into()),
+            (
+                "207 Multi-Status", "".into(),
+                r#"<d:multistatus xmlns:d="DAV:"><d:sync-token>next</d:sync-token></d:multistatus>"#.into(),
+            ),
+        ],
+    );
+    // Start with a sync token so the empty test delta doesn't remove events.
+    store::set_synced(&conn, &calendar.id, "one", "previous", false).unwrap();
+    let before = crate::store::now_unix();
+    let report = sync::sync_account(&conn, &client, "dav-1");
+    assert_eq!(report.pushed, 1);
+    assert!(report.error.contains("rate limiting"));
+    let account = store::account(&conn, "dav-1").unwrap().unwrap();
+    assert!(account.retry_at >= before + 120);
+    assert_eq!(account.throttle_count, 1);
+    assert_eq!(store::pending(&conn, &calendar.id).unwrap().len(), 2);
+    let paused = sync::sync_account(&conn, &client, "dav-1");
+    assert!(paused.error.starts_with(&report.error));
+    assert!(paused.error.contains("Try again in about"));
+
+    store::record_sync_with_retry(&conn, "dav-1", &report.error, before - 1, 1).unwrap();
+    store::record_sync(&conn, "dav-1", "Token refresh failed").unwrap();
+    let account = store::account(&conn, "dav-1").unwrap().unwrap();
+    assert_eq!((account.retry_at, account.throttle_count), (0, 1));
+    assert_eq!(synced(&conn, &client).pushed, 2);
+    let account = store::account(&conn, "dav-1").unwrap().unwrap();
+    assert_eq!((account.retry_at, account.throttle_count), (0, 0));
+    assert!(store::pending(&conn, &calendar.id).unwrap().is_empty());
+    let requests: Vec<_> = (0..7)
+        .map(|_| received.recv_timeout(Duration::from_secs(2)).unwrap())
+        .collect();
+    assert_eq!(requests.len(), 7);
+    assert!(requests[1].starts_with(&format!("PUT {GOOGLE_COLLECTION}/a.ics ")));
+    assert!(requests[2].starts_with(&format!("PUT {GOOGLE_COLLECTION}/b.ics ")));
+    assert!(requests[3].starts_with("PROPFIND "));
+    assert_eq!(requests[2], requests[4]);
+    assert!(requests[5].starts_with(&format!("PUT {GOOGLE_COLLECTION}/c.ics ")));
+    assert!(requests[6].starts_with("REPORT "));
+}
+
+#[test]
+fn google_only_treats_quota_forbidden_responses_as_throttled() {
+    let (client, listener) = google_fixture();
+    let _requests = serve_google(
+        listener,
+        vec![
+            (
+                "403 Forbidden",
+                "".into(),
+                r#"{"error":{"errors":[{"domain":"usageLimits","reason":"userRateLimitExceeded"}]}}"#.into(),
+            ),
+            (
+                "403 Forbidden",
+                "".into(),
+                r#"{"error":{"errors":[{"domain":"usageLimits","reason":"accessNotConfigured"}]}}"#.into(),
+            ),
+            (
+                "403 Forbidden",
+                "".into(),
+                r#"<d:error xmlns:d="DAV:"><d:need-privileges/></d:error>"#.into(),
+            ),
+        ],
+    );
+    assert!(client.primary_calendar().unwrap_err().is::<RateLimited>());
+    assert!(!client.primary_calendar().unwrap_err().is::<RateLimited>());
+    assert!(!client.primary_calendar().unwrap_err().is::<RateLimited>());
+    assert_eq!(
+        retry_after_seconds("Thu, 01 Jan 1970 00:02:00 GMT", 10),
+        Some(110)
+    );
+    assert_eq!(retry_after_seconds("nonsense", 10), None);
+    assert_eq!(
+        retry_after_seconds("9999999999999999999999", 10),
+        Some(86_400)
+    );
+    assert_eq!(
+        retry_after_seconds("Sat, 03 Jan 1970 00:00:00 GMT", 10),
+        Some(86_400)
+    );
 }
 
 #[test]
