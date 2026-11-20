@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { useValue } from '@legendapp/state/react'
 import { accounts$ } from '../../states/accounts'
+import { caldav$, type CalendarAccount } from '../../states/caldav'
 import { connectivity$, dismissSyncError, setSyncError } from '../../states/connectivity'
 import { ui$ } from '../../states/ui'
 import { settings$ } from '../../states/settings'
@@ -33,6 +34,7 @@ describe('account setup, reconnect and edit', () => {
   let listedAccounts: Account[]
   let calendarRequests: unknown[]
   let rejectCalendar: boolean
+  let connectedCalendar: CalendarAccount | undefined
   let discoveredServer: string | null
   let discoveryRequests: unknown[]
 
@@ -43,6 +45,8 @@ describe('account setup, reconnect and edit', () => {
     listedAccounts = [{ ...account, needs_reconnect: false }]
     calendarRequests = []
     rejectCalendar = false
+    connectedCalendar = undefined
+    caldav$.accounts.set([])
     discoveredServer = null
     discoveryRequests = []
     previousGo = Object.getOwnPropertyDescriptor(window, 'go')
@@ -94,6 +98,7 @@ describe('account setup, reconnect and edit', () => {
             if (command === 'caldav.connectGoogle') {
               calendarRequests.push(payload)
               if (rejectCalendar) throw new Error('Sign-in was declined')
+              if (connectedCalendar) return { account_id: connectedCalendar.id, accounts: [connectedCalendar] }
               return { accounts: [] }
             }
             if (command === 'app.prefsGet') return { prefs: {} }
@@ -112,6 +117,7 @@ describe('account setup, reconnect and edit', () => {
     ui$.reconnectAccountId.set('')
     ui$.googleCalendarSetupEmail.set('')
     ui$.caldavSetup.set(null)
+    caldav$.accounts.set([])
     if (previousGo) Object.defineProperty(window, 'go', previousGo)
     else delete (window as any).go
   })
@@ -326,6 +332,35 @@ describe('account setup, reconnect and edit', () => {
     prepareGmailSetup()
     settings$.calendarEnabled.set(false)
     await signIn()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('offers calendar selection after Google Calendar authorization during onboarding', async () => {
+    prepareGmailSetup()
+    connectedCalendar = {
+      id: 'google-dav',
+      server_url: 'https://dav.example.test/calendars/',
+      username: profileEmail,
+      display_name: 'Google Calendar',
+      google: true,
+      last_sync_at: 0,
+      last_error: '',
+      sync_interval: 15,
+      calendars: ['Home', 'Work'].map((name) => ({
+        id: name,
+        name,
+        color: '',
+        read_only: false,
+        enabled: true,
+        events: true,
+        tasks: false,
+      })),
+    }
+    await signIn()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Connect Google Calendar' })))
+    expect(screen.getByRole('dialog', { name: 'Choose calendars to sync' })).toBeTruthy()
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 })

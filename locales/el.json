@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "Ορισμένοι πάροχοι, όπως iCloud και Fastmail, απαιτούν κωδικό πρόσβασης εφαρμογής.",
   "settings.calendars.connect": "Σύνδεση",
   "settings.calendars.connectGoogle": "Σύνδεση Ημερολογίου Google",
+  "settings.calendars.chooseToSync": "Επιλογή ημερολογίων για συγχρονισμό",
+  "settings.calendars.noEventCalendars": "Δεν βρέθηκαν ημερολόγια συμβάντων για αυτόν τον λογαριασμό.",
   "settings.calendars.connecting": "Σύνδεση…",
   "settings.calendars.lastSynced": "Τελευταίος συγχρονισμός {time}",
   "settings.calendars.notSynced": "Δεν έχει συγχρονιστεί ακόμη",

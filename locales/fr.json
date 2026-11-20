@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "Certains fournisseurs, comme iCloud et Fastmail, exigent un mot de passe spécifique à l’application.",
   "settings.calendars.connect": "Se connecter",
   "settings.calendars.connectGoogle": "Connecter Google Agenda",
+  "settings.calendars.chooseToSync": "Choisir les agendas à synchroniser",
+  "settings.calendars.noEventCalendars": "Aucun agenda d’événements n’a été trouvé pour ce compte.",
   "settings.calendars.connecting": "Connexion…",
   "settings.calendars.lastSynced": "Dernière synchronisation : {time}",
   "settings.calendars.notSynced": "Pas encore synchronisé",

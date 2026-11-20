@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "Sommige providers, zoals iCloud en Fastmail, vereisen een app-specifiek wachtwoord.",
   "settings.calendars.connect": "Verbinden",
   "settings.calendars.connectGoogle": "Google Agenda koppelen",
+  "settings.calendars.chooseToSync": "Agenda’s kiezen om te synchroniseren",
+  "settings.calendars.noEventCalendars": "Er zijn geen agenda’s met afspraken gevonden voor dit account.",
   "settings.calendars.connecting": "Verbinden…",
   "settings.calendars.lastSynced": "Laatst gesynchroniseerd {time}",
   "settings.calendars.notSynced": "Nog niet gesynchroniseerd",

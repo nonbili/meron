@@ -5,6 +5,7 @@ import { useTranslation } from '../../lib/i18n'
 import { connectGoogleCalendar } from '../../states/caldav'
 import { ui$ } from '../../states/ui'
 import { Button } from '../button/Button'
+import { CalendarPickerDialog } from './CalendarPickerDialog'
 import { Dialog } from './Dialog'
 
 export function GoogleCalendarSetupDialog() {
@@ -15,6 +16,7 @@ export function GoogleCalendarSetupDialog() {
 function GoogleCalendarSetupPrompt({ email }: { email: string }) {
   const { t } = useTranslation()
   const [connecting, setConnecting] = useState(false)
+  const [accountId, setAccountId] = useState<string>()
   const [error, setError] = useState('')
 
   const close = () => {
@@ -25,14 +27,17 @@ function GoogleCalendarSetupPrompt({ email }: { email: string }) {
     setConnecting(true)
     setError('')
     try {
-      await connectGoogleCalendar({ email })
-      close()
+      const id = await connectGoogleCalendar({ email })
+      if (id) setAccountId(id)
+      else close()
     } catch (err) {
       setError(errorMessage(err, t('settings.calendars.addFailed')))
     } finally {
       setConnecting(false)
     }
   }
+
+  if (accountId) return <CalendarPickerDialog accountId={accountId} onClose={close} />
 
   return (
     <Dialog

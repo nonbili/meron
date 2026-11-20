@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "Daži pakalpojumi, piemēram, iCloud un Fastmail, pieprasa lietotnes paroli.",
   "settings.calendars.connect": "Savienot",
   "settings.calendars.connectGoogle": "Pievienot Google kalendāru",
+  "settings.calendars.chooseToSync": "Izvēlēties sinhronizējamos kalendārus",
+  "settings.calendars.noEventCalendars": "Šim kontam nav atrasts neviens notikumu kalendārs.",
   "settings.calendars.connecting": "Savieno…",
   "settings.calendars.lastSynced": "Pēdējoreiz sinhronizēts {time}",
   "settings.calendars.notSynced": "Vēl nav sinhronizēts",

@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "iCloud, Fastmail 등 일부 서비스는 앱 전용 비밀번호가 필요합니다.",
   "settings.calendars.connect": "연결",
   "settings.calendars.connectGoogle": "Google 캘린더 연결",
+  "settings.calendars.chooseToSync": "동기화할 캘린더 선택",
+  "settings.calendars.noEventCalendars": "이 계정에 일정 캘린더가 없습니다.",
   "settings.calendars.connecting": "연결 중…",
   "settings.calendars.lastSynced": "마지막 동기화 {time}",
   "settings.calendars.notSynced": "아직 동기화되지 않음",

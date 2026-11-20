@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "iCloud ve Fastmail gibi bazı sağlayıcılar uygulamaya özel parola ister.",
   "settings.calendars.connect": "Bağlan",
   "settings.calendars.connectGoogle": "Google Takvim’i bağla",
+  "settings.calendars.chooseToSync": "Senkronize edilecek takvimleri seç",
+  "settings.calendars.noEventCalendars": "Bu hesap için etkinlik takvimi bulunamadı.",
   "settings.calendars.connecting": "Bağlanıyor…",
   "settings.calendars.lastSynced": "Son eşitleme: {time}",
   "settings.calendars.notSynced": "Henüz eşitlenmedi",

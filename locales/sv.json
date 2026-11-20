@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "Vissa leverantörer, som iCloud och Fastmail, kräver ett appspecifikt lösenord.",
   "settings.calendars.connect": "Anslut",
   "settings.calendars.connectGoogle": "Anslut Google Kalender",
+  "settings.calendars.chooseToSync": "Välj kalendrar att synkronisera",
+  "settings.calendars.noEventCalendars": "Inga händelsekalendrar hittades för det här kontot.",
   "settings.calendars.connecting": "Ansluter…",
   "settings.calendars.lastSynced": "Senast synkroniserad {time}",
   "settings.calendars.notSynced": "Inte synkroniserad än",

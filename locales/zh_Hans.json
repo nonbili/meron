@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "部分服务商(如 iCloud 和 Fastmail)需要使用应用专用密码。",
   "settings.calendars.connect": "连接",
   "settings.calendars.connectGoogle": "连接 Google 日历",
+  "settings.calendars.chooseToSync": "选择要同步的日历",
+  "settings.calendars.noEventCalendars": "未找到此账号的活动日历。",
   "settings.calendars.connecting": "正在连接…",
   "settings.calendars.lastSynced": "上次同步:{time}",
   "settings.calendars.notSynced": "尚未同步",

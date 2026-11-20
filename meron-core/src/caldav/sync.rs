@@ -145,7 +145,13 @@ fn sync_calendars(
 ) -> Result<()> {
     let account_id = &account.id;
     let mut listed = if account.google {
-        if let Some(calendars) = client.google_calendars()? {
+        let calendars = client.google_calendars()?;
+        if account.google_calendar_list_disabled != calendars.is_none() {
+            db.with(|conn| {
+                store::set_google_calendar_list_disabled(conn, account_id, calendars.is_none())
+            })?;
+        }
+        if let Some(calendars) = calendars {
             calendars
         } else {
             let primary = client.primary_calendar()?;
@@ -154,7 +160,7 @@ fn sync_calendars(
                 .iter()
                 .any(|c| !super::same_google_collection_str(&c.url, &primary.url))
             {
-                bail!("Enable the Google Calendar API to sync secondary calendars");
+                bail!(super::GOOGLE_CALENDAR_LIST_DISABLED);
             }
             vec![primary]
         }

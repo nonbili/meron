@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "Algunos proveedores, como iCloud y Fastmail, requieren una contraseña específica de aplicación.",
   "settings.calendars.connect": "Conectar",
   "settings.calendars.connectGoogle": "Conectar Google Calendar",
+  "settings.calendars.chooseToSync": "Elegir calendarios para sincronizar",
+  "settings.calendars.noEventCalendars": "No se encontraron calendarios de eventos para esta cuenta.",
   "settings.calendars.connecting": "Conectando…",
   "settings.calendars.lastSynced": "Última sincronización: {time}",
   "settings.calendars.notSynced": "Aún sin sincronizar",

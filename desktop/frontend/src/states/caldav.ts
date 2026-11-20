@@ -29,6 +29,7 @@ export type CalendarAccount = {
   last_sync_at: number
   /** Why the last sync failed; empty when it did not. */
   last_error: string
+  discovery_warning?: string
   /** Minutes between automatic syncs; 0 for only when asked. */
   sync_interval: number
   calendars: CalendarAccountCalendar[]
@@ -79,14 +80,14 @@ export async function addCalendarAccount(input: {
   refreshCalendars()
 }
 
-export async function connectGoogleCalendar(options?: { accountId?: string; email?: string }) {
-  setAccounts(
-    await invoke<{ accounts?: CalendarAccount[] }>('caldav.connectGoogle', {
-      account_id: options?.accountId,
-      login_hint: options?.email,
-    }),
-  )
+export async function connectGoogleCalendar({ accountId, email }: { accountId?: string; email: string }) {
+  const res = await invoke<{ account_id: string; accounts?: CalendarAccount[] }>('caldav.connectGoogle', {
+    account_id: accountId,
+    login_hint: email,
+  })
+  setAccounts(res)
   refreshCalendars()
+  return res?.account_id
 }
 
 /** Throws when the server refuses the new password. */

@@ -337,8 +337,13 @@ fn google_calendar_list_disabled_does_not_remove_existing_secondary_calendars() 
     );
     let report = sync::sync_account(&conn, &client, "dav-1");
     assert!(
-        report.error.contains("Enable the Google Calendar API"),
+        report.error.contains(GOOGLE_CALENDAR_LIST_DISABLED),
         "{report:?}"
+    );
+    let accounts = service::accounts_payload(&conn).unwrap();
+    assert_eq!(
+        accounts[0]["discovery_warning"],
+        GOOGLE_CALENDAR_LIST_DISABLED
     );
     let current = store::calendars(&conn, "dav-1").unwrap();
     assert_eq!(current.len(), 2);
@@ -489,6 +494,102 @@ fn google_sync_discovers_multiple_pages_and_writes_to_the_selected_calendar() {
         .map(|_| received.recv_timeout(Duration::from_secs(2)).unwrap())
         .collect();
     assert!(requests[3].starts_with(&format!("REPORT {} ", work.path())));
+}
+
+#[test]
+fn google_holiday_calendar_reads_virtual_event_hrefs() {
+    let (client, listener) = google_fixture();
+    let selected = google_collection(
+        client.server.clone(),
+        "en.example#holiday@group.example.test",
+    )
+    .unwrap();
+    let client = client.for_calendar(selected.as_str()).unwrap();
+    let canonical = format!("{}/day.ics", selected.path());
+    let virtual_id = "cln2spboc5mn0r354dk6ur39chgnig37e9nnas1ecls62rbgdhiist35edq0";
+    assert_eq!(
+        google_virtual_alias("en.example#holiday@group.example.test"),
+        virtual_id
+    );
+    let alias = format!("/caldav/v2/{virtual_id}%40virtual/events/day.ics");
+    let event = selected.join(&alias).unwrap();
+    // Reads accept the alias; writes stay pinned to the selected calendar.
+    client.check_google_event_url_impl(&event, true).unwrap();
+    assert!(client.check_google_event_url(&event).is_err());
+    for unrelated in [
+        format!("/caldav/v2/{}%40virtual/events/day.ics", &virtual_id[1..]),
+        format!("/caldav/v2/{virtual_id}%40other/events/day.ics"),
+        "/caldav/v2/%40virtual/events/day.ics".to_string(),
+    ] {
+        let unrelated = selected.join(&unrelated).unwrap();
+        assert!(
+            client
+                .check_google_event_url_impl(&unrelated, true)
+                .is_err()
+        );
+    }
+    let mut other_origin = event.clone();
+    other_origin.set_host(Some("other.example.test")).unwrap();
+    assert!(
+        client
+            .check_google_event_url_impl(&other_origin, true)
+            .is_err()
+    );
+
+    let changes_body = format!(
+        r#"<d:multistatus xmlns:d="DAV:"><d:response><d:href>{alias}</d:href><d:propstat><d:prop><d:getetag>one</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response><d:sync-token>next</d:sync-token></d:multistatus>"#
+    );
+    let fetch_body = format!(
+        r#"<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:response><d:href>{alias}</d:href><d:propstat><d:prop><d:getetag>one</d:getetag><c:calendar-data>sample data</c:calendar-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>"#
+    );
+    let requests = serve_google(
+        listener,
+        vec![
+            ("207 Multi-Status", String::new(), changes_body),
+            ("207 Multi-Status", String::new(), fetch_body),
+        ],
+    );
+
+    let changes = client.changes(selected.as_str(), "").unwrap();
+    assert_eq!(changes.sync_token, "next");
+    let event = selected.join(&canonical).unwrap();
+    assert_eq!(changes.changed[0].url, event.as_str());
+    let fetched = client
+        .fetch(selected.as_str(), &[event.to_string()])
+        .unwrap();
+    assert!(fetched.gone.is_empty());
+    assert_eq!(fetched.objects[0].url, event.as_str());
+    assert_eq!(fetched.objects[0].etag, "one");
+    let _ = requests
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    let multiget = requests
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    assert!(multiget.contains(&format!("<d:href>{canonical}</d:href>")));
+}
+
+#[test]
+fn google_event_url_errors_explain_the_mismatch_without_disclosing_ids() {
+    let (client, _) = google_fixture();
+    let event = client
+        .server
+        .join(&format!("{GOOGLE_COLLECTION}/fictional-event.ics"))
+        .unwrap();
+    client.check_google_event_url(&event).unwrap();
+
+    let mut with_query = event.clone();
+    with_query.set_query(Some("fictional-secret"));
+    let mut other_collection = event;
+    other_collection.set_path("/caldav/v2/fictional-other/events/fictional-event.ics");
+    for (url, reason) in [
+        (with_query, "unexpected URL parameters or credentials"),
+        (other_collection, "different collection path"),
+    ] {
+        let error = client.check_google_event_url(&url).unwrap_err().to_string();
+        assert!(error.contains(reason), "{error}");
+        assert!(!error.contains("fictional-"), "{error}");
+    }
 }
 
 #[test]

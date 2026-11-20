@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "تتطلب بعض الخدمات، مثل iCloud وFastmail، كلمة مرور خاصة بالتطبيق.",
   "settings.calendars.connect": "اتصال",
   "settings.calendars.connectGoogle": "ربط تقويم Google",
+  "settings.calendars.chooseToSync": "اختيار التقويمات للمزامنة",
+  "settings.calendars.noEventCalendars": "لم يتم العثور على تقاويم أحداث لهذا الحساب.",
   "settings.calendars.connecting": "جارٍ الاتصال…",
   "settings.calendars.lastSynced": "آخر مزامنة {time}",
   "settings.calendars.notSynced": "لم تتم المزامنة بعد",

@@ -1220,6 +1220,8 @@
   "settings.calendars.passwordHint": "Некоторые сервисы, например iCloud и Fastmail, требуют пароль приложения.",
   "settings.calendars.connect": "Подключить",
   "settings.calendars.connectGoogle": "Подключить Google Календарь",
+  "settings.calendars.chooseToSync": "Выбрать календари для синхронизации",
+  "settings.calendars.noEventCalendars": "Для этого аккаунта не найдено календарей событий.",
   "settings.calendars.connecting": "Подключение…",
   "settings.calendars.lastSynced": "Последняя синхронизация: {time}",
   "settings.calendars.notSynced": "Ещё не синхронизировано",

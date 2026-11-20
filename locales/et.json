@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "Mõned teenusepakkujad, nt iCloud ja Fastmail, nõuavad rakendusepõhist parooli.",
   "settings.calendars.connect": "Ühenda",
   "settings.calendars.connectGoogle": "Ühenda Google Calendar",
+  "settings.calendars.chooseToSync": "Vali sünkroonitavad kalendrid",
+  "settings.calendars.noEventCalendars": "Selle konto jaoks ei leitud sündmuste kalendreid.",
   "settings.calendars.connecting": "Ühendamine…",
   "settings.calendars.lastSynced": "Viimati sünkrooniti {time}",
   "settings.calendars.notSynced": "Pole veel sünkrooninud",

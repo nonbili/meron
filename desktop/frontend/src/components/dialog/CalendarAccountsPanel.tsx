@@ -28,10 +28,13 @@ import { useValue } from '@legendapp/state/react'
 import { calendarColor } from '../../states/calendar'
 import { showToast, ui$ } from '../../states/ui'
 import { Button } from '../button/Button'
+import { Avatar } from '../avatar/Avatar'
 import { SelectInput, TextInput } from '../field/Field'
 import { ColorSwatchPicker } from '../field/ColorSwatchPicker'
 import { COLOR_PRESETS, normalizeHexColor } from '../../lib/colorPresets'
 import { SettingRow, SettingsGroup, Switch } from './AccountSettingsRows'
+import { CalendarPickerDialog } from './CalendarPickerDialog'
+import { useCalendarAccountIdentity } from './useCalendarAccountIdentity'
 
 type CalendarFormValues = { server?: string; email: string }
 
@@ -41,6 +44,8 @@ export function CalendarAccountsPanel() {
   const { t } = useTranslation()
   const accounts = useValue(caldav$.accounts)
   const [adding, setAdding] = useState<null | { initial?: CalendarFormValues }>(null)
+  const [newAccountId, setNewAccountId] = useState<string>()
+  const [pickingAccountId, setPickingAccountId] = useState<string>()
   const [mailboxId, setMailboxId] = useState('')
   const [discovering, setDiscovering] = useState(false)
   const [connectingGoogle, setConnectingGoogle] = useState(false)
@@ -54,12 +59,27 @@ export function CalendarAccountsPanel() {
       (!isGoogleMailbox(account) || googleConfigured),
   )
   const mailbox = mailboxes.find((account) => account.id === (mailboxId || activeMailboxId)) ?? mailboxes[0]
+  const googleAccount =
+    mailbox && isGoogleMailbox(mailbox)
+      ? accounts.find(
+          (account) => account.google && account.username.toLowerCase() === mailbox.email.trim().toLowerCase(),
+        )
+      : undefined
   const busy = discovering || connectingGoogle
 
-  const connectGoogle = async (options?: Parameters<typeof connectGoogleCalendar>[0]) => {
+  const revealNewAccount = () => {
+    const created = caldav$.accounts.peek().find((account) => !accounts.some(({ id }) => id === account.id))
+    if (created) setNewAccountId(created.id)
+  }
+
+  const connectGoogle = async (options: Parameters<typeof connectGoogleCalendar>[0]) => {
     setConnectingGoogle(true)
     try {
-      await connectGoogleCalendar(options)
+      const id = await connectGoogleCalendar(options)
+      if (id && !options.accountId) {
+        setNewAccountId(id)
+        setPickingAccountId(id)
+      }
     } catch (err) {
       showToast(errorMessage(err, t('settings.calendars.addFailed')), 'error')
     } finally {
@@ -69,6 +89,10 @@ export function CalendarAccountsPanel() {
 
   const findCalendar = async () => {
     if (!mailbox || busy) return
+    if (googleAccount) {
+      setPickingAccountId(googleAccount.id)
+      return
+    }
     if (isGoogleMailbox(mailbox)) {
       await connectGoogle({ email: mailbox.email })
       return
@@ -97,18 +121,11 @@ export function CalendarAccountsPanel() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <p className="max-w-lg text-xs text-secondary">{t('settings.calendars.intro')}</p>
-        <div className="flex flex-wrap gap-2">
-          {googleConfigured && (
-            <Button variant="secondary" size="sm" disabled={busy} onClick={() => void connectGoogle()}>
-              {connectingGoogle ? t('settings.calendars.connecting') : t('settings.calendars.connectGoogle')}
-            </Button>
-          )}
-          {!adding && (
-            <Button size="sm" leftIcon={Plus} disabled={busy} onClick={() => setAdding({})}>
-              {t('settings.calendars.add')}
-            </Button>
-          )}
-        </div>
+        {!adding && (
+          <Button size="sm" leftIcon={Plus} disabled={busy} onClick={() => setAdding({})}>
+            {t('settings.calendars.add')}
+          </Button>
+        )}
       </div>
       {mailbox && !adding && (
         <SettingsGroup title={t('settings.calendars.findForMailbox')}>
@@ -135,9 +152,9 @@ export function CalendarAccountsPanel() {
             <Button type="submit" size="sm" disabled={busy}>
               {discovering
                 ? t('common.loading')
-                : isGoogleMailbox(mailbox)
-                  ? t('settings.calendars.connect')
-                  : t('settings.calendars.findForMailbox')}
+                : connectingGoogle && isGoogleMailbox(mailbox)
+                  ? t('settings.calendars.connecting')
+                  : t(googleAccount ? 'settings.calendars.chooseToSync' : 'settings.calendars.findForMailbox')}
             </Button>
           </form>
         </SettingsGroup>
@@ -149,7 +166,13 @@ export function CalendarAccountsPanel() {
               {t('settings.calendars.discoveryNoServer')}
             </p>
           )}
-          <CalendarAccountForm initial={adding.initial} onDone={() => setAdding(null)} />
+          <CalendarAccountForm
+            initial={adding.initial}
+            onDone={() => {
+              revealNewAccount()
+              setAdding(null)
+            }}
+          />
         </SettingsGroup>
       )}
       {accounts.length === 0 && !adding && (
@@ -163,6 +186,8 @@ export function CalendarAccountsPanel() {
             <AccountCard
               key={account.id}
               account={account}
+              newlyAdded={account.id === newAccountId}
+              onPickCalendars={account.google ? () => setPickingAccountId(account.id) : undefined}
               onReconnect={
                 googleConfigured
                   ? () => void connectGoogle({ accountId: account.id, email: account.username })
@@ -172,6 +197,9 @@ export function CalendarAccountsPanel() {
             />
           ))}
         </div>
+      )}
+      {pickingAccountId && (
+        <CalendarPickerDialog accountId={pickingAccountId} onClose={() => setPickingAccountId(undefined)} />
       )}
     </div>
   )
@@ -281,16 +309,24 @@ export function CalendarAccountForm({
 
 function AccountCard({
   account,
+  newlyAdded,
+  onPickCalendars,
   onReconnect,
   connectingGoogle,
 }: {
   account: CalendarAccount
+  newlyAdded: boolean
+  onPickCalendars?: () => void
   onReconnect?: () => void
   connectingGoogle: boolean
 }) {
   const { t } = useTranslation()
   const id = useId()
-  const [expanded, setExpanded] = useState(false)
+  const { name, avatarUrl } = useCalendarAccountIdentity(account)
+  const [expanded, setExpanded] = useState(!!account.last_error || newlyAdded)
+  useEffect(() => {
+    if (account.last_error || newlyAdded) setExpanded(true)
+  }, [account.last_error, newlyAdded])
   const [syncing, setSyncing] = useState(false)
   const [password, setPassword] = useState<string | null>(null)
   const [passwordError, setPasswordError] = useState('')
@@ -324,7 +360,7 @@ function AccountCard({
       <button
         type="button"
         aria-labelledby={`${id}-name`}
-        aria-describedby={`${id}-summary`}
+        aria-describedby={`${id}-summary${expanded && account.last_error ? ` ${id}-error` : ''}`}
         aria-expanded={expanded}
         aria-controls={`${id}-details`}
         className="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3.5 py-2.5 text-start hover:bg-hover focus-visible:outline-offset-[-2px]"
@@ -336,14 +372,23 @@ function AccountCard({
           setExpanded(!expanded)
         }}
       >
+        {account.google && (
+          <span aria-hidden className="shrink-0">
+            <Avatar name={name} src={avatarUrl} size={32} />
+          </span>
+        )}
         <span className="flex min-w-0 flex-1 flex-col">
           <span id={`${id}-name`} className="truncate text-xs font-semibold text-primary">
-            {account.display_name || account.server_url}
+            {name}
           </span>
           <span id={`${id}-summary`} className="flex min-w-0 items-center gap-2 text-[0.6875rem] text-secondary">
             {account.username && <span className="min-w-0 max-w-1/2 truncate">{account.username}</span>}
-            {account.username && <span aria-hidden>·</span>}
-            <span className={`min-w-0 truncate ${account.last_error ? 'text-rose-500' : ''}`} title={status}>
+            {account.username && !(expanded && account.last_error) && <span aria-hidden>·</span>}
+            <span
+              className={`min-w-0 truncate ${account.last_error ? 'text-rose-500' : ''}`}
+              title={status}
+              hidden={expanded && !!account.last_error}
+            >
               {status}
             </span>
           </span>
@@ -355,12 +400,22 @@ function AccountCard({
         />
       </button>
       <div id={`${id}-details`} hidden={!expanded} className="divide-y divide-border/40 border-t border-border/40">
+        {account.last_error && (
+          <p id={`${id}-error`} className="break-words px-3.5 py-2 text-xs text-rose-500">
+            {status}
+          </p>
+        )}
         <SettingRow
           title={t('settings.calendars.accountName')}
           hint={t('settings.calendars.accountNameHint')}
-          control={<AccountName account={account} />}
+          control={<AccountName accountId={account.id} name={account.google ? name : account.display_name} />}
         />
         <div className="flex flex-wrap items-center gap-1.5 px-3.5 py-2.5">
+          {onPickCalendars && (
+            <Button variant="secondary" size="sm" onClick={onPickCalendars}>
+              {t('settings.calendars.chooseToSync')}
+            </Button>
+          )}
           <Button variant="secondary" size="sm" leftIcon={RefreshCw} disabled={syncing} onClick={() => void sync()}>
             {t('settings.calendars.syncNow')}
           </Button>
@@ -435,12 +490,12 @@ function AccountCard({
 }
 
 /** The account's name, saved when the field is left or Enter pressed. */
-function AccountName({ account }: { account: CalendarAccount }) {
+function AccountName({ accountId, name }: { accountId: string; name: string }) {
   const { t } = useTranslation()
-  const [draft, setDraft] = useState(account.display_name)
-  useEffect(() => setDraft(account.display_name), [account.display_name])
+  const [draft, setDraft] = useState(name)
+  useEffect(() => setDraft(name), [name])
   const save = () => {
-    if (draft.trim() !== account.display_name) void renameCalendarAccount(account.id, draft.trim())
+    if (draft.trim() !== name) void renameCalendarAccount(accountId, draft.trim())
   }
   return (
     <TextInput

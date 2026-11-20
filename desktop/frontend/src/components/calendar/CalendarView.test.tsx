@@ -37,6 +37,13 @@ it('jumps to a date from the mini calendar even without a synced calendar', asyn
     expect(document.activeElement).toBe(trigger)
 
     fireEvent.click(trigger)
+    const todayButton = screen.getByRole('button', { name: 'Today' })
+    expect(todayButton.closest('header')).toBe(screen.getByRole('heading', { level: 1 }).closest('header'))
+    act(() => todayButton.focus())
+    expect(pane.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(todayButton)
+
+    fireEvent.click(trigger)
     picker = within(pane.getByRole('dialog', { name: 'Jump to month' }))
     expect((picker.getByLabelText('Year') as HTMLInputElement).value).toBe(String(target.getFullYear()))
     fireEvent.click(picker.getByRole('button', { name: 'Previous year' }))
@@ -49,6 +56,9 @@ it('jumps to a date from the mini calendar even without a synced calendar', asyn
     expect(calendar$.day.peek()).toBe(nextYear.getTime())
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(monthTitle.format(nextYear))
     expect(pane.queryByRole('dialog')).toBeNull()
+
+    await act(async () => fireEvent.click(todayButton))
+    expect(calendar$.day.peek()).toBe(new Date().setHours(0, 0, 0, 0))
   } finally {
     cleanup()
     calendar$.set(previous)

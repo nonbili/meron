@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "Một số nhà cung cấp, như iCloud và Fastmail, yêu cầu mật khẩu dành riêng cho ứng dụng.",
   "settings.calendars.connect": "Kết nối",
   "settings.calendars.connectGoogle": "Kết nối Lịch Google",
+  "settings.calendars.chooseToSync": "Chọn lịch để đồng bộ",
+  "settings.calendars.noEventCalendars": "Không tìm thấy lịch sự kiện nào cho tài khoản này.",
   "settings.calendars.connecting": "Đang kết nối…",
   "settings.calendars.lastSynced": "Đồng bộ lần cuối {time}",
   "settings.calendars.notSynced": "Chưa đồng bộ",

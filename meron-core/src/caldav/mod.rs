@@ -272,6 +272,8 @@ pub struct Client {
     server: Url,
 }
 
+const GOOGLE_CALENDAR_LIST_DISABLED: &str = "Enable the Google Calendar API in the Google Cloud project used by Meron to discover and sync secondary calendars.";
+
 impl Client {
     pub fn new(
         server: &str,
@@ -507,7 +509,7 @@ impl Client {
                 }
                 if self.google_list_url.is_none() {
                     if method == "GET" {
-                        self.check_google_event_url(&url)?;
+                        self.check_google_event_url_impl(&url, true)?;
                     } else if matches!(method, "PROPFIND" | "REPORT")
                         && (!clean_google_url(&url) || !same_google_collection(&url, &self.server))
                     {
@@ -824,14 +826,17 @@ impl Client {
         for item in &ms.responses {
             let member = response.url.join(&item.href)?;
             if same_resource(&member, &response.url)
-                || self.google && same_google_collection(&member, &response.url)
+                || self.google && same_google_read_collection(&member, &self.server)
             {
                 page.truncated |= item.status == Some(507);
                 continue;
             }
-            if self.google {
-                self.check_google_event_url(&member)?;
-            }
+            let member = if self.google {
+                self.google_read_event_url(member)
+                    .context("reading the calendar change list")?
+            } else {
+                member
+            };
             if item.status == Some(404) {
                 page.removed.push(member.to_string());
             } else if let Some(etag) = item.prop_text(DAV, "getetag") {
@@ -858,7 +863,7 @@ impl Client {
                 // Hrefs go to the server as paths, the way it hands them out.
                 let url = Url::parse(url)?;
                 if self.google {
-                    self.check_google_event_url(&url)?;
+                    self.check_google_event_url_impl(&url, true)?;
                 }
                 let path = url.path();
                 body.push_str(&format!("<d:href>{}</d:href>", escape(&path)));
@@ -873,9 +878,12 @@ impl Client {
                     continue;
                 };
                 let answered = base.join(&response.href)?;
-                if self.google {
-                    self.check_google_event_url(&answered)?;
-                }
+                let answered = if self.google {
+                    self.google_read_event_url(answered)
+                        .context("reading the calendar event batch")?
+                } else {
+                    answered
+                };
                 // Keyed by the URL asked for, however the server spells it.
                 let url = batch
                     .iter()
@@ -986,18 +994,45 @@ impl Client {
         }
     }
 
-    fn check_google_event_url(&self, url: &Url) -> Result<()> {
-        let parent = url.join(".")?;
-        if !same_google_collection(&parent, &self.server)
-            || !url
-                .path_segments()
-                .and_then(Iterator::last)
-                .is_some_and(|name| !name.is_empty())
-            || !clean_google_url(url)
-        {
-            bail!("Google Calendar returned a URL outside the selected calendar's events");
+    fn google_read_event_url(&self, mut url: Url) -> Result<Url> {
+        self.check_google_event_url_impl(&url, true)?;
+        // Store events reported under the calendar's `@virtual` alias at the
+        // selected calendar's path, so every report keys them the same way.
+        if !same_google_collection(&url.join(".")?, &self.server) {
+            let name = url.path().rsplit('/').next().unwrap_or_default();
+            url.set_path(&format!(
+                "{}/{name}",
+                self.server.path().trim_end_matches('/')
+            ));
         }
-        Ok(())
+        Ok(url)
+    }
+
+    fn check_google_event_url(&self, url: &Url) -> Result<()> {
+        self.check_google_event_url_impl(url, false)
+    }
+
+    fn check_google_event_url_impl(&self, url: &Url, reading: bool) -> Result<()> {
+        let parent = url.join(".")?;
+        let reason = if url.origin() != self.server.origin() {
+            "different server"
+        } else if !clean_google_url(url) {
+            "unexpected URL parameters or credentials"
+        } else if !url
+            .path_segments()
+            .and_then(Iterator::last)
+            .is_some_and(|name| !name.is_empty())
+        {
+            "missing event name"
+        } else if !(same_google_collection(&parent, &self.server)
+            || reading && same_google_read_collection(&parent, &self.server))
+        {
+            "different collection path"
+        } else {
+            return Ok(());
+        };
+        // Explain the mismatch without exposing the calendar or event ID.
+        bail!("Google Calendar returned a URL outside the selected calendar's events ({reason})");
     }
 
     fn google_event_by_uid(&self, uid: &str) -> Result<Option<Url>> {
@@ -1360,6 +1395,59 @@ fn same_google_collection_str(a: &str, b: &str) -> bool {
         (Ok(a), Ok(b)) => same_google_collection(&a, &b),
         _ => false,
     }
+}
+
+/// Google lists the events of some read-only calendars (holidays, for one)
+/// under an alias collection: the calendar ID in lowercase, unpadded
+/// base32hex, followed by `@virtual`. Accept exactly that alias of the
+/// selected calendar, without relaxing origin, path shape, or write checks.
+fn same_google_read_collection(reported: &Url, selected: &Url) -> bool {
+    if reported.origin() != selected.origin() || !clean_google_url(reported) {
+        return false;
+    }
+    if same_google_collection(reported, selected) {
+        return true;
+    }
+    fn id(url: &Url) -> Option<String> {
+        match url
+            .path()
+            .trim_end_matches('/')
+            .split('/')
+            .collect::<Vec<_>>()
+            .as_slice()
+        {
+            ["", "caldav", "v2", id, "events"] => percent_encoding::percent_decode_str(id)
+                .decode_utf8()
+                .ok()
+                .map(|id| id.into_owned()),
+            _ => None,
+        }
+    }
+    let (Some(reported), Some(selected)) = (id(reported), id(selected)) else {
+        return false;
+    };
+    reported
+        .strip_suffix("@virtual")
+        .is_some_and(|alias| !selected.is_empty() && alias == google_virtual_alias(&selected))
+}
+
+/// Lowercase, unpadded base32hex (RFC 4648 §7).
+fn google_virtual_alias(id: &str) -> String {
+    const ALPHABET: &[u8; 32] = b"0123456789abcdefghijklmnopqrstuv";
+    let mut out = String::with_capacity(id.len().div_ceil(5) * 8);
+    let (mut buffer, mut bits) = (0u32, 0);
+    for &byte in id.as_bytes() {
+        buffer = (buffer << 8) | u32::from(byte);
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            out.push(ALPHABET[(buffer >> bits) as usize & 31] as char);
+        }
+    }
+    if bits > 0 {
+        out.push(ALPHABET[(buffer << (5 - bits)) as usize & 31] as char);
+    }
+    out
 }
 
 /// The member is the collection itself (servers list it first in Depth 1

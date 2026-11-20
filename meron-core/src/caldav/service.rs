@@ -211,9 +211,9 @@ fn add_google(
     let client = Client::google(&email, access_token)?;
     // Verify CalDAV is enabled as well as Calendar List: events use CalDAV.
     let primary = client.primary_calendar()?;
-    let mut calendars = client
-        .google_calendars()?
-        .unwrap_or_else(|| vec![primary.clone()]);
+    let listed = client.google_calendars()?;
+    let calendar_list_disabled = listed.is_none();
+    let mut calendars = listed.unwrap_or_else(|| vec![primary.clone()]);
     for calendar in &mut calendars {
         if calendar.url == client.server.as_str() {
             calendar.url.clone_from(&primary.url);
@@ -241,6 +241,7 @@ fn add_google(
     }
     let id = if let Some(account) = existing {
         save_google_credentials(engine, &conn, &account.id, &credentials)?;
+        store::set_google_calendar_list_disabled(&conn, &account.id, calendar_list_disabled)?;
         account.id
     } else {
         let id = crate::tasks::new_id("dav");
@@ -256,6 +257,7 @@ fn add_google(
                 ..Default::default()
             },
         )?;
+        store::set_google_calendar_list_disabled(&transaction, &id, calendar_list_disabled)?;
         store::reconcile_calendars(&transaction, &id, &calendars)?;
         save_google_credentials(engine, &transaction, &id, &credentials)?;
         if let Err(err) = transaction.commit() {
@@ -644,6 +646,11 @@ pub fn accounts_payload(conn: &rusqlite::Connection) -> Result<Value> {
             "display_name": account.display_name,
             "last_sync_at": account.last_sync_at,
             "last_error": account.last_error,
+            "discovery_warning": if account.google_calendar_list_disabled {
+                super::GOOGLE_CALENDAR_LIST_DISABLED
+            } else {
+                ""
+            },
             "sync_interval": account.sync_interval,
             "calendars": calendars,
         }));

@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "Beberapa penyedia, seperti iCloud dan Fastmail, memerlukan kata sandi khusus aplikasi.",
   "settings.calendars.connect": "Hubungkan",
   "settings.calendars.connectGoogle": "Hubungkan Google Kalender",
+  "settings.calendars.chooseToSync": "Pilih kalender untuk disinkronkan",
+  "settings.calendars.noEventCalendars": "Tidak ada kalender acara untuk akun ini.",
   "settings.calendars.connecting": "Menghubungkan…",
   "settings.calendars.lastSynced": "Terakhir disinkronkan {time}",
   "settings.calendars.notSynced": "Belum disinkronkan",

@@ -19,6 +19,7 @@ import {
   loadSyncedCalendars,
   openCalendarItem,
   syncCalendarsInBackground,
+  selectDay,
   shiftMonth,
   type CalendarItem,
 } from '../../states/calendar'
@@ -55,21 +56,24 @@ export function CalendarView() {
 
   useEscapeKey(() => setExpandedDay(null), expandedDay !== null && !editor)
 
+  const jumpToToday = () => {
+    setExpandedDay(null)
+    goToToday()
+  }
+
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-chats">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/50 bg-header/70 px-4">
-        <CalendarDays size={17} className="shrink-0 text-accent" />
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">{title}</h1>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            setExpandedDay(null)
-            goToToday()
-          }}
-        >
-          {t('calendar.today')}
-        </Button>
+    <section className="flex min-w-0 flex-1 flex-col bg-chats [--calendar-sidebar-width:calc(var(--spacing)*56)]">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/50 bg-header/70 px-4 min-[1100px]:ps-0">
+        <div className="flex min-w-0 items-center gap-2 min-[1100px]:gap-0">
+          <div className="flex min-w-0 items-center gap-2 min-[1100px]:w-(--calendar-sidebar-width) min-[1100px]:shrink-0 min-[1100px]:px-4">
+            <CalendarDays size={17} className="shrink-0 text-accent" />
+            <h1 className="min-w-0 truncate text-sm font-semibold text-primary">{title}</h1>
+          </div>
+          <Button variant="secondary" size="sm" onClick={jumpToToday}>
+            {t('calendar.today')}
+          </Button>
+        </div>
+        <div className="flex-1" />
         <div className="flex items-center gap-2 min-[1100px]:hidden">
           <IconButton label={t('calendar.previousMonth')} icon={ChevronLeft} size="sm" onClick={() => shiftMonth(-1)} />
           <IconButton label={t('calendar.nextMonth')} icon={ChevronRight} size="sm" onClick={() => shiftMonth(1)} />
@@ -97,7 +101,7 @@ export function CalendarView() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border/50 p-3 min-[1100px]:flex">
+        <aside className="hidden w-(--calendar-sidebar-width) shrink-0 flex-col gap-3 overflow-y-auto border-r border-border/50 p-3 min-[1100px]:flex">
           <MiniCalendar
             month={month}
             days={days}
@@ -142,18 +146,21 @@ export function CalendarView() {
                     'relative flex min-h-0 min-w-0 flex-col gap-0.5 border-b border-r border-border/40 p-1 cursor-pointer hover:bg-hover/40',
                     !sameMonth(day, month) && 'bg-black/[0.02] dark:bg-white/[0.02]',
                   )}
-                  onClick={() => calendar$.editor.set({ mode: 'new', day: day.getTime() })}
+                  onClick={() => {
+                    setExpandedDay(null)
+                    selectDay(day)
+                    calendar$.editor.set({ mode: 'new', day: day.getTime() })
+                  }}
                 >
                   <span
                     className={clsx(
                       'ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[0.6875rem] font-semibold',
-                      isSelected
+                      isToday
                         ? 'bg-accent text-accent-label'
-                        : isToday
-                          ? 'bg-accent/15 text-accent'
-                          : sameMonth(day, month)
-                            ? 'text-primary'
-                            : 'text-secondary/60',
+                        : sameMonth(day, month)
+                          ? 'text-primary'
+                          : 'text-secondary/60',
+                      isSelected && !isToday && 'min-[1100px]:bg-accent/15 min-[1100px]:text-accent',
                     )}
                     aria-current={isToday ? 'date' : undefined}
                   >

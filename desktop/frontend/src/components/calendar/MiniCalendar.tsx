@@ -137,7 +137,13 @@ function MonthPicker({ month, onJump }: { month: Date; onJump: (day: Date) => vo
   )
 
   return (
-    <div ref={container} className="relative min-w-0 flex-1">
+    <div
+      ref={container}
+      className="relative min-w-0 flex-1"
+      onBlur={(event) => {
+        if (draft && !event.currentTarget.contains(event.relatedTarget)) setDraft(null)
+      }}
+    >
       <button
         ref={trigger}
         type="button"

@@ -1419,6 +1419,8 @@
   "settings.calendars.passwordHint": "iCloud や Fastmail など、一部のサービスではアプリ用パスワードが必要です。",
   "settings.calendars.connect": "接続",
   "settings.calendars.connectGoogle": "Google カレンダーを連携",
+  "settings.calendars.chooseToSync": "同期するカレンダーを選択",
+  "settings.calendars.noEventCalendars": "このアカウントには予定用のカレンダーが見つかりませんでした。",
   "settings.calendars.connecting": "接続中…",
   "settings.calendars.lastSynced": "最終同期: {time}",
   "settings.calendars.notSynced": "まだ同期されていません",

@@ -67,6 +67,7 @@ pub struct DavAccount {
     pub display_name: String,
     pub home: String,
     pub google: bool,
+    pub google_calendar_list_disabled: bool,
     pub last_sync_at: i64,
     pub last_error: String,
     /// Minutes between automatic syncs; 0 syncs only when asked.
@@ -148,7 +149,8 @@ pub struct DavObject {
 
 const ACCOUNT_COLUMNS: &str = "id, server_url, username, display_name, home, last_sync_at,
     last_error, json_extract(json, '$.sync_interval'), json_extract(json, '$.google'),
-    json_extract(json, '$.retry_at'), json_extract(json, '$.throttle_count')";
+    json_extract(json, '$.retry_at'), json_extract(json, '$.throttle_count'),
+    json_extract(json, '$.google_calendar_list_disabled')";
 
 fn read_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavAccount> {
     Ok(DavAccount {
@@ -158,6 +160,7 @@ fn read_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavAccount> {
         display_name: row.get(3)?,
         home: row.get(4)?,
         google: row.get::<_, Option<bool>>(8)?.unwrap_or(false),
+        google_calendar_list_disabled: row.get::<_, Option<bool>>(11)?.unwrap_or(false),
         last_sync_at: row.get(5)?,
         last_error: row.get(6)?,
         sync_interval: row
@@ -207,6 +210,18 @@ pub fn set_sync_interval(conn: &Connection, id: &str, minutes: i64) -> Result<()
     conn.execute(
         "UPDATE dav_accounts SET json = json_set(json, '$.sync_interval', ?2) WHERE id = ?1",
         params![id, minutes.max(0)],
+    )?;
+    Ok(())
+}
+
+pub(super) fn set_google_calendar_list_disabled(
+    conn: &Connection,
+    id: &str,
+    disabled: bool,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_accounts SET json = json_set(json, '$.google_calendar_list_disabled', ?2) WHERE id = ?1",
+        params![id, disabled],
     )?;
     Ok(())
 }
