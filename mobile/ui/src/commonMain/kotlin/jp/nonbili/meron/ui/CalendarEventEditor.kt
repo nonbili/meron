@@ -127,6 +127,13 @@ internal fun CalendarEventEditor(
     var location by remember { mutableStateOf(item?.location.orEmpty()) }
     var allDay by remember { mutableStateOf(item?.allDay ?: false) }
     var repeat by remember { mutableStateOf(item?.repeat.orEmpty()) }
+    // A rule desktop's custom repeat editor made (an RRULE) is kept as it is
+    // unless another choice replaces it.
+    val repeatOptions =
+        remember(item?.repeat) {
+            val own = item?.repeat.orEmpty()
+            if (repeats.any { it.first == own }) repeats else repeats + (own to "calendar.repeat.custom")
+        }
     // An all-day item's bounds are UTC midnights with an exclusive end; here
     // the end is the last day, as the user names it.
     var startDay by remember {
@@ -259,8 +266,8 @@ internal fun CalendarEventEditor(
                 )
                 PickerRow(
                     icon = Icons.Filled.Repeat,
-                    value = tr(repeats.first { it.first == repeat }.second),
-                    options = repeats,
+                    value = tr(repeatOptions.first { it.first == repeat }.second),
+                    options = repeatOptions,
                     optionLabel = { tr(it.second) },
                     onPick = { repeat = it.first },
                 )

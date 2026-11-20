@@ -28,11 +28,8 @@ const DAY: i64 = 86_400;
 /// past it: a daily event reaches more than fifty years.
 const MAX_OCCURRENCES: usize = 20_000;
 
-/// The repeat rules the editor offers, as `events.rrule` stores them.
-const REPEATS: [&str; 4] = ["daily", "weekly", "monthly", "yearly"];
-
-/// What the editor sends to keep a synced event's own repeat rule, one none
-/// of [`REPEATS`] can say.
+/// What the editor sends to keep a synced event's own repeat rule, one the
+/// editor cannot say (see [`super::rrule`]).
 pub const CUSTOM_REPEAT: &str = "custom";
 
 /// What the editor sends to create or change an event made here.
@@ -44,7 +41,8 @@ pub struct EventInput {
     pub start: i64,
     pub end: i64,
     pub all_day: bool,
-    /// One of [`REPEATS`], or empty for once.
+    /// Empty for once, a plain choice (`weekly`), or an RRULE the custom
+    /// repeat editor made (see [`super::rrule`]).
     pub repeat: String,
     /// When editing a repeating event, the start of the occurrence the editor
     /// was opened on: `start`/`end` are then that occurrence's new times, and
@@ -139,10 +137,7 @@ fn apply_input(event: &mut CalendarEvent, input: &EventInput) -> Result<()> {
     if input.start <= 0 {
         return Err(anyhow!("an event needs a start"));
     }
-    let repeat = input.repeat.trim().to_ascii_lowercase();
-    if !repeat.is_empty() && !REPEATS.contains(&repeat.as_str()) {
-        return Err(anyhow!("unknown repeat: {repeat}"));
-    }
+    let repeat = input.repeat.trim();
     let (start, end) = if input.all_day {
         let start = input.start.div_euclid(DAY) * DAY;
         let end = (input.end.max(input.start) + DAY - 1).div_euclid(DAY) * DAY;
@@ -166,7 +161,7 @@ fn apply_input(event: &mut CalendarEvent, input: &EventInput) -> Result<()> {
     } else {
         event.tzid.clone()
     };
-    event.rrule = repeat;
+    event.rrule = super::rrule::from_editor(repeat)?;
     apply_alerts(event, input);
     Ok(())
 }
@@ -194,6 +189,7 @@ pub fn create_event(conn: &Connection, input: &EventInput) -> Result<Value> {
         ..Default::default()
     };
     apply_input(&mut event, input)?;
+    settle_rule(&CalendarEvent::default(), &mut event, true)?;
     if let Some(calendar) = input.calendar.as_deref().filter(|c| !c.is_empty()) {
         let calendar = writable_calendar(conn, calendar)?;
         caldav::queue_new_event(conn, &calendar, &mut event)?;
@@ -217,6 +213,11 @@ fn writable_calendar(conn: &Connection, id: &str) -> Result<caldav::store::DavCa
 /// organizer's, so only its notes and alerts are the user's to edit.
 pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<Value> {
     let mut event = store::event(conn, id)?.ok_or_else(|| anyhow!("no such event: {id}"))?;
+    // An editor that says what it opened with (desktop's) shows a repeat as
+    // of the start being saved, and moves it with that start itself; so is
+    // one chosen in this edit. Otherwise a series' own rule is moved here.
+    let rule_as_shown = input.original.is_some()
+        || super::rrule::from_editor(&input.repeat).is_ok_and(|rule| rule != event.rrule);
     // A picker left as it opened is not a move, even if the event has since
     // moved elsewhere (another window, a sync).
     let opened_in = input
@@ -268,6 +269,7 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
         if keep_custom || same_timing || still_a_timed_series {
             event.tzid = before.tzid.clone();
         }
+        settle_rule(&before, &mut event, rule_as_shown)?;
         event.ics = caldav::ics::patch(&before.ics, &before, &event);
         if !moving {
             let saved = store::save_event(conn, &event)?;
@@ -308,6 +310,7 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
                 if let Some(copy) = &unsent_copy {
                     caldav::store::retarget_moves(conn, &copy.url, "")?;
                 }
+                keep_floating_times(&mut event);
                 event.calendar.clear();
                 event.ics.clear();
             }
@@ -317,8 +320,15 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
         return Ok(json!({ "event": event_json(&saved), "moved_from": before.calendar }));
     }
     if event.invite_uid.is_empty() {
+        let before = event.clone();
         let input = series_input(&event, input);
         apply_input(&mut event, &input)?;
+        // A timed series keeps the zone it repeats in, UTC (no zone) for one
+        // brought here from a calendar that kept it so.
+        if before.recurring && !before.all_day && event.recurring && !event.all_day {
+            event.tzid = before.tzid.clone();
+        }
+        settle_rule(&before, &mut event, rule_as_shown)?;
     } else {
         event.notes = input.notes.trim().to_string();
         apply_alerts(&mut event, input);
@@ -392,12 +402,13 @@ fn series_input(event: &CalendarEvent, input: &EventInput) -> EventInput {
 /// so when either side is all-day — including a switch between the two —
 /// the move is counted in whole dates and the time of day comes from the edit.
 fn shift_series_start(event: &CalendarEvent, input: &EventInput) -> Option<i64> {
-    let tz = event
-        .tzid
-        .parse::<Tz>()
-        .ok()
-        .filter(|_| !event.tzid.is_empty())
-        .unwrap_or_else(super::local_tz);
+    // A timed series' own zone, UTC included; an all-day one becoming timed
+    // the zone it names, or this device's.
+    let tz = match event.tzid.parse::<Tz>() {
+        Ok(tz) if event.all_day && !event.tzid.is_empty() => tz,
+        _ if event.all_day => super::local_tz(),
+        _ => rule_tz(event),
+    };
     let local = |at: i64| Some(tz.timestamp_opt(at, 0).single()?.naive_local());
     let utc = |at: i64| Some(chrono::DateTime::from_timestamp(at, 0)?.naive_utc());
     let at = |at: i64, all_day: bool| if all_day { utc(at) } else { local(at) };
@@ -843,6 +854,17 @@ pub fn event_json(event: &CalendarEvent) -> Value {
         "source": if event.invite_uid.is_empty() { "event" } else { "invite" },
         // The synced calendar it belongs to; empty for one on this device.
         "calendar": event.calendar,
+        // A series' first date, in the zone its repeat's dates are counted in:
+        // what a custom repeat is made from, whichever occurrence is open.
+        "series_date": if event.recurring {
+            first_day(event).format("%Y-%m-%d").to_string()
+        } else {
+            String::new()
+        },
+        // The zone those dates are in, for an editor to place an edited start
+        // in: an IANA name, `UTC`, or empty for this device's own (a floating
+        // series) or for whole days.
+        "series_zone": series_zone(event),
     })
 }
 
@@ -856,9 +878,12 @@ pub fn events_payload(conn: &Connection, from: i64, to: i64, include_tasks: bool
     let mut items: Vec<(i64, Value)> = Vec::new();
     let mut keys = std::collections::HashSet::new();
     for event in store::events_between(conn, from, to)? {
+        // The same for every occurrence: worked out once, the series' first
+        // date included, which may mean reading its whole object.
+        let series = event_json(&event);
         for occurrence in occurrences(&event, from, to) {
             let start = occurrence.start;
-            let mut item = event_json(&event);
+            let mut item = series.clone();
             // Two occurrences can start together (one moved onto another), and
             // clients key their lists by this.
             let base = format!("{}@{start}", event.id);
@@ -1037,7 +1062,7 @@ fn occurrences(event: &CalendarEvent, from: i64, to: i64) -> Vec<Occurrence> {
     } else {
         event.ics.clone()
     };
-    let Some(ical) = super::parse_ical(&ics) else {
+    let Some(ical) = super::parse_ical(&caldav::ics::for_expansion(&ics)) else {
         return single();
     };
     let expanded = ical.expand_dates(expansion_tz(&ical, event.all_day), MAX_OCCURRENCES);
@@ -1232,13 +1257,97 @@ fn expansion_tz(ical: &calcard::icalendar::ICalendar, all_day: bool) -> Tz {
 /// The calendar an event made here repeats by: its first occurrence and the
 /// rule, timed in the zone it was made in so 09:00 stays 09:00 across DST.
 fn repeat_ics(event: &CalendarEvent) -> String {
-    let freq = event.rrule.to_ascii_uppercase();
+    let rule = rrule_ics(event, false);
     let (dtstart, dtend) = date_lines(event);
     format!(
         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Meron//Meron//EN\r\nBEGIN:VEVENT\r\n\
-         UID:{}\r\n{dtstart}\r\n{dtend}\r\nRRULE:FREQ={freq}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+         UID:{}\r\n{dtstart}\r\n{dtend}\r\nRRULE:{rule}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
         event.id
     )
+}
+
+/// A repeat rule fit for the series as saved, its zone now settled. One not
+/// `as_shown` (the series' own, from an editor that leaves moving it here)
+/// moves with a series whose first day moved; either is refused when it ends
+/// before that day or leaves it out. A rule kept as it was on a series that
+/// has not moved is left as it is, the server's own reading of it included.
+fn settle_rule(before: &CalendarEvent, event: &mut CalendarEvent, as_shown: bool) -> Result<()> {
+    if !event.recurring || event.rrule.is_empty() {
+        return Ok(());
+    }
+    let to = first_day(event);
+    let from = before.recurring.then(|| first_day(before));
+    if let Some(from) = from.filter(|from| *from != to && !as_shown) {
+        event.rrule = super::rrule::align(&event.rrule, from, to);
+    }
+    if event.rrule == before.rrule && from == Some(to) {
+        return Ok(());
+    }
+    super::rrule::check(&event.rrule, to)
+}
+
+/// Before a synced series' object goes: a floating series' times are this
+/// device's wall times, so it takes this device's zone to keep them so.
+pub(crate) fn keep_floating_times(event: &mut CalendarEvent) {
+    if event.recurring
+        && !event.all_day
+        && event.tzid.is_empty()
+        && caldav::ics::starts_floating(&event.ics)
+    {
+        event.tzid = super::local_tzid().unwrap_or_default();
+    }
+}
+
+/// The zone [`first_day`] counts in, as `event_json` names it.
+fn series_zone(event: &CalendarEvent) -> String {
+    if !event.recurring || event.all_day {
+        return String::new();
+    }
+    match event.tzid.parse::<Tz>() {
+        // By its IANA name, which a browser knows, rather than as the object
+        // names it ("Eastern Standard Time").
+        Ok(tz) if !event.tzid.is_empty() => {
+            tz.name().map(|name| name.into_owned()).unwrap_or_default()
+        }
+        _ if caldav::ics::starts_floating(&event.ics) => String::new(),
+        _ => "UTC".into(),
+    }
+}
+
+/// The zone a series' repeat end date is a date in: its own, UTC for one
+/// written in UTC, and this device's for a floating one.
+pub(crate) fn rule_tz(event: &CalendarEvent) -> Tz {
+    if event.all_day {
+        return Tz::UTC;
+    }
+    match event.tzid.parse::<Tz>() {
+        Ok(tz) if !event.tzid.is_empty() => tz,
+        // A floating start is read in this device's zone, as are its dates.
+        _ if caldav::ics::starts_floating(&event.ics) => super::local_tz(),
+        _ => Tz::UTC,
+    }
+}
+
+/// The date a series starts on, as its repeat's end date is counted.
+pub(crate) fn first_day(event: &CalendarEvent) -> NaiveDate {
+    rule_tz(event)
+        .timestamp_opt(event.start_at, 0)
+        .single()
+        .map(|t| t.date_naive())
+        .unwrap_or_default()
+}
+
+/// The RRULE value for an event's stored repeat, as its DTSTART is written:
+/// `floating` when that is a wall-clock time in no zone.
+pub(crate) fn rrule_ics(event: &CalendarEvent, floating: bool) -> String {
+    use super::rrule::{Timing, to_ics};
+    if event.all_day {
+        return to_ics(&event.rrule, Timing::AllDay);
+    }
+    if floating {
+        return to_ics(&event.rrule, Timing::Floating);
+    }
+    to_ics(&event.rrule, Timing::Zoned(&rule_tz(event)))
 }
 
 /// The DTSTART and DTEND lines for an event: dates for an all-day one, wall

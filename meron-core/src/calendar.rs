@@ -9,6 +9,7 @@
 //! whoever sent it.
 
 pub mod events;
+pub mod rrule;
 #[cfg(test)]
 mod tests;
 

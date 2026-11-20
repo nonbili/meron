@@ -450,7 +450,65 @@ fn open_inner(path: &Path, key: Option<&str>, on_upgrade: impl FnOnce()) -> Resu
     with_anyhow_busy_retry(|| run_migrations(&conn)).context("run migrations")?;
     with_anyhow_busy_retry(|| invalidate_body_cache_if_needed(&conn))
         .context("invalidate body cache if needed")?;
+    with_anyhow_busy_retry(|| reread_synced_repeat_rules(&conn))
+        .context("reread synced repeat rules")?;
     Ok(conn)
+}
+
+/// Which repeat rules the editor can say, as `events.rrule` was last
+/// worked out for synced events (see `calendar::rrule`).
+const SYNCED_RULES_VERSION: &str = "3";
+
+/// A synced event's `rrule` says whether the editor can say its repeat, as
+/// that was when the event was last fetched. Once the editor changes what it
+/// can say, every synced series' rule is read again from its own object,
+/// rather than waiting for its server to send a change: one it can now say
+/// is filled in, and one it no longer takes on (a zone only the object
+/// defines) goes back to its server.
+pub(super) fn reread_synced_repeat_rules(conn: &Connection) -> Result<()> {
+    if meta_get(conn, "synced_rules_version")?.as_deref() == Some(SYNCED_RULES_VERSION) {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    // A batch at a time: a calendar's objects can be large, and this runs as
+    // the store opens.
+    let mut after = String::new();
+    loop {
+        let rows = tx
+            .prepare_cached(
+                "SELECT id, ics, rrule FROM events
+                 WHERE calendar <> '' AND recurring = 1 AND ics <> '' AND id > ?1
+                 ORDER BY id LIMIT 100",
+            )?
+            .query_map([&after], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let Some((last, _, _)) = rows.last() else {
+            break;
+        };
+        after = last.clone();
+        for (id, ics, stored) in rows {
+            // An object that cannot be read is left as it was.
+            let Some(rule) = crate::caldav::ics::event_from_ics(&ics).map(|event| event.rrule)
+            else {
+                continue;
+            };
+            if rule != stored {
+                tx.execute(
+                    "UPDATE events SET rrule = ?2 WHERE id = ?1",
+                    params![id, rule],
+                )?;
+            }
+        }
+    }
+    meta_set(&tx, "synced_rules_version", SYNCED_RULES_VERSION)?;
+    tx.commit()?;
+    Ok(())
 }
 
 fn configure_connection(conn: &Connection) -> Result<()> {

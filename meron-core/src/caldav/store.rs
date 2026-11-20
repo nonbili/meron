@@ -444,6 +444,28 @@ pub fn set_enabled(conn: &Connection, id: &str, enabled: bool) -> Result<()> {
 /// The calendar is gone from its server: events created or changed here
 /// that never reached it stay on this device instead of going with it.
 fn keep_unsent_here(conn: &Connection, id: &str) -> Result<()> {
+    // A floating series that leaves its object keeps its wall times by
+    // taking this device's zone (see `keep_floating_times`).
+    let floating: Vec<(String, String)> = conn
+        .prepare(
+            "SELECT id, ics FROM events
+             WHERE calendar = ?1 AND recurring <> 0 AND rrule <> '' AND all_day = 0 AND tzid = ''
+               AND id IN (SELECT local_id FROM dav_objects
+                          WHERE calendar = ?1 AND state IN (?2, ?3) AND local_id <> '')",
+        )?
+        .query_map(params![id, CREATED, CHANGED], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let zone = crate::calendar::local_tzid().unwrap_or_default();
+    for (event, ics) in floating {
+        if super::ics::starts_floating(&ics) {
+            conn.execute(
+                "UPDATE events SET tzid = ?2 WHERE id = ?1",
+                params![event, zone],
+            )?;
+        }
+    }
     conn.execute(
         "UPDATE events SET calendar = '',
            -- A repeat the editor can name is kept by `rrule`; a server's own

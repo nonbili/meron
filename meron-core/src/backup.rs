@@ -332,6 +332,7 @@ fn backup_events(conn: &Connection) -> Result<Vec<store::CalendarEvent>> {
                 // A repeat the editor names is kept by `rrule`; a server's
                 // own rule only by its object.
                 if !(event.recurring && event.rrule.is_empty()) {
+                    crate::calendar::events::keep_floating_times(&mut event);
                     event.ics.clear();
                 }
             }

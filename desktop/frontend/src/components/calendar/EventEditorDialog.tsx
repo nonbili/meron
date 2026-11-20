@@ -1,5 +1,5 @@
 import { CalendarDays, Check, Copy, Mail, Trash2, X } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { dateValue, localInstant, parseDateValue, timeValue, utcDate, utcDateValue } from '../../lib/calendarGrid'
 import { formatEventRange } from '../../lib/date'
@@ -28,8 +28,13 @@ import { IconButton } from '../button/IconButton'
 import { Checkbox } from '../field/Checkbox'
 import { LinkifiedText } from '../field/LinkifiedText'
 import { SelectInput, TextInput } from '../field/Field'
+import { alignRepeat, describeRepeat, isPlainRepeat, parseRepeat } from '../../lib/repeatRule'
+import { CustomRepeatDialog } from './CustomRepeatDialog'
 
-const CUSTOM_REPEAT: { value: CalendarRepeat; label: string } = { value: 'custom', label: 'calendar.repeat.custom' }
+/** A synced event's own rule, which none of the editor's can say. */
+const SERVER_REPEAT = 'custom'
+/** The Repeat choice that opens the custom repeat editor. */
+const CUSTOMIZE = '\u0000customize'
 
 /** A calendar as the picker names it: with its account, since two accounts
  * can each have a "Personal". */
@@ -117,10 +122,53 @@ function initialForm(editor: EventEditor): Form {
     endDate: item.all_day ? utcDateValue(Math.max(item.start, item.end - 86_400)) : dateValue(end),
     endTime: timeValue(end),
     // A synced event repeating by a rule the choices cannot say.
-    repeat: hasCustomRepeat(item) ? 'custom' : item.repeat,
+    repeat: hasCustomRepeat(item) ? SERVER_REPEAT : item.repeat,
     ...alertFields(item.alerts),
     calendar: item.calendar ?? '',
   }
+}
+
+/** The form with its start moved, its end keeping the event's length. */
+function movedStart(current: Form, startDate: string, startTime: string): Form {
+  // All-day bounds are dates: count whole days, never local hours, which
+  // a DST change between the two would make 23 or 25.
+  if (current.allDay) {
+    const days = (utcDate(startDate) - utcDate(current.startDate)) / 86_400
+    if (!utcDate(startDate) || !utcDate(current.endDate)) return { ...current, startDate }
+    return { ...current, startDate, endDate: utcDateValue(utcDate(current.endDate) + days * 86_400) }
+  }
+  const before = localInstant(current.startDate, current.startTime)
+  const after = localInstant(startDate, startTime)
+  if (!before || !after) return { ...current, startDate, startTime }
+  const end = new Date((localInstant(current.endDate, current.endTime) + after - before) * 1000)
+  return { ...current, startDate, startTime, endDate: dateValue(end), endTime: timeValue(end) }
+}
+
+/** An instant's date (`YYYY-MM-DD`) in an IANA zone, or this device's. */
+function zoneDate(epochSeconds: number, zone?: string): string {
+  let parts: Intl.DateTimeFormatPart[]
+  try {
+    parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date(epochSeconds * 1000))
+  } catch {
+    // A zone this webview does not know: this device's.
+    return dateValue(new Date(epochSeconds * 1000))
+  }
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+/** Whole days from one `YYYY-MM-DD` to another. */
+function daysBetween(from: string, to: string): number {
+  return Math.round((utcDate(to) - utcDate(from)) / 86_400)
+}
+
+function shiftDate(date: string, days: number): string {
+  return utcDateValue(utcDate(date) + days * 86_400)
 }
 
 function hasCustomRepeat(item: CalendarItem): boolean {
@@ -307,7 +355,7 @@ function NotesField({
 // but for its notes and alerts: its time and title are the organizer's to change. Mirrors
 // mobile's EventEditorSheet.
 export function EventEditorDialog({ editor }: { editor: EventEditor }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [form, setForm] = useState(() => initialForm(editor))
   // What the fields held when the editor opened, so the core can tell an
   // edit from a value a sync has since replaced.
@@ -321,26 +369,60 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
   const readOnly = !!synced && !synced.writable
   const writableCalendars = calendars.filter((calendar) => calendar.writable)
   const pickedCalendar = calendars.find((calendar) => calendar.id === form.calendar)
-  const repeats = item && hasCustomRepeat(item) ? [...REPEATS, CUSTOM_REPEAT] : REPEATS
+  const [customizing, setCustomizing] = useState(false)
+  // What a custom repeat's days and end are counted from: the series' first
+  // date as it will be saved, in the series' own zone (not the occurrence
+  // open, nor this device's date for it), moved as far as the start has been
+  // here.
+  const [opened] = useState(() => initialForm(editor))
+  const seriesDateOf = (form: Form): string => {
+    if (!item?.series_date) return form.startDate
+    // The series moves by as many days as the open occurrence moves on the
+    // calendar of the series' own zone, where an hour's change can cross
+    // midnight; a whole day is the date it names.
+    const zone = item.series_zone || undefined
+    const opens = item.all_day ? opened.startDate : zoneDate(item.start, zone)
+    const edited = localInstant(form.startDate, form.startTime)
+    const lands = form.allDay ? form.startDate : edited ? zoneDate(edited, zone) : opens
+    return shiftDate(item.series_date, daysBetween(opens, lands))
+  }
+  // The repeat as last chosen and the first day it was chosen for: each move
+  // of the start moves that rule, so moving back restores it exactly.
+  const anchor = useRef({ repeat: opened.repeat, date: seriesDateOf(opened) })
+  /** Change the form, moving a custom repeat with the series' first day. */
+  const change = (update: (form: Form) => Form) =>
+    setForm((current) => {
+      const next = update(current)
+      const from = parseDateValue(anchor.current.date)
+      const to = parseDateValue(seriesDateOf(next))
+      return from && to ? { ...next, repeat: alignRepeat(anchor.current.repeat, from, to) } : next
+    })
+  /** A repeat chosen here, as of the start shown. */
+  const chooseRepeat = (repeat: string) => {
+    anchor.current = { repeat, date: seriesDateOf(form) }
+    set('repeat', repeat)
+  }
+  const seriesDate = seriesDateOf(form)
+  const locale = i18n.language.replace('_', '-')
+  // The plain choices, then the event's own rule and the one being made, and
+  // last the way to make one.
+  const repeatOptions = REPEATS.map(({ value, label: key }) => ({ value, label: t(key) }))
+  if (item && hasCustomRepeat(item))
+    repeatOptions.push({ value: SERVER_REPEAT, label: t('calendar.repeat.serverRule') })
+  // The event's own rule is offered as it opened only while its first day
+  // has not moved; moved, the rule shown is it moved along.
+  const ownRule = item?.repeat && seriesDate === item.series_date ? item.repeat : ''
+  for (const value of new Set([ownRule, form.repeat])) {
+    const rule = isPlainRepeat(value) ? null : parseRepeat(value)
+    if (rule) repeatOptions.push({ value, label: describeRepeat(rule, t, locale) })
+  }
+  repeatOptions.push({ value: CUSTOMIZE, label: t('calendar.repeat.customize') })
   const close = () => calendar$.editor.set(null)
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((current) => ({ ...current, [key]: value }))
   // Moving the start moves the end with it, keeping the event's length.
   const moveStart = (startDate: string, startTime: string) =>
-    setForm((current) => {
-      // All-day bounds are dates: count whole days, never local hours, which
-      // a DST change between the two would make 23 or 25.
-      if (current.allDay) {
-        const days = (utcDate(startDate) - utcDate(current.startDate)) / 86_400
-        if (!utcDate(startDate) || !utcDate(current.endDate)) return { ...current, startDate }
-        return { ...current, startDate, endDate: utcDateValue(utcDate(current.endDate) + days * 86_400) }
-      }
-      const before = localInstant(current.startDate, current.startTime)
-      const after = localInstant(startDate, startTime)
-      if (!before || !after) return { ...current, startDate, startTime }
-      const end = new Date((localInstant(current.endDate, current.endTime) + after - before) * 1000)
-      return { ...current, startDate, startTime, endDate: dateValue(end), endTime: timeValue(end) }
-    })
+    change((current) => movedStart(current, startDate, startTime))
   const canSave = !!parseDateValue(form.startDate) && !saving && !readOnly
 
   const save = async () => {
@@ -410,7 +492,7 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
                 // Leads mean minutes for a timed event and days for an all-day
                 // one, so the switch starts the alerts over from the default.
                 onChange={(event) =>
-                  setForm((current) => ({ ...current, allDay: event.target.checked, ...alertFields(null) }))
+                  change((current) => ({ ...current, allDay: event.target.checked, ...alertFields(null) }))
                 }
               />
               {t('invite.allDay')}
@@ -456,11 +538,14 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
                 wrapperClassName="col-span-2"
                 aria-label={t('calendar.fields.repeat')}
                 value={form.repeat}
-                onChange={(event) => set('repeat', event.target.value as CalendarRepeat)}
+                onChange={(event) => {
+                  if (event.target.value === CUSTOMIZE) setCustomizing(true)
+                  else chooseRepeat(event.target.value)
+                }}
               >
-                {repeats.map(({ value, label: key }) => (
+                {repeatOptions.map(({ value, label: text }) => (
                   <option key={value} value={value}>
-                    {t(key)}
+                    {text}
                   </option>
                 ))}
               </SelectInput>
@@ -488,7 +573,7 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
                       ) : (
                         <>
                           {/* A server's own repeat rule cannot live on this device. */}
-                          {form.repeat !== 'custom' && <option value="">{t('calendar.onThisDevice')}</option>}
+                          {form.repeat !== SERVER_REPEAT && <option value="">{t('calendar.onThisDevice')}</option>}
                           {writableCalendars.map((calendar) => (
                             <option key={calendar.id} value={calendar.id}>
                               {calendarLabel(calendar, '')}
@@ -547,6 +632,18 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
           </Button>
         </div>
       </form>
+      {customizing && (
+        <CustomRepeatDialog
+          // A server's rule cannot be opened; the editor starts afresh.
+          value={form.repeat === SERVER_REPEAT ? '' : form.repeat}
+          startDate={seriesDate}
+          onDone={(repeat) => {
+            chooseRepeat(repeat)
+            setCustomizing(false)
+          }}
+          onClose={() => setCustomizing(false)}
+        />
+      )}
     </Dialog>
   )
 }

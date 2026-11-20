@@ -16,7 +16,10 @@ import { showToast, showUndoToast, ui$ } from './ui'
 
 /** `custom` keeps a synced event's own rule, one the other choices cannot
  * say ("every Monday and Wednesday"); the core never sends it back. */
-export type CalendarRepeat = '' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'
+/** How an event repeats: empty for once, a plain choice (`weekly`), an RRULE
+ * the custom repeat editor made (see lib/repeatRule.ts), or, from the editor
+ * only, `custom` to keep a synced event's rule that none of these can say. */
+export type CalendarRepeat = string
 
 /** A CalDAV calendar events can come from, as `caldav.calendars` lists it. */
 export type SyncedCalendar = {
@@ -61,6 +64,12 @@ export type CalendarItem = {
   /** Whether `alerts` count all-day days rather than minutes: the series'
    * kind, which one occurrence of an invitation can differ from. */
   alerts_all_day?: boolean
+  /** A repeating event's first date (`YYYY-MM-DD`), in the zone its
+   * repeat's dates are counted in; empty for one that does not repeat. */
+  series_date?: string
+  /** The zone `series_date` is in: an IANA name, `UTC`, or empty for this
+   * device's own (a floating series) or for whole days. */
+  series_zone?: string
   /** The synced calendar (`SyncedCalendar.id`) it comes from; empty for one
    * on this device. */
   calendar?: string

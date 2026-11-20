@@ -85,6 +85,11 @@ describe('catalog validation helpers', () => {
     ).toEqual(['count', 'sender'])
   })
 
+  test('reads a one-word plural branch as text, not a placeholder', () => {
+    expect(placeholders('{count, plural, one {day} other {days}}')).toEqual(['count'])
+    expect(placeholders('{count, plural, one {{name}} other {{name}s}}')).toEqual(['count', 'name'])
+  })
+
   test('rejects missing or unexpected count placeholders', () => {
     expect(() =>
       validateCatalogs({

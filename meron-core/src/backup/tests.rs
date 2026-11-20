@@ -1022,3 +1022,26 @@ fn restored_read_rules_do_not_replay_events_from_before_import() {
     store::apply_due_rules(&target, "a", "INBOX", 7, store::now_unix() + 600).unwrap();
     assert!(store::pending_rule_actions(&target, "a", "INBOX").unwrap()[0].trash);
 }
+
+#[test]
+fn an_unsent_floating_series_keeps_its_wall_times_in_a_backup() {
+    let conn = test_conn();
+    // Monday 00:30 wherever the reader is, changed here and not yet sent.
+    conn.execute(
+        "INSERT INTO events (id, start_at, end_at, recurring, rrule, calendar, ics)
+         VALUES ('f', 1, 2, 1, 'FREQ=WEEKLY;BYDAY=MO;COUNT=3', 'cal', ?1)",
+        params![
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:f\r\nDTSTART:20261005T003000\r\nDTEND:20261005T010000\r\n\
+             RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=3\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        ],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO dav_objects (calendar, url, local_id, state) VALUES ('cal', 'u', 'f', ?1)",
+        params![crate::caldav::store::CHANGED],
+    )
+    .unwrap();
+    let events = backup_events(&conn).unwrap();
+    assert!(events[0].ics.is_empty() && events[0].calendar.is_empty());
+    assert_eq!(Some(events[0].tzid.clone()), crate::calendar::local_tzid());
+}

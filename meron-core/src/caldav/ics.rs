@@ -7,16 +7,9 @@
 //! properties it changed, in the series' master VEVENT, and leaves every
 //! other line as the server sent it.
 
-use crate::calendar::events::date_lines;
+use crate::calendar::events::{date_lines, rrule_ics, rule_tz};
+use crate::calendar::rrule::{self, Timing};
 use crate::store::CalendarEvent;
-
-/// The repeat rules the editor offers, as an RRULE says them.
-const SIMPLE_FREQS: [(&str, &str); 4] = [
-    ("DAILY", "daily"),
-    ("WEEKLY", "weekly"),
-    ("MONTHLY", "monthly"),
-    ("YEARLY", "yearly"),
-];
 
 /// What a server object says about the event it holds, in the shape the
 /// `events` table keeps. `None` when it holds no VEVENT (a VTODO, a journal).
@@ -24,23 +17,42 @@ pub fn event_from_ics(ics: &str) -> Option<CalendarEvent> {
     let invite = crate::calendar::parse_invite(ics)?;
     let lines = unfold(ics);
     let master = master_event(&lines);
-    // The editor's repeat choices say how often and nothing else: a series
-    // with dates added, skipped or moved is one only its server can keep.
+    // The editor's repeats say a rule and nothing else: a series with dates
+    // added, skipped or moved is one only its server can keep.
     let has_exceptions = master.is_some_and(|(start, end)| {
         top_level(&lines, start, end).any(|l| matches!(name_of(l).as_str(), "EXDATE" | "RDATE"))
     }) || lines.iter().any(|l| name_of(l) == "RECURRENCE-ID");
-    let rrule = master
-        .and_then(|(start, end)| top_level(&lines, start, end).find(|l| name_of(l) == "RRULE"))
-        .and_then(|line| simple_rrule(value_of(line)))
-        .filter(|_| !has_exceptions)
-        .unwrap_or_default();
+    let dtstart = master
+        .and_then(|(start, end)| top_level(&lines, start, end).find(|l| name_of(l) == "DTSTART"));
     // A repeat keeps its wall-clock time in the zone DTSTART names, when that
     // is one the editor can use again.
-    let tzid = master
-        .and_then(|(start, end)| top_level(&lines, start, end).find(|l| name_of(l) == "DTSTART"))
+    let tzid = dtstart
         .and_then(|line| param_of(line, "TZID"))
         .filter(|tzid| tzid.parse::<calcard::common::timezone::Tz>().is_ok())
         .filter(|_| invite.recurring && !invite.all_day)
+        .unwrap_or_default();
+    let series = CalendarEvent {
+        all_day: invite.all_day,
+        tzid: tzid.clone(),
+        ..Default::default()
+    };
+    let tz = rule_tz(&series);
+    let timing = if invite.all_day {
+        Timing::AllDay
+    } else if dtstart.is_some_and(|l| is_floating(l)) {
+        Timing::Floating
+    } else {
+        Timing::Zoned(&tz)
+    };
+    // A zone the object defines itself, by a name no zone database has, is
+    // one a rule made here could not be timed in again.
+    let own_zone = dtstart
+        .and_then(|line| param_of(line, "TZID"))
+        .is_some_and(|tzid| tzid.parse::<calcard::common::timezone::Tz>().is_err());
+    let rrule = master
+        .and_then(|(start, end)| top_level(&lines, start, end).find(|l| name_of(l) == "RRULE"))
+        .filter(|_| !has_exceptions && !own_zone)
+        .and_then(|line| rrule::from_ics(value_of(line), timing, invite.start))
         .unwrap_or_default();
     Some(CalendarEvent {
         title: invite.summary,
@@ -50,7 +62,7 @@ pub fn event_from_ics(ics: &str) -> Option<CalendarEvent> {
         end_at: invite.end,
         all_day: invite.all_day,
         recurring: invite.recurring,
-        rrule: rrule.to_string(),
+        rrule,
         tzid,
         ics: ics.to_string(),
         ..Default::default()
@@ -107,17 +119,19 @@ pub fn patch(ics: &str, before: &CalendarEvent, after: &CalendarEvent) -> String
         || before.tzid != after.tzid;
     let timing_changed = start_changed || before.end_at != after.end_at;
     let rule_changed = before.recurring != after.recurring || before.rrule != after.rrule;
+    // An end date is written as DTSTART says times (a date, a floating time
+    // or an instant), so a series whose start changes how, or when in the
+    // day, has its end written again with it.
+    let rewrite_rule =
+        rule_changed || (start_changed && after.recurring && after.rrule.contains("UNTIL="));
+    // A floating time (a wall-clock time in no zone, which every device
+    // reads as its own) stays floating rather than turning into UTC.
+    let floating = !after.all_day
+        && after.tzid.is_empty()
+        && top_level(&lines, start, end)
+            .find(|l| name_of(l) == "DTSTART")
+            .is_some_and(|l| is_floating(l));
     if timing_changed {
-        // A floating time (a wall-clock time in no zone, which every device
-        // reads as its own) stays floating rather than turning into UTC.
-        let floating = !after.all_day
-            && after.tzid.is_empty()
-            && top_level(&lines, start, end)
-                .find(|l| name_of(l) == "DTSTART")
-                .is_some_and(|l| {
-                    let value = value_of(l).trim();
-                    param_of(l, "TZID").is_none() && value.contains('T') && !value.ends_with('Z')
-                });
         let (dtstart, dtend) = if floating {
             floating_lines(after)
         } else {
@@ -132,13 +146,13 @@ pub fn patch(ics: &str, before: &CalendarEvent, after: &CalendarEvent) -> String
         }
         add.push(dtend);
     }
-    if rule_changed {
+    if rewrite_rule {
         replace.push("RRULE");
         if !after.recurring {
             replace.extend(["RDATE", "EXDATE"]);
         }
         if !after.rrule.is_empty() {
-            add.push(format!("RRULE:FREQ={}", after.rrule.to_ascii_uppercase()));
+            add.push(format!("RRULE:{}", rrule_ics(after, floating)));
         }
     }
     if replace.is_empty() {
@@ -207,6 +221,73 @@ pub fn patch(ics: &str, before: &CalendarEvent, after: &CalendarEvent) -> String
     folded
 }
 
+/// `ics` as the series' occurrences are worked out from it: an RRULE's UTC
+/// end (RFC 5545 asks for one when DTSTART names a zone) restated as a wall
+/// time in that zone. calcard compares the end with each occurrence's wall
+/// time before placing it in the zone, so a UTC end would cut a series in a
+/// zone ahead of UTC short by the occurrences of its last day.
+pub fn for_expansion(ics: &str) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    let lines = unfold(ics);
+    let Some((start, end)) = master_event(&lines) else {
+        return Cow::Borrowed(ics);
+    };
+    let Some(tz) = top_level(&lines, start, end)
+        .find(|l| name_of(l) == "DTSTART")
+        .and_then(|l| param_of(l, "TZID"))
+        .and_then(|tzid| tzid.parse::<calcard::common::timezone::Tz>().ok())
+    else {
+        return Cow::Borrowed(ics);
+    };
+    let local_until = |part: &str| -> Option<String> {
+        let (key, value) = part.split_once('=')?;
+        if !key.trim().eq_ignore_ascii_case("UNTIL") {
+            return None;
+        }
+        let instant =
+            chrono::NaiveDateTime::parse_from_str(value.trim().strip_suffix('Z')?, "%Y%m%dT%H%M%S")
+                .ok()?;
+        use chrono::TimeZone as _;
+        Some(format!(
+            "UNTIL={}",
+            tz.from_utc_datetime(&instant)
+                .naive_local()
+                .format("%Y%m%dT%H%M%S")
+        ))
+    };
+    let mut changed = false;
+    let mut depth = 0usize;
+    let mut out = lines.clone();
+    for line in out.iter_mut().take(end).skip(start + 1) {
+        match name_of(line).as_str() {
+            "BEGIN" => depth += 1,
+            "END" => depth = depth.saturating_sub(1),
+            "RRULE" if depth == 0 => {
+                let value = value_of(line);
+                let rule: Vec<String> = value
+                    .split(';')
+                    .map(|part| local_until(part).unwrap_or_else(|| part.to_string()))
+                    .collect();
+                let rule = rule.join(";");
+                if rule != value {
+                    let head = line[..line.len() - value.len()].to_string();
+                    *line = format!("{head}{rule}");
+                    changed = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    if !changed {
+        return Cow::Borrowed(ics);
+    }
+    let mut folded = String::new();
+    for line in out {
+        fold_into(&mut folded, &line);
+    }
+    Cow::Owned(folded)
+}
+
 /// DTSTART and DTEND as floating wall-clock times, read in this device's
 /// zone as the event was.
 fn floating_lines(event: &CalendarEvent) -> (String, String) {
@@ -241,24 +322,20 @@ fn vtimezone(tzid: &str, start: i64) -> Option<Vec<String>> {
     Some(lines[begin..=begin + end].to_vec())
 }
 
-/// The editor's name for an RRULE that says nothing more than how often.
-fn simple_rrule(rule: &str) -> Option<&'static str> {
-    let mut freq = None;
-    for part in rule.split(';').filter(|p| !p.is_empty()) {
-        let (key, value) = part.split_once('=')?;
-        match key.to_ascii_uppercase().as_str() {
-            "FREQ" => freq = Some(value.to_ascii_uppercase()),
-            "INTERVAL" if value.trim() == "1" => {}
-            // WKST changes nothing for a rule without BYDAY.
-            "WKST" => {}
-            _ => return None,
-        }
-    }
-    let freq = freq?;
-    SIMPLE_FREQS
-        .iter()
-        .find(|(name, _)| *name == freq)
-        .map(|(_, simple)| *simple)
+/// Whether an object's series starts at a wall-clock time in no zone.
+pub(crate) fn starts_floating(ics: &str) -> bool {
+    let lines = unfold(ics);
+    master_event(&lines).is_some_and(|(start, end)| {
+        top_level(&lines, start, end)
+            .find(|l| name_of(l) == "DTSTART")
+            .is_some_and(|l| is_floating(l))
+    })
+}
+
+/// A DTSTART naming a wall-clock time in no zone.
+fn is_floating(line: &str) -> bool {
+    let value = value_of(line).trim();
+    param_of(line, "TZID").is_none() && value.contains('T') && !value.ends_with('Z')
 }
 
 /// Content lines with folding undone (RFC 5545 §3.1).
@@ -561,12 +638,112 @@ mod tests {
     }
 
     #[test]
-    fn simple_rules_round_trip() {
-        assert_eq!(simple_rrule("FREQ=WEEKLY"), Some("weekly"));
-        assert_eq!(simple_rrule("FREQ=DAILY;INTERVAL=1"), Some("daily"));
-        assert_eq!(simple_rrule("FREQ=WEEKLY;BYDAY=MO,WE"), None);
-        assert_eq!(simple_rrule("FREQ=MONTHLY;INTERVAL=2"), None);
-        assert_eq!(simple_rrule("FREQ=HOURLY"), None);
+    fn rules_the_editor_can_say_round_trip_and_others_stay_the_servers() {
+        let ics = |rule: &str| {
+            format!(
+                "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:r\r\nDTSTART;TZID=Asia/Tokyo:20261123T090000\r\n\
+                 DTEND;TZID=Asia/Tokyo:20261123T100000\r\nRRULE:{rule}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+            )
+        };
+        assert_eq!(event_from_ics(&ics("FREQ=WEEKLY")).unwrap().rrule, "weekly");
+        assert_eq!(
+            event_from_ics(&ics("FREQ=DAILY;INTERVAL=1")).unwrap().rrule,
+            "daily"
+        );
+        assert_eq!(event_from_ics(&ics("FREQ=HOURLY")).unwrap().rrule, "");
+        assert_eq!(
+            event_from_ics(&ics("FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=-1"))
+                .unwrap()
+                .rrule,
+            ""
+        );
+
+        // Every other Monday and Wednesday until 30 June, 09:00 Tokyo.
+        let server = ics("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;UNTIL=20270630T000000Z");
+        let before = event_from_ics(&server).unwrap();
+        assert_eq!(
+            before.rrule,
+            "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;UNTIL=20270630"
+        );
+        // Unchanged, the server's own line stays as it was.
+        assert_eq!(patch(&server, &before, &before), server);
+
+        let after = CalendarEvent {
+            rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10".into(),
+            ..before.clone()
+        };
+        let patched = patch(&server, &before, &after);
+        assert!(
+            patched.contains("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10\r\n"),
+            "{patched}"
+        );
+        let after = CalendarEvent {
+            rrule: "FREQ=WEEKLY;BYDAY=MO;UNTIL=20270701".into(),
+            ..before.clone()
+        };
+        let patched = patch(&server, &before, &after);
+        // The end of 1 July in Tokyo, as an instant (RFC 5545 §3.3.10).
+        assert!(
+            patched.contains("RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20270701T145959Z\r\n"),
+            "{patched}"
+        );
+        assert_eq!(event_from_ics(&patched).unwrap().rrule, after.rrule);
+    }
+
+    #[test]
+    fn an_end_date_follows_the_start_when_it_changes_form() {
+        // Weekly 09:00 Tokyo, ending with 30 June's occurrence itself.
+        let server = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:r\r\nDTSTART;TZID=Asia/Tokyo:20261123T090000\r\n\
+                      DTEND;TZID=Asia/Tokyo:20261123T100000\r\nRRULE:FREQ=WEEKLY;UNTIL=20270630T000000Z\r\n\
+                      END:VEVENT\r\nEND:VCALENDAR\r\n";
+        let before = event_from_ics(server).unwrap();
+        assert_eq!(before.rrule, "FREQ=WEEKLY;UNTIL=20270630");
+
+        // All day now: the end becomes a date, as DTSTART is.
+        let all_day = CalendarEvent {
+            all_day: true,
+            tzid: String::new(),
+            start_at: before.start_at.div_euclid(86_400) * 86_400,
+            end_at: before.start_at.div_euclid(86_400) * 86_400 + 86_400,
+            ..before.clone()
+        };
+        let patched = patch(server, &before, &all_day);
+        assert!(
+            patched.contains("RRULE:FREQ=WEEKLY;UNTIL=20270630\r\n"),
+            "{patched}"
+        );
+
+        // Later in the day: the end is the end of 30 June still, not 09:00.
+        let later = CalendarEvent {
+            start_at: before.start_at + 3 * 3600,
+            end_at: before.end_at + 3 * 3600,
+            ..before.clone()
+        };
+        let patched = patch(server, &before, &later);
+        assert!(
+            patched.contains("RRULE:FREQ=WEEKLY;UNTIL=20270630T145959Z\r\n"),
+            "{patched}"
+        );
+    }
+
+    #[test]
+    fn a_utc_series_counts_its_end_date_in_utc() {
+        // Daily 13:00 UTC, ending with 30 December's occurrence, read the same
+        // on any device.
+        let server = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:u\r\nDTSTART:20260701T130000Z\r\n\
+                      DTEND:20260701T140000Z\r\nRRULE:FREQ=DAILY;UNTIL=20261230T130000Z\r\n\
+                      END:VEVENT\r\nEND:VCALENDAR\r\n";
+        let event = event_from_ics(server).unwrap();
+        assert_eq!(event.rrule, "FREQ=DAILY;UNTIL=20261230");
+        let changed = CalendarEvent {
+            rrule: "FREQ=DAILY;UNTIL=20261231".into(),
+            ..event.clone()
+        };
+        let patched = patch(server, &event, &changed);
+        assert!(
+            patched.contains("RRULE:FREQ=DAILY;UNTIL=20261231T235959Z\r\n"),
+            "{patched}"
+        );
     }
 
     #[test]

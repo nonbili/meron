@@ -399,7 +399,11 @@ function placeholderMap(catalog: Catalog): Record<string, string[]> {
 
 function placeholders(value: string): string[] {
   const names = new Set<string>()
-  for (const match of value.matchAll(/\{([A-Za-z][A-Za-z0-9_]*)\s*(?=[,}])/g)) {
+  // A plural's branch is text, even one word of it ("one {day} other {days}").
+  const pattern = /,\s*plural\s*,/.test(value)
+    ? /(?<!\b(?:zero|one|two|few|many|other)\s*)\{([A-Za-z][A-Za-z0-9_]*)\s*(?=[,}])/g
+    : /\{([A-Za-z][A-Za-z0-9_]*)\s*(?=[,}])/g
+  for (const match of value.matchAll(pattern)) {
     names.add(match[1])
   }
   return [...names].sort()

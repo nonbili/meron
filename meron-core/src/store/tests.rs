@@ -6629,3 +6629,60 @@ fn unstarring_an_empty_branch_leaves_other_branches_in_other_folders() {
     let targets = starred_mutation_targets(&conn, "acct", "INBOX", Some(&key), &[], false).unwrap();
     assert_eq!(targets, BTreeMap::from([("INBOX".into(), vec![1])]));
 }
+
+#[test]
+fn synced_repeat_rules_are_read_again_once_the_editor_can_say_them() {
+    let conn = test_conn();
+    let ics = |rule: &str, extra: &str| {
+        format!(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nDTSTART:20261005T090000Z\r\n\
+             DTEND:20261005T100000Z\r\nRRULE:{rule}\r\n{extra}END:VEVENT\r\nEND:VCALENDAR\r\n"
+        )
+    };
+    let insert = |id: &str, ics: &str| {
+        conn.execute(
+            "INSERT INTO events (id, start_at, end_at, recurring, rrule, calendar, ics)
+             VALUES (?1, 0, 0, 1, '', 'cal', ?2)",
+            params![id, ics],
+        )
+        .unwrap();
+    };
+    insert("sayable", &ics("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE", ""));
+    insert(
+        "skipped",
+        &ics("FREQ=WEEKLY", "EXDATE:20261012T090000Z\r\n"),
+    );
+    // Taken on as `weekly` before the editor left a zone only its object
+    // defines to the server.
+    conn.execute(
+        "INSERT INTO events (id, start_at, end_at, recurring, rrule, calendar, ics)
+         VALUES ('own-zone', 0, 0, 1, 'weekly', 'cal', ?1)",
+        params![
+            "BEGIN:VCALENDAR\r\nBEGIN:VTIMEZONE\r\nTZID:Office Time\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\n\
+             TZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\nBEGIN:VEVENT\r\nUID:z\r\n\
+             DTSTART;TZID=Office Time:20261005T090000\r\nDTEND;TZID=Office Time:20261005T100000\r\n\
+             RRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        ],
+    )
+    .unwrap();
+    let rule = |id: &str| -> String {
+        conn.query_row("SELECT rrule FROM events WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })
+        .unwrap()
+    };
+
+    db::meta_set(&conn, "synced_rules_version", "0").unwrap();
+    db::reread_synced_repeat_rules(&conn).unwrap();
+    assert_eq!(rule("sayable"), "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE");
+    // Skipped dates are still the server's to keep.
+    assert_eq!(rule("skipped"), "");
+    // And one it no longer takes on goes back to the server.
+    assert_eq!(rule("own-zone"), "");
+
+    // Once done, it is not done again.
+    conn.execute("UPDATE events SET rrule = '' WHERE id = 'sayable'", [])
+        .unwrap();
+    db::reread_synced_repeat_rules(&conn).unwrap();
+    assert_eq!(rule("sayable"), "");
+}
