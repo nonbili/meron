@@ -7,16 +7,14 @@ import { Button } from '../button/Button'
 import { Avatar } from '../avatar/Avatar'
 import { Checkbox } from '../field/Checkbox'
 import { Dialog } from './Dialog'
-import { useCalendarAccountIdentity } from './useCalendarAccountIdentity'
 
 export function CalendarPickerDialog({ accountId, onClose }: { accountId: string; onClose: () => void }) {
   const { t } = useTranslation()
   const titleId = useId()
   const account = useValue(caldav$.accounts).find(({ id }) => id === accountId)
-  const { name, avatarUrl } = useCalendarAccountIdentity(account)
-  const [updating, setUpdating] = useState(false)
+  const name = account?.name ?? ''
   const [refreshing, setRefreshing] = useState(false)
-  const busy = updating || refreshing
+  const busy = refreshing
   const calendars = account?.calendars.filter((calendar) => calendar.events) ?? []
 
   return (
@@ -27,7 +25,7 @@ export function CalendarPickerDialog({ accountId, onClose }: { accountId: string
       {account && (
         <div className="mt-3 flex items-center gap-2.5">
           <span aria-hidden className="shrink-0">
-            <Avatar name={name} src={avatarUrl} size={32} />
+            <Avatar name={name} src={account.avatar_url} size={32} />
           </span>
           <div className="min-w-0 break-words text-xs">
             <p className="font-semibold">{name}</p>
@@ -47,14 +45,7 @@ export function CalendarPickerDialog({ accountId, onClose }: { accountId: string
               <Checkbox
                 checked={calendar.enabled}
                 disabled={busy}
-                onChange={async (event) => {
-                  setUpdating(true)
-                  try {
-                    await setCalendarEnabled(calendar.id, event.target.checked)
-                  } finally {
-                    setUpdating(false)
-                  }
-                }}
+                onChange={(event) => void setCalendarEnabled(calendar.id, event.target.checked)}
               />
               <span
                 aria-hidden

@@ -64,7 +64,7 @@ export function ColorSwatchPicker({
   }
 
   return (
-    <div role="radiogroup" aria-label={label} className="flex items-center gap-1.5">
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-1.5">
       {noneLabel !== undefined && (
         <button
           type="button"

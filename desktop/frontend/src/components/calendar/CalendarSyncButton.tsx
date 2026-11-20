@@ -29,7 +29,7 @@ export function CalendarSyncButton() {
   const failed = accounts.find((account) => account.last_error)
   const syncNow = t('settings.calendars.syncNow')
   const label = failed
-    ? `${syncNow} · ${failed.display_name || failed.server_url}: ${t('settings.calendars.syncFailed', { error: failed.last_error })}`
+    ? `${syncNow} · ${failed.name}: ${t('settings.calendars.syncFailed', { error: failed.last_error })}`
     : syncNow
 
   return (

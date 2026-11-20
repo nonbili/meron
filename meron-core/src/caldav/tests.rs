@@ -1228,3 +1228,71 @@ fn live_sync() {
             .all(|e| e.calendar.is_empty())
     );
 }
+
+#[test]
+fn unnamed_google_account_and_its_primary_calendar_go_by_the_mailbox_name() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    let server = "https://apidata.googleusercontent.com/caldav/v2/sam%40example.test/events/";
+    let mut account = store::DavAccount {
+        id: "dav-1".into(),
+        server_url: server.into(),
+        username: "sam@example.test".into(),
+        // What older Google connections saved: treated as unnamed.
+        display_name: "Google Calendar".into(),
+        google: true,
+        ..Default::default()
+    };
+    store::save_account(&conn, &account).unwrap();
+    store::reconcile_calendars(
+        &conn,
+        "dav-1",
+        &[
+            Calendar {
+                url: server.into(),
+                name: "sam@example.test".into(),
+                components: vec!["VEVENT".into()],
+                ..Default::default()
+            },
+            Calendar {
+                url: google_collection(Url::parse(server).unwrap(), "family@group.example.test")
+                    .unwrap()
+                    .to_string(),
+                name: "Family".into(),
+                components: vec!["VEVENT".into()],
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+
+    // No mailbox for the address: its address.
+    let accounts = service::accounts_payload(&conn).unwrap();
+    assert_eq!(accounts[0]["name"], "sam@example.test");
+
+    conn.execute(
+        "INSERT INTO accounts (id, email, display_name, avatar_url) VALUES ('mail-1', 'Sam@Example.test', 'Sam Rivera', '/media/sam.png')",
+        [],
+    )
+    .unwrap();
+    let accounts = service::accounts_payload(&conn).unwrap();
+    assert_eq!(accounts[0]["name"], "Sam Rivera");
+    assert_eq!(accounts[0]["avatar_url"], "/media/sam.png");
+    let calendars = accounts[0]["calendars"].as_array().unwrap();
+    assert_eq!(calendars[0]["name"], "Sam Rivera");
+    assert_eq!(calendars[0]["primary"], true);
+    assert_eq!(calendars[1]["name"], "Family");
+    assert_eq!(calendars[1]["primary"], false);
+    let shown = service::calendars_payload(&conn).unwrap();
+    let shown = shown["calendars"].as_array().unwrap();
+    assert!(shown.iter().all(|c| c["account_name"] == "Sam Rivera"));
+    assert_eq!(shown[0]["account_avatar_url"], "/media/sam.png");
+    assert!(shown.iter().any(|c| c["name"] == "Sam Rivera"));
+
+    // A name the user gives wins, the primary calendar's included.
+    account.display_name = "Work".into();
+    store::save_account(&conn, &account).unwrap();
+    let accounts = service::accounts_payload(&conn).unwrap();
+    assert_eq!(accounts[0]["name"], "Work");
+    assert_eq!(accounts[0]["calendars"][0]["name"], "Work");
+}

@@ -27,6 +27,8 @@ export type SyncedCalendar = {
   writable: boolean
   account_id: string
   account_name: string
+  account_avatar_url?: string
+  account_google?: boolean
 }
 
 /** One occurrence in a calendar range, as `calendar.events` shapes it (see

@@ -9,7 +9,7 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use super::Client;
-use super::store::{self, DavAccount};
+use super::store::{self, DavAccount, DavCalendar};
 use super::sync::{self, Report};
 use crate::engine::{Engine, default_oauth_client};
 use crate::oauth::{self, GOOGLE_CALENDAR_PROVIDER};
@@ -81,8 +81,10 @@ pub fn dispatch(engine: &Engine, method: &str, params: &Value) -> Result<Value> 
             let id = required("account_id")?;
             let mut account = store::account(&conn, id)?
                 .ok_or_else(|| anyhow!("no such CalDAV account: {id}"))?;
-            // An empty name goes back to the server's host, as on adding.
+            // An empty name goes back to the server's host, as on adding;
+            // a Google account's back to its mailbox's name.
             account.display_name = match text("display_name").trim() {
+                "" if account.google => String::new(),
                 "" => super::parse_server_url(&account.server_url)?
                     .host_str()
                     .unwrap_or(&account.username)
@@ -252,7 +254,8 @@ fn add_google(
                 id: id.clone(),
                 server_url: client.server.to_string(),
                 username: email,
-                display_name: "Google Calendar".into(),
+                // Unnamed: it goes by its mailbox's name (see `account_identity`).
+                display_name: String::new(),
                 google: true,
                 ..Default::default()
             },
@@ -358,9 +361,14 @@ pub fn set_calendar_enabled(
 ) -> Result<Value> {
     let calendar = store::calendar(&*lock(engine)?, calendar_id)?
         .ok_or_else(|| anyhow!("no such calendar: {calendar_id}"))?;
-    if !enabled {
-        flush_unsent(engine, &calendar.account, Some(calendar_id), discard_unsent);
+    if enabled {
+        // A sync already running listed its calendars before this one was
+        // on and leaves it alone, so there is nothing to wait for.
+        let conn = lock(engine)?;
+        store::set_enabled(&conn, calendar_id, true)?;
+        return Ok(json!({ "accounts": accounts_payload(&conn)? }));
     }
+    flush_unsent(engine, &calendar.account, Some(calendar_id), discard_unsent);
     // Nor halfway through for a calendar being turned off: an upload that
     // finished after would be taken for a deletion to send.
     let _sync = SyncGuard::claim(engine, &calendar.account)
@@ -614,22 +622,88 @@ pub fn sync(engine: &Engine, account_id: Option<&str>, automatic: bool) -> Resul
         total.pulled += report.pulled;
         total.pushed += report.pushed;
         if total.error.is_empty() && !report.error.is_empty() {
-            total.error = format!("{}: {}", account.display_name, report.error);
+            let name = account_identity(&*lock(engine)?, &account).name;
+            total.error = format!("{name}: {}", report.error);
         }
     }
     Ok(total)
+}
+
+/// What an account goes by. A Google account the user has not named takes
+/// its mailbox's name and picture, or its address without a mailbox.
+pub(crate) struct AccountIdentity {
+    pub name: String,
+    pub avatar_url: String,
+}
+
+/// Google connections made before accounts could go unnamed all saved this.
+const OLD_GOOGLE_DEFAULT_NAME: &str = "Google Calendar";
+
+pub(crate) fn account_identity(
+    conn: &rusqlite::Connection,
+    account: &DavAccount,
+) -> AccountIdentity {
+    let saved = account.display_name.trim();
+    if !account.google {
+        let name = if saved.is_empty() {
+            account.server_url.as_str()
+        } else {
+            saved
+        };
+        return AccountIdentity {
+            name: name.to_string(),
+            avatar_url: String::new(),
+        };
+    }
+    let (mailbox_name, avatar_url) = conn
+        .query_row(
+            "SELECT display_name, avatar_url FROM accounts
+             WHERE lower(trim(email)) = lower(trim(?1)) ORDER BY sort_order LIMIT 1",
+            [&account.username],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .unwrap_or_default();
+    let name = if !saved.is_empty() && saved != OLD_GOOGLE_DEFAULT_NAME {
+        saved.to_string()
+    } else if !mailbox_name.trim().is_empty() {
+        mailbox_name.trim().to_string()
+    } else {
+        account.username.clone()
+    };
+    AccountIdentity { name, avatar_url }
+}
+
+/// Google's primary calendar is named after the account's address, which
+/// reads better as the account's own name.
+fn calendar_name(
+    account: &DavAccount,
+    identity: &AccountIdentity,
+    calendar: &DavCalendar,
+) -> String {
+    if is_primary(account, calendar) {
+        identity.name.clone()
+    } else {
+        calendar.name.clone()
+    }
+}
+
+/// The calendar Google keeps at the account's own collection.
+fn is_primary(account: &DavAccount, calendar: &DavCalendar) -> bool {
+    account.google && super::same_google_collection_str(&calendar.url, &account.server_url)
 }
 
 /// Every account with its calendars, for settings.
 pub fn accounts_payload(conn: &rusqlite::Connection) -> Result<Value> {
     let mut out = Vec::new();
     for account in store::accounts(conn)? {
+        let identity = account_identity(conn, &account);
         let calendars: Vec<Value> = store::calendars(conn, &account.id)?
             .iter()
             .map(|calendar| {
                 json!({
                     "id": calendar.id,
-                    "name": calendar.name,
+                    "name": calendar_name(&account, &identity, calendar),
+                    "primary": is_primary(&account, calendar),
                     "color": calendar.shown_color(),
                     "read_only": calendar.read_only,
                     "enabled": calendar.enabled,
@@ -644,6 +718,8 @@ pub fn accounts_payload(conn: &rusqlite::Connection) -> Result<Value> {
             "username": account.username,
             "google": account.google,
             "display_name": account.display_name,
+            "name": identity.name,
+            "avatar_url": identity.avatar_url,
             "last_sync_at": account.last_sync_at,
             "last_error": account.last_error,
             "discovery_warning": if account.google_calendar_list_disabled {
@@ -662,19 +738,27 @@ pub fn accounts_payload(conn: &rusqlite::Connection) -> Result<Value> {
 /// calendar, with `writable` for the editor's picker and `color` for the
 /// view.
 pub fn calendars_payload(conn: &rusqlite::Connection) -> Result<Value> {
-    let accounts = store::accounts(conn)?;
+    let accounts: Vec<_> = store::accounts(conn)?
+        .into_iter()
+        .map(|account| {
+            let identity = account_identity(conn, &account);
+            (account, identity)
+        })
+        .collect();
     let calendars: Vec<Value> = store::all_calendars(conn)?
         .iter()
         .filter(|c| c.enabled && c.supports("VEVENT"))
         .map(|calendar| {
-            let account = accounts.iter().find(|a| a.id == calendar.account);
+            let account = accounts.iter().find(|(a, _)| a.id == calendar.account);
             json!({
                 "id": calendar.id,
-                "name": calendar.name,
+                "name": account.map_or_else(|| calendar.name.clone(), |(a, i)| calendar_name(a, i, calendar)),
                 "color": calendar.shown_color(),
                 "writable": !calendar.read_only,
                 "account_id": calendar.account,
-                "account_name": account.map(|a| a.display_name.as_str()).unwrap_or_default(),
+                "account_name": account.map(|(_, i)| i.name.as_str()).unwrap_or_default(),
+                "account_avatar_url": account.map(|(_, i)| i.avatar_url.as_str()).unwrap_or_default(),
+                "account_google": account.is_some_and(|(a, _)| a.google),
             })
         })
         .collect();

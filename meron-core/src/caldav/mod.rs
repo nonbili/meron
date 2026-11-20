@@ -1390,7 +1390,7 @@ fn same_google_collection(a: &Url, b: &Url) -> bool {
     a.origin() == b.origin() && segments(a) == segments(b)
 }
 
-fn same_google_collection_str(a: &str, b: &str) -> bool {
+pub(crate) fn same_google_collection_str(a: &str, b: &str) -> bool {
     match (Url::parse(a), Url::parse(b)) {
         (Ok(a), Ok(b)) => same_google_collection(&a, &b),
         _ => false,

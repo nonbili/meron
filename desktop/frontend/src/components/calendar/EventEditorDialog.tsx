@@ -34,7 +34,11 @@ const CUSTOM_REPEAT: { value: CalendarRepeat; label: string } = { value: 'custom
 /** A calendar as the picker names it: with its account, since two accounts
  * can each have a "Personal". */
 function calendarLabel(calendar: SyncedCalendar, note: string): string {
-  const name = calendar.account_name ? `${calendar.name} (${calendar.account_name})` : calendar.name
+  // A primary calendar already goes by its account's name.
+  const name =
+    calendar.account_name && calendar.name !== calendar.account_name
+      ? `${calendar.name} (${calendar.account_name})`
+      : calendar.name
   return note ? `${name} · ${note}` : name
 }
 

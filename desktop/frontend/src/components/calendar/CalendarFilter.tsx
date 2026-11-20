@@ -1,6 +1,6 @@
 import { useValue } from '@legendapp/state/react'
 import { Layers } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from '../../lib/i18n'
 import {
   calendar$,
@@ -11,9 +11,11 @@ import {
 } from '../../states/calendar'
 import { IconButton } from '../button/IconButton'
 import { Checkbox } from '../field/Checkbox'
+import { CalendarColorEditor } from './CalendarColorEditor'
 import { MenuSurface } from '../menu/MenuSurface'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { clsx } from '../../lib/utils'
+import { Avatar } from '../avatar/Avatar'
 
 /** Which calendars the views draw: this device's events, then each synced
  * calendar under its account, in its colour. Hiding one only leaves it out
@@ -64,9 +66,14 @@ export function CalendarList() {
   const { t } = useTranslation()
   const calendars = useValue(calendar$.calendars)
   const hidden = useValue(calendar$.hiddenCalendars)
-  const accounts = new Map<string, { name: string; calendars: SyncedCalendar[] }>()
+  const accounts = new Map<string, { name: string; avatar?: string; google: boolean; calendars: SyncedCalendar[] }>()
   for (const calendar of calendars) {
-    const account = accounts.get(calendar.account_id) ?? { name: calendar.account_name, calendars: [] }
+    const account = accounts.get(calendar.account_id) ?? {
+      name: calendar.account_name,
+      avatar: calendar.account_avatar_url,
+      google: !!calendar.account_google,
+      calendars: [],
+    }
     account.calendars.push(calendar)
     accounts.set(calendar.account_id, account)
   }
@@ -80,12 +87,20 @@ export function CalendarList() {
       />
       {[...accounts.entries()].map(([id, account]) => (
         <div key={id} className="flex flex-col gap-0.5">
-          <span className="mt-1.5 truncate px-2 text-[0.6875rem] font-semibold text-secondary">{account.name}</span>
+          <span className="mt-1.5 flex min-w-0 items-center gap-1.5 px-2 text-[0.6875rem] font-semibold text-secondary">
+            {account.google && (
+              <span aria-hidden className="shrink-0">
+                <Avatar name={account.name} src={account.avatar} size={16} />
+              </span>
+            )}
+            <span className="truncate">{account.name}</span>
+          </span>
           {account.calendars.map((calendar) => (
             <CalendarRow
               key={calendar.id}
               name={calendar.name}
               color={calendarColor(calendar)}
+              calendarId={calendar.id}
               shown={!hidden.includes(calendar.id)}
               onToggle={() => toggleCalendarShown(calendar.id)}
             />
@@ -100,26 +115,42 @@ function CalendarRow({
   name,
   color,
   colorClass,
+  calendarId,
   shown,
   onToggle,
 }: {
   name: string
   color?: string
   colorClass?: string
+  /** A synced calendar, whose colour can be changed from here. */
+  calendarId?: string
   shown: boolean
   onToggle: () => void
 }) {
-  return (
-    <label className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-primary cursor-pointer hover:bg-hover">
-      <Checkbox checked={shown} onChange={onToggle} />
-      <span
-        className={`h-2.5 w-2.5 shrink-0 rounded-full ${colorClass ?? ''}`}
-        style={color ? { backgroundColor: color } : undefined}
-        aria-hidden
-      />
-      <span className="truncate" title={name}>
+  const id = useId()
+  const row = (dot: ReactNode) => (
+    <div className="flex min-w-0 items-center gap-1 rounded-lg ps-2 text-xs text-primary hover:bg-hover">
+      <Checkbox id={id} checked={shown} onChange={onToggle} />
+      {dot}
+      <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer truncate py-1.5 pe-2" title={name}>
         {name}
-      </span>
-    </label>
+      </label>
+    </div>
+  )
+  if (calendarId && color) {
+    return (
+      <CalendarColorEditor calendarId={calendarId} color={color}>
+        {row}
+      </CalendarColorEditor>
+    )
+  }
+  return row(
+    <span className="flex size-5 shrink-0 items-center justify-center">
+      <span
+        aria-hidden
+        className={`size-2.5 rounded-full ${colorClass ?? ''}`}
+        style={color ? { backgroundColor: color } : undefined}
+      />
+    </span>,
   )
 }

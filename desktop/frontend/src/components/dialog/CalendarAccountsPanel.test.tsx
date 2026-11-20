@@ -33,7 +33,10 @@ const googleCalendars: CalendarAccount = {
   server_url: 'https://dav.example.test/google/',
   username: google.email,
   google: true,
-  display_name: 'Google Calendar',
+  // Unnamed: the core calls it by its mailbox's name and picture.
+  display_name: '',
+  name: google.display_name,
+  avatar_url: google.avatar_url,
   last_sync_at: 0,
   last_error: '',
   sync_interval: 15,
@@ -192,10 +195,10 @@ describe('finding calendars for existing mail accounts', () => {
     expect(calls.some(({ method }) => method === 'caldav.connectGoogle')).toBe(false)
   })
 
-  it('uses the mailbox name and avatar by default without overriding a custom calendar account name', async () => {
+  it('shows each account by the name and avatar the core resolves', async () => {
     calendarAccounts = [
-      { ...googleCalendars, username: google.email.toUpperCase() },
-      { ...googleCalendars, id: 'custom-name', display_name: 'Shared schedules' },
+      googleCalendars,
+      { ...googleCalendars, id: 'custom-name', display_name: 'Shared schedules', name: 'Shared schedules' },
     ]
     render(<CalendarAccountsPanel />)
     const card = await screen.findByRole('button', { name: google.display_name })
@@ -242,6 +245,7 @@ describe('finding calendars for existing mail accounts', () => {
         username: mailbox.email,
         google: false,
         display_name: 'Work account',
+        name: 'Work account',
         last_sync_at: 0,
         last_error: '',
         sync_interval: 15,
@@ -257,7 +261,6 @@ describe('finding calendars for existing mail accounts', () => {
     fireEvent.click(account)
     expect(account.getAttribute('aria-expanded')).toBe('true')
     const edit = screen.getByRole('button', { name: 'Edit calendar' })
-    expect(edit.textContent).toBe('Edit')
     fireEvent.click(edit)
     fireEvent.change(screen.getByRole('textbox', { name: 'Calendar name' }), { target: { value: 'Studio' } })
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
@@ -266,5 +269,27 @@ describe('finding calendars for existing mail accounts', () => {
     fireEvent.click(account)
     expect(account.getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByRole('button', { name: 'Edit calendar' })).toBeNull()
+  })
+
+  it("changes a Google calendar's colour from its dot, with no edit button", async () => {
+    calendarAccounts = [googleCalendars]
+    render(<CalendarAccountsPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: google.display_name }))
+    expect(screen.queryByRole('button', { name: 'Edit calendar' })).toBeNull()
+    const [dot] = screen.getAllByRole('button', { name: 'Colour' })
+    fireEvent.click(dot)
+    expect(dot.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(dot.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(dot)
+    fireEvent.pointerDown(document.body)
+    expect(dot.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(dot)
+    await act(async () => fireEvent.click(screen.getByRole('radio', { name: 'Blue' })))
+    expect(calls).toContainEqual({
+      method: 'caldav.updateCalendar',
+      payload: { calendar_id: 'personal', color: '#3b82f6' },
+    })
+    expect(dot.getAttribute('aria-expanded')).toBe('false')
   })
 })

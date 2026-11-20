@@ -12,6 +12,8 @@ export type CalendarAccountCalendar = {
   color: string
   read_only: boolean
   enabled: boolean
+  /** Google's primary calendar, which `name` calls by the account's name. */
+  primary?: boolean
   /** Holds events (VEVENT); only these are shown in the calendar. */
   events: boolean
   /** Holds to-dos (VTODO). */
@@ -24,7 +26,13 @@ export type CalendarAccount = {
   server_url: string
   username: string
   google: boolean
+  /** The name the user gave; empty for a Google account that goes by its
+   * mailbox's. */
   display_name: string
+  /** What the account is called everywhere. */
+  name: string
+  /** Its mailbox's picture, for a Google account. */
+  avatar_url?: string
   /** Epoch seconds of the last sync that finished cleanly; 0 for never. */
   last_sync_at: number
   /** Why the last sync failed; empty when it did not. */
@@ -105,7 +113,7 @@ type AccountsAnswer = {
 /** Run a change that drops a calendar's events from this device. When some
  * of them were changed here and cannot reach the server yet, ask before
  * throwing those changes away. */
-async function dropping(method: string, params: Record<string, unknown>) {
+async function dropping(method: string, params: Record<string, unknown>): Promise<boolean> {
   try {
     let res = await invoke<AccountsAnswer>(method, params)
     if (res?.unsent) {
@@ -116,20 +124,22 @@ async function dropping(method: string, params: Record<string, unknown>) {
         confirmLabel: t('settings.calendars.discardUnsent'),
         tone: 'danger',
       })
-      if (!confirmed) return
+      if (!confirmed) return false
       res = await invoke<AccountsAnswer>(method, { ...params, discard_unsent: true })
     }
     setAccounts(res)
     refreshCalendars()
+    return true
   } catch (error) {
     showToast(errorMessage(error, t('settings.calendars.saveFailed')), 'error')
+    return false
   }
 }
 
 export async function removeCalendarAccount(account: CalendarAccount) {
   const confirmed = await confirmAction({
     title: t('settings.calendars.remove'),
-    message: t('settings.calendars.removeConfirm', { name: account.display_name || account.server_url }),
+    message: t('settings.calendars.removeConfirm', { name: account.name }),
     confirmLabel: t('settings.calendars.remove'),
     tone: 'danger',
   })
@@ -137,17 +147,57 @@ export async function removeCalendarAccount(account: CalendarAccount) {
   await dropping('caldav.remove', { account_id: account.id })
 }
 
+/** Accounts with a sync running from here, and whether another is wanted
+ * once it ends: turning on several calendars in a row syncs twice at most,
+ * not once per switch. */
+const followUps = new Map<string, boolean>()
+
+async function syncSoon(accountId: string) {
+  if (followUps.has(accountId)) {
+    followUps.set(accountId, true)
+    return
+  }
+  do {
+    followUps.set(accountId, false)
+    await syncCalendarAccount(accountId)
+    refreshCalendars()
+  } while (followUps.get(accountId))
+  followUps.delete(accountId)
+}
+
+/** Show the switch's new state at once; the answer, or a reload when the
+ * change fails, puts the truth back. */
+function markEnabled(calendarId: string, enabled: boolean) {
+  caldav$.accounts.set(
+    caldav$.accounts.peek().map((account) => ({
+      ...account,
+      calendars: account.calendars.map((calendar) =>
+        calendar.id === calendarId ? { ...calendar, enabled } : calendar,
+      ),
+    })),
+  )
+}
+
 export async function setCalendarEnabled(calendarId: string, enabled: boolean) {
+  markEnabled(calendarId, enabled)
   if (enabled) {
     try {
       setAccounts(await invoke<AccountsAnswer>('caldav.setCalendarEnabled', { calendar_id: calendarId, enabled }))
       refreshCalendars()
     } catch (error) {
+      void loadCalendarAccounts()
       showToast(errorMessage(error, t('settings.calendars.saveFailed')), 'error')
+      return
     }
+    // A calendar just turned on has no events here yet: fetch them now
+    // rather than at the next scheduled sync.
+    const account = caldav$.accounts.peek().find((a) => a.calendars.some((c) => c.id === calendarId))
+    if (account) void syncSoon(account.id)
     return
   }
-  await dropping('caldav.setCalendarEnabled', { calendar_id: calendarId, enabled })
+  if (!(await dropping('caldav.setCalendarEnabled', { calendar_id: calendarId, enabled }))) {
+    void loadCalendarAccounts()
+  }
 }
 
 /** Make a new calendar on an account's server. Throws with the server's
