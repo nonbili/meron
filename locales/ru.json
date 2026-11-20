@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Найти календари почтового аккаунта",
+  "settings.calendars.discoveryNoServer": "Не удалось автоматически найти сервер календаря. Вы можете ввести его адрес ниже.",
   "eml.open": "Открыть файл EML…",
   "contacts.notes": "Заметки",
   "contacts.notesPlaceholder": "Добавить заметку…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Выберите провайдера для подключения.",
   "accounts.setup.connectMailAccount": "Подключить почтовый аккаунт",
   "accounts.setup.feedAccountHint": "Аккаунт RSS может содержать несколько лент. Добавьте первую сейчас или добавляйте ленты позже через меню аккаунта.",
+  "accounts.setup.caldavFound": "Мы нашли сервер календаря для вашего почтового домена. Его можно подключить сейчас или позже в разделе Настройки → Календари.",
+  "accounts.setup.connectCalendar": "Подключить календарь",
   "accounts.setup.googleCalendarAccess": "Синхронизируйте события основного календаря в обоих направлениях. Для подключения по CalDAV Google запрашивает полный доступ к календарю. Его можно подключить позже в разделе Настройки → Календари.",
   "accounts.setup.imapSmtpAccount": "Аккаунт IMAP / SMTP",
   "accounts.setup.oauthTab": "OAuth",

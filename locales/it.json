@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Trova i calendari di un account di posta",
+  "settings.calendars.discoveryNoServer": "Non è stato trovato automaticamente alcun server di calendario. Puoi inserire l’indirizzo qui sotto.",
   "eml.open": "Apri file EML…",
   "contacts.notes": "Note",
   "contacts.notesPlaceholder": "Aggiungi una nota…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Scegli un fornitore da connettere.",
   "accounts.setup.connectMailAccount": "Connetti un account e-mail",
   "accounts.setup.feedAccountHint": "Crea l'account ora; aggiungi altri feed in qualsiasi momento con il \"+\" sopra l'elenco dei feed.",
+  "accounts.setup.caldavFound": "Abbiamo trovato un server di calendario per il tuo dominio email. Puoi collegarlo ora o più tardi da Impostazioni → Calendari.",
+  "accounts.setup.connectCalendar": "Collega calendario",
   "accounts.setup.googleCalendarAccess": "Sincronizza in entrambe le direzioni gli eventi del tuo calendario principale. Google richiede l’accesso completo al calendario per la connessione tramite CalDAV. Puoi collegarlo in seguito da Impostazioni → Calendari.",
   "accounts.setup.imapSmtpAccount": "Account IMAP/SMTP",
   "accounts.setup.oauthTab": "OAuth",

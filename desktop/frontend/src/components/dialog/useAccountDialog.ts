@@ -4,11 +4,13 @@ import { invoke } from '../../lib/bridge'
 import { boot } from '../../boot'
 import { ui$, type SetupMode } from '../../states/ui'
 import { accounts$ } from '../../states/accounts'
+import { discoverCalendarServer } from '../../states/caldav'
 import { settings$ } from '../../states/settings'
 import { clearSyncErrorFor } from '../../states/connectivity'
 import { openMailAccount } from '../../states/kanban'
 import { nextRssAccountDisplayName } from '../../states/feeds'
 import { errorMessage } from '../../lib/errors'
+import { isGoogleMailbox } from '../../lib/googleMailbox'
 import { securityForPort, serverSelectionAfterDiscovery, type MailSecurity } from './accountSecurity'
 import {
   certificateProbePayload,
@@ -20,6 +22,22 @@ import {
 } from '../../lib/certificateTrust'
 
 type AddAccountResult = { account?: { id?: string } }
+
+async function offerDiscoveredCalendar(account: { id: string; email: string }) {
+  try {
+    const server = await discoverCalendarServer(account.email)
+    if (
+      server &&
+      settings$.calendarEnabled.peek() &&
+      ui$.selectedAccount.peek() === account.id &&
+      !ui$.setupOpen.peek()
+    ) {
+      ui$.caldavSetup.set({ email: account.email, server })
+    }
+  } catch {
+    // Calendar discovery is best-effort and must not affect the saved mailbox.
+  }
+}
 
 // All of the account-setup dialog's state and backend flows: provider OAuth
 // (begin + poll), IMAP/SMTP autodiscovery, and the final save. Returned to the
@@ -101,6 +119,24 @@ export function useAccountDialog() {
     openMailAccount(created.id)
     ui$.selectedThread.set('')
     return created
+  }
+
+  const offerCalendar = (
+    before: Set<string>,
+    created: ReturnType<typeof selectCreatedAccount>,
+    provider: SetupMode,
+  ) => {
+    if (
+      !created ||
+      before.has(created.id) ||
+      reconnectAccount ||
+      provider === 'rss' ||
+      !settings$.calendarEnabled.peek()
+    )
+      return
+    if (isGoogleMailbox(created)) {
+      if (provider === 'gmail' || gmailConfigured) ui$.googleCalendarSetupEmail.set(created.email)
+    } else void offerDiscoveredCalendar(created)
   }
 
   useEffect(() => {
@@ -227,15 +263,7 @@ export function useAccountDialog() {
         ui$.setupOpen.set(false)
         await boot()
         const created = selectCreatedAccount(before, added.account?.id)
-        if (
-          provider === 'gmail' &&
-          !reconnectAccount &&
-          created &&
-          !before.has(created.id) &&
-          settings$.calendarEnabled.peek()
-        ) {
-          ui$.googleCalendarSetupEmail.set(created.email)
-        }
+        offerCalendar(before, created, provider)
       }
     } catch (err) {
       console.error('Failed to poll profile', err)
@@ -465,6 +493,7 @@ export function useAccountDialog() {
       if (ui$.settingsOpen.peek()) {
         if (created) ui$.accountSettingsId.set(created.id)
       }
+      offerCalendar(before, created, mode)
     } catch (err) {
       const message = errorMessage(err, 'Could not save account')
       // A server whose certificate does not validate (a local bridge with a

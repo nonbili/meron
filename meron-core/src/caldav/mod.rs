@@ -10,6 +10,7 @@
 //! calendar home, so each is tried until a `calendar-home-set` turns up.
 //! Nextcloud, Stalwart, Radicale, Fastmail and iCloud all answer one of these.
 
+mod discovery;
 pub mod ics;
 pub mod service;
 pub mod store;

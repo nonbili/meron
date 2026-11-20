@@ -25,6 +25,10 @@ pub fn dispatch(engine: &Engine, method: &str, params: &Value) -> Result<Value> 
     let flag = |key: &str| params.get(key).and_then(Value::as_bool);
     let conn = || engine.db.lock().map_err(|_| anyhow!("store lock poisoned"));
     match method {
+        "caldav.discoverServer" => Ok(json!({
+            "server_url": super::discovery::discover_server(required("email")?)
+                .map(|url| url.to_string()),
+        })),
         "caldav.accounts" => Ok(json!({ "accounts": accounts_payload(&*conn()?)? })),
         "caldav.calendars" => calendars_payload(&*conn()?),
         "caldav.add" => add_account(

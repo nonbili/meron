@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Leia e-posti konto kalendrid",
+  "settings.calendars.discoveryNoServer": "Kalendriserverit ei leitud automaatselt. Saad serveri aadressi allpool sisestada.",
   "eml.open": "Ava EML-fail…",
   "contacts.notes": "Märkmed",
   "contacts.notesPlaceholder": "Lisa märge…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Vali ühendamiseks teenusepakkuja.",
   "accounts.setup.connectMailAccount": "Ühenda e-posti konto",
   "accounts.setup.feedAccountHint": "Loo konto nüüd; saad lisada vooge igal ajal voo loendi kohal oleva nupu \"+\" abil.",
+  "accounts.setup.caldavFound": "Leidsime sinu e-posti domeeni kalendriserveri. Saad selle ühendada kohe või hiljem menüüs Seaded → Kalendrid.",
+  "accounts.setup.connectCalendar": "Ühenda kalender",
   "accounts.setup.googleCalendarAccess": "Sünkrooni oma põhikalendri sündmusi mõlemas suunas. Google küsib CalDAV-ühenduse jaoks täielikku juurdepääsu kalendrile. Saad kalendri hiljem ühendada menüüs Seaded → Kalendrid.",
   "accounts.setup.imapSmtpAccount": "IMAP / SMTP konto",
   "accounts.setup.oauthTab": "OAuth",

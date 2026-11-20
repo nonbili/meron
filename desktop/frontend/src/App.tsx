@@ -40,6 +40,7 @@ import { UpdateBanner } from './components/banner/UpdateBanner'
 import { SetupScreen } from './components/setup/SetupScreen'
 import { AccountDialog } from './components/dialog/AccountDialog'
 import { GoogleCalendarSetupDialog } from './components/dialog/GoogleCalendarSetupDialog'
+import { CaldavSetupDialog } from './components/dialog/CaldavSetupDialog'
 import { SettingsDialog } from './components/dialog/SettingsDialog'
 import { AddFeedDialog } from './components/dialog/AddFeedDialog'
 import { FeedEditDialog } from './components/dialog/FeedEditDialog'
@@ -182,6 +183,7 @@ export default function App() {
         {settingsOpen && <SettingsDialog />}
         {setupOpen && <AccountDialog />}
         <GoogleCalendarSetupDialog />
+        <CaldavSetupDialog />
         {addFeedAccount && <AddFeedDialog />}
         {editFeed && <FeedEditDialog />}
         {/* End-to-end encryption: opened from messages, the composer and Settings. */}

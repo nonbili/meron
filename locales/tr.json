@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Bir e-posta hesabının takvimlerini bul",
+  "settings.calendars.discoveryNoServer": "Takvim sunucusu otomatik olarak bulunamadı. Sunucu adresini aşağıya girebilirsiniz.",
   "eml.open": "EML dosyası aç…",
   "contacts.notes": "Notlar",
   "contacts.notesPlaceholder": "Not ekle…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Bağlanmak için bir sağlayıcı seçin.",
   "accounts.setup.connectMailAccount": "Bir E-posta Hesabı Bağlayın",
   "accounts.setup.feedAccountHint": "Hesabı şimdi oluşturun; besleme listesinin üzerindeki \"+\" simgesiyle istediğiniz zaman daha fazla besleme ekleyin.",
+  "accounts.setup.caldavFound": "E-posta alan adınız için bir takvim sunucusu bulduk. Şimdi veya daha sonra Ayarlar → Takvimler bölümünden bağlanabilirsiniz.",
+  "accounts.setup.connectCalendar": "Takvimi bağla",
   "accounts.setup.googleCalendarAccess": "Birincil takviminizdeki etkinlikleri iki yönlü eşitleyin. Google, CalDAV üzerinden bağlanmak için Takvim’e tam erişim ister. Daha sonra Ayarlar → Takvimler bölümünden bağlayabilirsiniz.",
   "accounts.setup.imapSmtpAccount": "IMAP/SMTP hesabı",
   "accounts.setup.oauthTab": "OAuth",

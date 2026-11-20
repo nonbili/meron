@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Знайти календарі поштового облікового запису",
+  "settings.calendars.discoveryNoServer": "Не вдалося автоматично знайти сервер календаря. Ви можете ввести його адресу нижче.",
   "eml.open": "Відкрити файл EML…",
   "contacts.notes": "Нотатки",
   "contacts.notesPlaceholder": "Додати нотатку…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Виберіть постачальника для під'єднання.",
   "accounts.setup.connectMailAccount": "Під'єднати поштовий обліковий запис",
   "accounts.setup.feedAccountHint": "Обліковий запис RSS може містити кілька стрічок. Додайте першу зараз або додавайте стрічки пізніше через меню облікового запису.",
+  "accounts.setup.caldavFound": "Ми знайшли сервер календаря для вашого поштового домену. Його можна під’єднати зараз або пізніше в розділі Налаштування → Календарі.",
+  "accounts.setup.connectCalendar": "Під’єднати календар",
   "accounts.setup.googleCalendarAccess": "Синхронізуйте події основного календаря в обох напрямках. Для під’єднання через CalDAV Google запитує повний доступ до календаря. Календар можна під’єднати пізніше в розділі Налаштування → Календарі.",
   "accounts.setup.imapSmtpAccount": "Обліковий запис IMAP / SMTP",
   "accounts.setup.oauthTab": "OAuth",

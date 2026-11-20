@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Hitta kalendrar för ett e-postkonto",
+  "settings.calendars.discoveryNoServer": "Ingen kalenderserver hittades automatiskt. Du kan ange serveradressen nedan.",
   "eml.open": "Öppna EML-fil…",
   "contacts.notes": "Anteckningar",
   "contacts.notesPlaceholder": "Lägg till en anteckning…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Välj en leverantör att ansluta.",
   "accounts.setup.connectMailAccount": "Anslut ett e-postkonto",
   "accounts.setup.feedAccountHint": "Skapa kontot nu; lägg till fler flöden när som helst med \"+\" ovanför flödeslistan.",
+  "accounts.setup.caldavFound": "Vi hittade en kalenderserver för din e-postdomän. Du kan ansluta den nu eller senare under Inställningar → Kalendrar.",
+  "accounts.setup.connectCalendar": "Anslut kalender",
   "accounts.setup.googleCalendarAccess": "Synkronisera händelser i din primära kalender åt båda håll. Google begär fullständig kalenderåtkomst för anslutningen via CalDAV. Du kan ansluta kalendern senare under Inställningar → Kalendrar.",
   "accounts.setup.imapSmtpAccount": "IMAP / SMTP-konto",
   "accounts.setup.oauthTab": "OAuth",

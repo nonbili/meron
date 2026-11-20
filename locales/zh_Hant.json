@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "尋找郵件帳戶的日曆",
+  "settings.calendars.discoveryNoServer": "未自動找到日曆伺服器。你可以在下方輸入伺服器位址。",
   "eml.open": "開啟 EML 檔案…",
   "contacts.notes": "備註",
   "contacts.notesPlaceholder": "新增備註…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "選擇要連結的提供者。",
   "accounts.setup.connectMailAccount": "連結郵件帳戶",
   "accounts.setup.feedAccountHint": "立即建立帳戶；隨時使用訂閱源清單上方的 \"+\" 新增更多訂閱源。",
+  "accounts.setup.caldavFound": "已找到與你的電子郵件網域對應的日曆伺服器。你可以立即連結，也可以稍後在設定 → 日曆中連結。",
+  "accounts.setup.connectCalendar": "連結日曆",
   "accounts.setup.googleCalendarAccess": "雙向同步主要日曆中的活動。透過 CalDAV 連線時，Google 會要求完整的日曆存取權限。你可以稍後在設定 → 日曆中連結。",
   "accounts.setup.imapSmtpAccount": "IMAP/SMTP 帳戶",
   "accounts.setup.oauthTab": "OAuth",

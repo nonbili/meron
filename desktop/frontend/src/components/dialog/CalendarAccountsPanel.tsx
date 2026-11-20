@@ -3,12 +3,15 @@ import { KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { formatThreadDate } from '../../lib/date'
 import { errorMessage } from '../../lib/errors'
+import { isGoogleMailbox } from '../../lib/googleMailbox'
+import { accounts$ } from '../../states/accounts'
 import {
   SYNC_INTERVALS,
   addCalendarAccount,
   connectGoogleCalendar,
   createCalendar,
   deleteCalendar,
+  discoverCalendarServer,
   setSyncInterval,
   updateCalendar,
   type CalendarAccountCalendar,
@@ -30,23 +33,54 @@ import { ColorSwatchPicker } from '../field/ColorSwatchPicker'
 import { COLOR_PRESETS, normalizeHexColor } from '../../lib/colorPresets'
 import { SettingRow, SettingsGroup, Switch } from './AccountSettingsRows'
 
+type CalendarFormValues = { server?: string; email: string }
+
 // Calendars synced from CalDAV servers (Nextcloud, Fastmail, iCloud, …): add
 // an account, choose which of its calendars to show, see how syncing goes.
 export function CalendarAccountsPanel() {
   const { t } = useTranslation()
   const accounts = useValue(caldav$.accounts)
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState<null | { initial?: CalendarFormValues }>(null)
+  const [mailboxId, setMailboxId] = useState('')
+  const [discovering, setDiscovering] = useState(false)
   const [connectingGoogle, setConnectingGoogle] = useState(false)
   const googleConfigured = !!useValue(ui$.system)?.gmail_oauth_configured
+  const activeMailboxId = useValue(ui$.selectedAccount)
+  const mailboxes = useValue(accounts$).filter(
+    (account) =>
+      account.email &&
+      account.auth_type !== 'rss' &&
+      account.auth_type !== 'local' &&
+      (!isGoogleMailbox(account) || googleConfigured),
+  )
+  const mailbox = mailboxes.find((account) => account.id === (mailboxId || activeMailboxId)) ?? mailboxes[0]
+  const busy = discovering || connectingGoogle
 
-  const connectGoogle = async (account?: CalendarAccount) => {
+  const connectGoogle = async (options?: Parameters<typeof connectGoogleCalendar>[0]) => {
     setConnectingGoogle(true)
     try {
-      await connectGoogleCalendar(account ? { accountId: account.id, email: account.username } : undefined)
+      await connectGoogleCalendar(options)
     } catch (err) {
       showToast(errorMessage(err, t('settings.calendars.addFailed')), 'error')
     } finally {
       setConnectingGoogle(false)
+    }
+  }
+
+  const findCalendar = async () => {
+    if (!mailbox || busy) return
+    if (isGoogleMailbox(mailbox)) {
+      await connectGoogle({ email: mailbox.email })
+      return
+    }
+    setDiscovering(true)
+    try {
+      const server = await discoverCalendarServer(mailbox.email)
+      setAdding({ initial: { email: mailbox.email, server: server ?? undefined } })
+    } catch {
+      setAdding({ initial: { email: mailbox.email } })
+    } finally {
+      setDiscovering(false)
     }
   }
 
@@ -65,18 +99,59 @@ export function CalendarAccountsPanel() {
         <p className="max-w-lg text-xs text-secondary">{t('settings.calendars.intro')}</p>
         <div className="flex flex-wrap gap-2">
           {googleConfigured && (
-            <Button variant="secondary" size="sm" disabled={connectingGoogle} onClick={() => void connectGoogle()}>
+            <Button variant="secondary" size="sm" disabled={busy} onClick={() => void connectGoogle()}>
               {connectingGoogle ? t('settings.calendars.connecting') : t('settings.calendars.connectGoogle')}
             </Button>
           )}
           {!adding && (
-            <Button size="sm" leftIcon={Plus} onClick={() => setAdding(true)}>
+            <Button size="sm" leftIcon={Plus} disabled={busy} onClick={() => setAdding({})}>
               {t('settings.calendars.add')}
             </Button>
           )}
         </div>
       </div>
-      {adding && <AddAccountForm onDone={() => setAdding(false)} />}
+      {mailbox && !adding && (
+        <SettingsGroup title={t('settings.calendars.findForMailbox')}>
+          <form
+            className="flex flex-wrap items-center gap-2 p-3.5"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void findCalendar()
+            }}
+          >
+            <SelectInput
+              aria-label={t('settings.sections.mailAccounts')}
+              wrapperClassName="min-w-0 grow"
+              value={mailbox.id}
+              disabled={busy}
+              onChange={(event) => setMailboxId(event.target.value)}
+            >
+              {mailboxes.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.email}
+                </option>
+              ))}
+            </SelectInput>
+            <Button type="submit" size="sm" disabled={busy}>
+              {discovering
+                ? t('common.loading')
+                : isGoogleMailbox(mailbox)
+                  ? t('settings.calendars.connect')
+                  : t('settings.calendars.findForMailbox')}
+            </Button>
+          </form>
+        </SettingsGroup>
+      )}
+      {adding && (
+        <SettingsGroup title={t('settings.calendars.add')}>
+          {adding.initial && !adding.initial.server && (
+            <p role="status" className="px-3.5 pt-3.5 text-xs text-secondary">
+              {t('settings.calendars.discoveryNoServer')}
+            </p>
+          )}
+          <CalendarAccountForm initial={adding.initial} onDone={() => setAdding(null)} />
+        </SettingsGroup>
+      )}
       {accounts.length === 0 && !adding && (
         <p className="rounded-2xl border border-dashed border-border/70 px-4 py-6 text-center text-xs text-secondary">
           {t('settings.calendars.none')}
@@ -86,31 +161,42 @@ export function CalendarAccountsPanel() {
         <AccountCard
           key={account.id}
           account={account}
-          onReconnect={googleConfigured ? () => void connectGoogle(account) : undefined}
-          connectingGoogle={connectingGoogle}
+          onReconnect={
+            googleConfigured ? () => void connectGoogle({ accountId: account.id, email: account.username }) : undefined
+          }
+          connectingGoogle={busy}
         />
       ))}
     </div>
   )
 }
 
-function AddAccountForm({ onDone }: { onDone: () => void }) {
+export function CalendarAccountForm({
+  onDone,
+  initial,
+  optional = false,
+}: {
+  onDone: () => void
+  initial?: CalendarFormValues
+  optional?: boolean
+}) {
   const { t } = useTranslation()
-  const [server, setServer] = useState('')
-  const [username, setUsername] = useState('')
+  const [server, setServer] = useState(initial?.server ?? '')
+  const [username, setUsername] = useState(initial?.email ?? '')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const canSubmit = !!server.trim() && !!username.trim() && !!password && !busy
+  const serverUrl = server.trim()
+  const canSubmit = !!serverUrl && !!username.trim() && !!password && !busy
 
   const submit = async () => {
-    if (!canSubmit) return
+    if (!canSubmit || (initial?.server && !serverUrl.startsWith('https://'))) return
     setBusy(true)
     setError('')
     try {
       await addCalendarAccount({
-        server_url: server.trim(),
+        server_url: serverUrl,
         username: username.trim(),
         password,
         display_name: name.trim(),
@@ -124,60 +210,66 @@ function AddAccountForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <SettingsGroup title={t('settings.calendars.add')}>
-      <form
-        className="flex flex-col gap-3 p-3.5"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void submit()
-        }}
-      >
-        <TextInput
-          fieldSize="md"
-          autoFocus
-          placeholder={t('settings.calendars.serverPlaceholder')}
-          aria-label={t('settings.calendars.server')}
-          value={server}
-          onChange={(event) => setServer(event.target.value)}
-          autoCapitalize="off"
-          spellCheck={false}
-        />
-        <TextInput
-          fieldSize="md"
-          placeholder={t('settings.calendars.username')}
-          aria-label={t('settings.calendars.username')}
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
-          autoCapitalize="off"
-          spellCheck={false}
-        />
-        <TextInput
-          fieldSize="md"
-          type="password"
-          placeholder={t('settings.calendars.password')}
-          aria-label={t('settings.calendars.password')}
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        <p className="text-[0.6875rem] text-secondary">{t('settings.calendars.passwordHint')}</p>
-        <TextInput
-          fieldSize="md"
-          placeholder={t('settings.calendars.accountNameOptional')}
-          aria-label={t('settings.calendars.accountName')}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-        {error && <p className="text-xs text-rose-500 select-text">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={onDone} disabled={busy}>
-            {t('buttons.cancel')}
-          </Button>
-          <Button type="submit" size="sm" disabled={!canSubmit}>
-            {busy ? t('settings.calendars.connecting') : t('settings.calendars.connect')}
-          </Button>
-        </div>
-      </form>
-    </SettingsGroup>
+    <form
+      className={optional ? 'mt-4 flex flex-col gap-3' : 'flex flex-col gap-3 p-3.5'}
+      onSubmit={(event) => {
+        event.preventDefault()
+        void submit()
+      }}
+    >
+      <TextInput
+        fieldSize="md"
+        autoFocus={!initial?.server}
+        placeholder={t('settings.calendars.serverPlaceholder')}
+        aria-label={t('settings.calendars.server')}
+        pattern={initial?.server ? '\\s*https://.+\\s*' : undefined}
+        title={initial?.server ? 'https://…' : undefined}
+        value={server}
+        onChange={(event) => setServer(event.target.value)}
+        autoCapitalize="off"
+        spellCheck={false}
+      />
+      <TextInput
+        fieldSize="md"
+        placeholder={t('settings.calendars.username')}
+        aria-label={t('settings.calendars.username')}
+        value={username}
+        onChange={(event) => setUsername(event.target.value)}
+        autoCapitalize="off"
+        spellCheck={false}
+      />
+      <TextInput
+        fieldSize="md"
+        type="password"
+        autoFocus={!!initial?.server}
+        autoComplete={initial ? 'off' : undefined}
+        placeholder={t('settings.calendars.password')}
+        aria-label={t('settings.calendars.password')}
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+      />
+      <p className="text-[0.6875rem] text-secondary">{t('settings.calendars.passwordHint')}</p>
+      <TextInput
+        fieldSize="md"
+        placeholder={t('settings.calendars.accountNameOptional')}
+        aria-label={t('settings.calendars.accountName')}
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      {error && (
+        <p role="alert" className="text-xs text-rose-500 select-text">
+          {error}
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" size="sm" onClick={onDone} disabled={busy}>
+          {t(optional ? 'buttons.skip' : 'buttons.cancel')}
+        </Button>
+        <Button type="submit" size="sm" disabled={!canSubmit}>
+          {busy ? t('settings.calendars.connecting') : t('settings.calendars.connect')}
+        </Button>
+      </div>
+    </form>
   )
 }
 

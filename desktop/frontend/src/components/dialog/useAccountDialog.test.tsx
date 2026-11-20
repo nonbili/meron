@@ -7,6 +7,7 @@ import { ui$ } from '../../states/ui'
 import { settings$ } from '../../states/settings'
 import type { Account, SystemCheck } from '../../types'
 import { AccountDialog } from './AccountDialog'
+import { CaldavSetupDialog } from './CaldavSetupDialog'
 import { GoogleCalendarSetupDialog } from './GoogleCalendarSetupDialog'
 import { useAccountDialog } from './useAccountDialog'
 
@@ -32,6 +33,8 @@ describe('account setup, reconnect and edit', () => {
   let listedAccounts: Account[]
   let calendarRequests: unknown[]
   let rejectCalendar: boolean
+  let discoveredServer: string | null
+  let discoveryRequests: unknown[]
 
   beforeEach(() => {
     saved = null
@@ -40,11 +43,14 @@ describe('account setup, reconnect and edit', () => {
     listedAccounts = [{ ...account, needs_reconnect: false }]
     calendarRequests = []
     rejectCalendar = false
+    discoveredServer = null
+    discoveryRequests = []
     previousGo = Object.getOwnPropertyDescriptor(window, 'go')
     accounts$.set([account])
     ui$.setupMode.set('custom')
     ui$.reconnectAccountId.set(account.id)
     ui$.googleCalendarSetupEmail.set('')
+    ui$.caldavSetup.set(null)
     settings$.calendarEnabled.set(true)
     ui$.setupOpen.set(true)
     ui$.settingsOpen.set(false)
@@ -77,6 +83,14 @@ describe('account setup, reconnect and edit', () => {
                 },
               }
             if (command === 'account.list') return { accounts: listedAccounts }
+            if (command === 'caldav.discoverServer') {
+              discoveryRequests.push(payload)
+              return { server_url: discoveredServer }
+            }
+            if (command === 'caldav.add') {
+              calendarRequests.push(payload)
+              return { accounts: [] }
+            }
             if (command === 'caldav.connectGoogle') {
               calendarRequests.push(payload)
               if (rejectCalendar) throw new Error('Sign-in was declined')
@@ -97,6 +111,7 @@ describe('account setup, reconnect and edit', () => {
     dismissSyncError()
     ui$.reconnectAccountId.set('')
     ui$.googleCalendarSetupEmail.set('')
+    ui$.caldavSetup.set(null)
     if (previousGo) Object.defineProperty(window, 'go', previousGo)
     else delete (window as any).go
   })
@@ -115,6 +130,7 @@ describe('account setup, reconnect and edit', () => {
     expect(saved.id).toBe(account.id)
     expect(accounts$.peek().map((entry) => entry.id)).toEqual([account.id])
     expect(connectivity$.error.peek()).toBeNull()
+    expect(discoveryRequests).toEqual([])
   })
 
   it('keeps the banner when reconnect fails', async () => {
@@ -208,6 +224,7 @@ describe('account setup, reconnect and edit', () => {
       <>
         {setupOpen && <AccountDialog />}
         <GoogleCalendarSetupDialog />
+        <CaldavSetupDialog />
       </>
     )
   }
@@ -222,6 +239,52 @@ describe('account setup, reconnect and edit', () => {
     })
     expect(accounts$.peek().some((entry) => entry.email === profileEmail)).toBe(true)
   }
+
+  async function addCustomMailbox() {
+    const email = 'mailbox@example.test'
+    accounts$.set([])
+    ui$.reconnectAccountId.set('')
+    listedAccounts = [{ ...account, id: email, email, needs_reconnect: false }]
+    render(<CaldavSetupDialog />)
+    const hook = renderHook(() => useAccountDialog())
+    await act(async () => hook.result.current.setForm((form) => ({ ...form, email, password: 'mail-only' })))
+    await act(async () => hook.result.current.save())
+    expect(accounts$.peek()[0]?.email).toBe(email)
+    expect(discoveryRequests).toEqual([{ email }])
+    return email
+  }
+
+  it('skips the calendar prompt when discovery finds no service', async () => {
+    await addCustomMailbox()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(calendarRequests).toEqual([])
+  })
+
+  it('prefills the CalDAV server without reusing mail credentials and lets the user skip', async () => {
+    discoveredServer = 'https://dav.example.test/calendars/'
+    const email = await addCustomMailbox()
+    expect(screen.getByRole('dialog', { name: 'Connect calendar' })).toBeTruthy()
+    expect((screen.getByLabelText('Server') as HTMLInputElement).value).toBe(discoveredServer)
+    expect((screen.getByLabelText('Username') as HTMLInputElement).value).toBe(email)
+    expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe('')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(calendarRequests).toEqual([])
+  })
+
+  it('connects CalDAV only with credentials entered in the optional step', async () => {
+    discoveredServer = 'https://dav.example.test/calendars/'
+    const email = await addCustomMailbox()
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'calendar-only' } })
+    })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /^Connect$/ })))
+    expect(calendarRequests).toEqual([
+      { server_url: discoveredServer, username: email, password: 'calendar-only', display_name: '' },
+    ])
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
 
   it('offers Google Calendar after the first Gmail mailbox is saved and lets the user skip', async () => {
     prepareGmailSetup()

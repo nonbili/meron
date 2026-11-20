@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Encontrar agendas de uma conta de e-mail",
+  "settings.calendars.discoveryNoServer": "Nenhum servidor de agenda foi encontrado automaticamente. Você pode digitar o endereço do servidor abaixo.",
   "eml.open": "Abrir arquivo EML…",
   "contacts.notes": "Notas",
   "contacts.notesPlaceholder": "Adicionar uma nota…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Escolha um provedor para se conectar.",
   "accounts.setup.connectMailAccount": "Conectar uma conta de e-mail",
   "accounts.setup.feedAccountHint": "Crie a conta agora; adicione mais feeds a qualquer momento com o \"+\" acima da lista de feeds.",
+  "accounts.setup.caldavFound": "Encontramos um servidor de agenda para seu domínio de e-mail. Você pode conectá-lo agora ou mais tarde em Configurações → Agendas.",
+  "accounts.setup.connectCalendar": "Conectar agenda",
   "accounts.setup.googleCalendarAccess": "Sincronize os eventos da sua agenda principal nos dois sentidos. O Google solicita acesso total à agenda para a conexão via CalDAV. Você pode conectá-la mais tarde em Configurações → Agendas.",
   "accounts.setup.imapSmtpAccount": "Conta IMAP/SMTP",
   "accounts.setup.oauthTab": "OAuth",

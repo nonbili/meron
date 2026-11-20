@@ -61,6 +61,11 @@ export async function loadCalendarAccounts() {
   }
 }
 
+/** Locate a calendar server without using the mailbox's credentials. */
+export async function discoverCalendarServer(email: string) {
+  return (await invoke<{ server_url: string | null }>('caldav.discoverServer', { email }))?.server_url ?? null
+}
+
 /** Connect to a server and keep the account. Throws, with the server's
  * reason, when it cannot be reached or refuses the password. */
 export async function addCalendarAccount(input: {

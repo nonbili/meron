@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Atrast e-pasta konta kalendārus",
+  "settings.calendars.discoveryNoServer": "Kalendāra serveris netika atrasts automātiski. Servera adresi varat ievadīt zemāk.",
   "eml.open": "Atvērt EML failu…",
   "contacts.notes": "Piezīmes",
   "contacts.notesPlaceholder": "Pievienot piezīmi…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Izvēlieties pakalpojumu sniedzēju, lai izveidotu savienojumu.",
   "accounts.setup.connectMailAccount": "Pievienot pasta kontu",
   "accounts.setup.feedAccountHint": "Izveidojiet kontu tagad; pievienojiet vairāk plūsmu jebkurā laikā, izmantojot \"+\" virs plūsmu saraksta.",
+  "accounts.setup.caldavFound": "Jūsu e-pasta domēnam atrasts kalendāra serveris. Varat to pievienot tagad vai vēlāk sadaļā Iestatījumi → Kalendāri.",
+  "accounts.setup.connectCalendar": "Pievienot kalendāru",
   "accounts.setup.googleCalendarAccess": "Sinhronizējiet galvenā kalendāra pasākumus abos virzienos. Lai izveidotu CalDAV savienojumu, Google pieprasa pilnu piekļuvi kalendāram. Varat to pievienot vēlāk sadaļā Iestatījumi → Kalendāri.",
   "accounts.setup.imapSmtpAccount": "IMAP/SMTP konts",
   "accounts.setup.oauthTab": "OAuth",

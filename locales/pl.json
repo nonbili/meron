@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Znajdź kalendarze konta pocztowego",
+  "settings.calendars.discoveryNoServer": "Nie znaleziono automatycznie serwera kalendarza. Możesz wpisać jego adres poniżej.",
   "eml.open": "Otwórz plik EML…",
   "contacts.notes": "Notatki",
   "contacts.notesPlaceholder": "Dodaj notatkę…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Wybierz dostawcę, aby się połączyć.",
   "accounts.setup.connectMailAccount": "Połącz konto pocztowe",
   "accounts.setup.feedAccountHint": "Utwórz konto teraz; możesz dodać więcej kanałów w dowolnym momencie za pomocą „+” nad listą kanałów.",
+  "accounts.setup.caldavFound": "Znaleziono serwer kalendarza dla Twojej domeny pocztowej. Możesz go połączyć teraz lub później w sekcji Ustawienia → Kalendarze.",
+  "accounts.setup.connectCalendar": "Połącz kalendarz",
   "accounts.setup.googleCalendarAccess": "Synchronizuj wydarzenia z głównego kalendarza w obu kierunkach. Google prosi o pełny dostęp do kalendarza, aby nawiązać połączenie przez CalDAV. Możesz go połączyć później w sekcji Ustawienia → Kalendarze.",
   "accounts.setup.imapSmtpAccount": "Konto IMAP/SMTP",
   "accounts.setup.oauthTab": "OAuth",

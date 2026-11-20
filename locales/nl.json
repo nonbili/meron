@@ -1,4 +1,6 @@
 {
+  "settings.calendars.findForMailbox": "Agenda’s van een e-mailaccount zoeken",
+  "settings.calendars.discoveryNoServer": "Er is niet automatisch een agendaserver gevonden. Je kunt het serveradres hieronder invoeren.",
   "eml.open": "EML-bestand openen…",
   "contacts.notes": "Notities",
   "contacts.notesPlaceholder": "Notitie toevoegen…",
@@ -107,6 +109,8 @@
   "accounts.setup.chooseProvider": "Kies een provider om verbinding mee te maken.",
   "accounts.setup.connectMailAccount": "E-mailaccount verbinden",
   "accounts.setup.feedAccountHint": "Een RSS-account kan meerdere feeds bevatten. Voeg nu de eerste feed toe of voeg later feeds toe via het accountmenu.",
+  "accounts.setup.caldavFound": "We hebben een agendaserver gevonden voor je e-maildomein. Je kunt die nu of later koppelen via Instellingen → Agenda’s.",
+  "accounts.setup.connectCalendar": "Agenda koppelen",
   "accounts.setup.googleCalendarAccess": "Synchroniseer afspraken in je primaire agenda in beide richtingen. Google vraagt volledige toegang tot Agenda voor de verbinding via CalDAV. Je kunt de agenda later koppelen via Instellingen → Agenda’s.",
   "accounts.setup.imapSmtpAccount": "IMAP- / SMTP-account",
   "accounts.setup.oauthTab": "OAuth",
