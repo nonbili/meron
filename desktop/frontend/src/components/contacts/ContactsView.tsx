@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { ArrowUpDown, Check, ChevronLeft, Copy, Pin, PinOff, SquarePen, Users, X } from 'lucide-react'
+import { ArrowUpDown, BookUser, Check, ChevronLeft, Copy, Pin, PinOff, SquarePen, Users, X } from 'lucide-react'
 import { invoke } from '../../lib/bridge'
 import { useTranslation } from '../../lib/i18n'
 import { copyText } from '../../lib/native'
@@ -21,6 +21,7 @@ import { mail$ } from '../../states/mail'
 import { IconButton } from '../button/IconButton'
 import { useNarrowWindow } from '../../lib/useNarrowWindow'
 import { ContactNotes } from './ContactNotes'
+import { AddressBooks } from './AddressBooks'
 
 const SORT_LABELS = {
   frequent: 'contacts.sortFrequent',
@@ -40,6 +41,7 @@ export function ContactsView() {
   const [copied, setCopied] = useState(false)
   const sort = useValue(contacts$.sort)
   const [sortOpen, setSortOpen] = useState(false)
+  const [addressBooks, setAddressBooks] = useState(false)
   const sortRef = useRef<HTMLDivElement>(null)
   useDismissOnOutside(
     sortOpen,
@@ -205,6 +207,15 @@ export function ContactsView() {
           <Users size={17} className="text-accent" />
         )}
         <h1 className="min-w-0 flex-1 truncate">{t('contacts.title')}</h1>
+        {!selected && (
+          <IconButton
+            icon={BookUser}
+            size="sm"
+            label={t('contacts.addressBooks', { defaultValue: 'Address books' })}
+            active={addressBooks}
+            onClick={() => setAddressBooks(!addressBooks)}
+          />
+        )}
         {selected && (
           <IconButton
             icon={isPinned(selected) ? PinOff : Pin}
@@ -215,7 +226,9 @@ export function ContactsView() {
         )}
         <IconButton icon={X} size="sm" label={t('buttons.close')} onClick={() => ui$.contactsOpen.set(false)} />
       </header>
-      {!selected ? (
+      {!selected && addressBooks ? (
+        <AddressBooks onChange={() => setRetry((n) => n + 1)} />
+      ) : !selected ? (
         <>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="m-3 flex items-center gap-1.5">

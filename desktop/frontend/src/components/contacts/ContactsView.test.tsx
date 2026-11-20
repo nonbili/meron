@@ -5,7 +5,7 @@ import { ui$ } from '../../states/ui'
 import { contacts$, openContact } from '../../states/contacts'
 import { AddressRow } from '../chat/AddressList'
 import { mail$ } from '../../states/mail'
-import type { Message } from '../../types'
+import type { Message, SystemCheck } from '../../types'
 
 afterEach(() => {
   cleanup()
@@ -16,6 +16,7 @@ afterEach(() => {
   contacts$.sort.set('frequent')
   ui$.contactsOpen.set(false)
   ui$.calendarOpen.set(false)
+  ui$.system.set(null)
   mail$.foldersByAccount.set({})
 })
 
@@ -24,6 +25,60 @@ async function settle() {
     await new Promise((resolve) => setTimeout(resolve, 180))
   })
 }
+
+it('reconnects Google Contacts using the connected account as the login hint', async () => {
+  ui$.system.set({ gmail_oauth_configured: true } as SystemCheck)
+  const calls: Array<[string, Record<string, unknown>]> = []
+  ;(window as any).go = {
+    main: {
+      App: {
+        Invoke: async (method: string, params: Record<string, unknown>) => {
+          calls.push([method, params])
+          if (method === 'carddav.accounts')
+            return { accounts: [{ id: 'google-book', google: true, username: 'cora@example.test', books: [] }] }
+          if (method === 'carddav.connectGoogle') return { account_id: 'google-book' }
+          return { contacts: [] }
+        },
+      },
+    },
+  }
+  const view = render(<ContactsView />)
+  fireEvent.click(view.getByRole('button', { name: 'Address books' }))
+  const reconnect = await view.findByRole('button', { name: 'Reconnect Google Contacts' })
+  await act(async () => fireEvent.click(reconnect))
+  expect(calls).toContainEqual([
+    'carddav.connectGoogle',
+    { account_id: 'google-book', login_hint: 'cora@example.test' },
+  ])
+})
+
+it('connects an address book and shows the synced contact in the directory', async () => {
+  const calls: Array<[string, Record<string, unknown>]> = []
+  let synced = false
+  ;(window as any).go = {
+    main: {
+      App: {
+        Invoke: async (method: string, params: Record<string, unknown>) => {
+          calls.push([method, params])
+          if (method === 'carddav.accounts') return { accounts: [] }
+          if (method === 'carddav.add') return { account_id: 'book-account' }
+          if (method === 'carddav.sync') synced = true
+          return { contacts: synced ? [{ name: 'Cora Fixture', addr: 'cora@example.test' }] : [] }
+        },
+      },
+    },
+  }
+  const view = render(<ContactsView />)
+  fireEvent.click(view.getByRole('button', { name: 'Address books' }))
+  fireEvent.change(view.getByLabelText('CardDAV server URL'), { target: { value: 'https://dav.example.test' } })
+  fireEvent.change(view.getByLabelText('Username'), { target: { value: 'cora@example.test' } })
+  fireEvent.change(view.getByLabelText('Password'), { target: { value: 'fictional-app-password' } })
+  await act(async () => fireEvent.submit(view.getByRole('button', { name: 'Connect CardDAV' }).closest('form')!))
+  expect(calls).toContainEqual(['carddav.sync', { account_id: 'book-account' }])
+  fireEvent.click(view.getByRole('button', { name: 'Address books' }))
+  await settle()
+  expect(view.getByText('Cora Fixture')).toBeTruthy()
+})
 
 it('keeps directory rows mounted while loading more contacts', async () => {
   const contacts = Array.from({ length: 100 }, (_, i) => ({ name: `Person ${i}`, addr: `person${i}@example.com` }))

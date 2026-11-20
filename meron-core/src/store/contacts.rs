@@ -270,7 +270,7 @@ pub fn list_contacts(
 
     // One entry per address, across accounts and the names it came with.
     struct Tally {
-        names: Vec<(String, u32)>,
+        names: Vec<(String, u32, bool)>,
         addr: String,
         count: u32,
         last_date: i64,
@@ -302,9 +302,28 @@ pub fn list_contacts(
             entry.addr = addr;
         }
         if !name.is_empty() {
-            match entry.names.iter_mut().find(|(seen, _)| *seen == name) {
-                Some((_, seen)) => *seen += count,
-                None => entry.names.push((name, count)),
+            match entry.names.iter_mut().find(|(seen, _, _)| *seen == name) {
+                Some((_, seen, _)) => *seen += count,
+                None => entry.names.push((name, count, false)),
+            }
+        }
+    }
+
+    // Book contacts are separate records, but the directory and composer
+    // return one suggestion per mailbox address across all contact sources.
+    for (name, addr) in crate::carddav::contacts(conn)? {
+        let entry = tallies.entry(addr.to_lowercase()).or_insert_with(|| Tally {
+            names: Vec::new(),
+            addr,
+            count: 0,
+            last_date: 0,
+        });
+        if !name.is_empty() {
+            if let Some((_, _, saved)) = entry.names.iter_mut().find(|(known, _, _)| *known == name)
+            {
+                *saved = true;
+            } else {
+                entry.names.push((name, 0, true));
             }
         }
     }
@@ -320,14 +339,14 @@ pub fn list_contacts(
             .is_some_and(char::is_alphanumeric);
         Some(if word_start { 0 } else { 1 })
     };
-    // The most frequent of `names`; ties go to the alphabetically first, for a
+    // Prefer an address-book name, then the most frequent; ties go to the alphabetically first, for a
     // stable pick.
-    let top = |names: &[&(String, u32)]| {
+    let top = |names: &[&(String, u32, bool)]| {
         names
             .iter()
             .rev()
-            .max_by_key(|(_, count)| *count)
-            .map(|(name, _)| name.clone())
+            .max_by(|a, b| (a.2, a.1).cmp(&(b.2, b.1)).then_with(|| b.0.cmp(&a.0)))
+            .map(|(name, _, _)| name.clone())
             .unwrap_or_default()
     };
     struct Hit {
@@ -344,7 +363,7 @@ pub fn list_contacts(
             if own.contains(&key) || (hide_automated && is_automated_address(&key)) {
                 return None;
             }
-            let all: Vec<&(String, u32)> = t.names.iter().collect();
+            let all: Vec<_> = t.names.iter().collect();
             if q.is_empty() {
                 return Some(Hit {
                     rank: 0,
@@ -354,7 +373,7 @@ pub fn list_contacts(
                     addr: t.addr,
                 });
             }
-            let named: Vec<(&(String, u32), u8)> = t
+            let named: Vec<_> = t
                 .names
                 .iter()
                 .filter_map(|entry| Some((entry, rank(&entry.0)?)))
@@ -372,10 +391,10 @@ pub fn list_contacts(
             // Matched by name alone: rank it, and show it, by the names that
             // match. A shared sender (a notifications address carrying each
             // actor's name) mustn't outrank a person on its other names' mail.
-            let matching: Vec<&(String, u32)> = named.iter().map(|(entry, _)| *entry).collect();
+            let matching: Vec<_> = named.iter().map(|(entry, _)| *entry).collect();
             Some(Hit {
                 rank: name_rank?,
-                count: matching.iter().map(|(_, count)| count).sum(),
+                count: matching.iter().map(|(_, count, _)| count).sum(),
                 last_date: t.last_date,
                 name: top(&matching),
                 addr: t.addr,

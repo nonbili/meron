@@ -449,6 +449,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.oauthPollProfile("outlook"), nil
 	case "caldav.connectGoogle":
 		return a.connectGoogleCalendar(payload)
+	case "carddav.connectGoogle":
+		return a.connectGoogleDAV(payload, "google_contacts", "carddav.addGoogle")
 	case "mail.sync":
 		return a.mailSync(payload)
 	case "watch.start", "watch.stop":
@@ -573,6 +575,9 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		// Synced calendar accounts; the password in caldav.add and
 		// caldav.setPassword is never logged (Invoke logs only the name).
 		if strings.HasPrefix(command, "caldav.") && command != "caldav.addGoogle" {
+			return a.calendarInvoke(command, payload)
+		}
+		if strings.HasPrefix(command, "carddav.") && command != "carddav.addGoogle" {
 			return a.calendarInvoke(command, payload)
 		}
 		return nil, fmt.Errorf("unknown command: %s", command)

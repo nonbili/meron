@@ -462,7 +462,7 @@ fn account_client(engine: &Engine, account: &DavAccount) -> Result<Client> {
         .as_deref()
         .ok_or_else(|| anyhow!("Reconnect Google Calendar to resume syncing"))?;
     let oauth = default_oauth_client(GOOGLE_CALENDAR_PROVIDER);
-    let tokens = oauth::refresh_google_calendar(&oauth, refresh).map_err(anyhow::Error::msg)?;
+    let tokens = oauth::refresh_google_dav(&oauth, refresh).map_err(anyhow::Error::msg)?;
     let client = Client::google(&account.username, &tokens.access_token)?;
     let refreshed = Credentials {
         expires_at: crate::store::now_unix().saturating_add(tokens.expires_in.unwrap_or(3600)),

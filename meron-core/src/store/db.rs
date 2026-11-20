@@ -725,7 +725,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 30;
+pub(super) const SCHEMA_VERSION: i64 = 31;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -849,6 +849,25 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if version < 30 {
         migrate_v30(&tx)?;
+    }
+    if version < 31 {
+        tx.execute_batch(
+            "CREATE TABLE carddav_accounts (
+                id TEXT PRIMARY KEY, server TEXT NOT NULL, username TEXT NOT NULL,
+                google INTEGER NOT NULL DEFAULT 0, UNIQUE(server, username)
+            );
+            CREATE TABLE carddav_books (
+                id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES carddav_accounts(id) ON DELETE CASCADE,
+                url TEXT NOT NULL, name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+                sync_token TEXT NOT NULL DEFAULT '', UNIQUE(account, url)
+            );
+            CREATE TABLE carddav_cards (
+                book TEXT NOT NULL REFERENCES carddav_books(id) ON DELETE CASCADE,
+                url TEXT NOT NULL, etag TEXT NOT NULL, name TEXT NOT NULL, emails TEXT NOT NULL,
+                invalid INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(book, url)
+            );
+            PRAGMA user_version = 31;",
+        )?;
     }
     tx.commit()?;
     Ok(())

@@ -73,7 +73,10 @@ pub fn default_oauth_client(provider: &str) -> crate::oauth::Client {
             ..Default::default()
         },
         _ => crate::oauth::Client {
-            provider: if provider == crate::oauth::GOOGLE_CALENDAR_PROVIDER {
+            provider: if matches!(
+                provider,
+                crate::oauth::GOOGLE_CALENDAR_PROVIDER | crate::oauth::GOOGLE_CONTACTS_PROVIDER
+            ) {
                 provider.to_string()
             } else {
                 "gmail".to_string()
@@ -175,6 +178,8 @@ pub struct Engine {
     /// CalDAV accounts with a sync in flight, so overlapping triggers (a
     /// timer, an edit, a manual refresh) run one at a time.
     pub dav_syncing: std::sync::Mutex<HashSet<String>>,
+    pub(crate) carddav_operation: std::sync::Mutex<()>,
+    pub(crate) carddav_secrets: std::sync::Mutex<HashMap<String, secrets::Secrets>>,
 }
 
 /// Platform hooks the [`Engine`] needs but that differ between the desktop
@@ -466,6 +471,8 @@ impl Engine {
             host: Arc::from(host),
             dav_credentials: std::sync::Mutex::new(HashMap::new()),
             dav_syncing: std::sync::Mutex::new(HashSet::new()),
+            carddav_operation: std::sync::Mutex::new(()),
+            carddav_secrets: std::sync::Mutex::new(HashMap::new()),
         }
     }
 

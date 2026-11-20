@@ -32,9 +32,10 @@ fn str_param(p: &Value, key: &str) -> String {
 
 fn client(p: &Value) -> Result<oauth::Client, String> {
     match p.get("provider").and_then(Value::as_str).unwrap_or("") {
-        provider @ ("gmail" | "outlook" | oauth::GOOGLE_CALENDAR_PROVIDER) => {
-            Ok(default_oauth_client(provider))
-        }
+        provider @ ("gmail"
+        | "outlook"
+        | oauth::GOOGLE_CALENDAR_PROVIDER
+        | oauth::GOOGLE_CONTACTS_PROVIDER) => Ok(default_oauth_client(provider)),
         _ => Err("unsupported oauth provider".to_string()),
     }
 }

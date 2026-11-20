@@ -14,6 +14,8 @@ pub const GOOGLE_SCOPES: &str = "openid email profile https://mail.google.com/";
 pub const GOOGLE_CALENDAR_PROVIDER: &str = "google_calendar";
 // Google CalDAV uses the full Calendar scope for event sync.
 pub const GOOGLE_CALENDAR_SCOPE: &str = "https://www.googleapis.com/auth/calendar";
+pub const GOOGLE_CONTACTS_PROVIDER: &str = "google_contacts";
+pub const GOOGLE_CONTACTS_SCOPE: &str = "https://www.googleapis.com/auth/carddav";
 pub const OUTLOOK_AUTHORIZE_URL: &str =
     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 pub const OUTLOOK_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
@@ -95,9 +97,11 @@ pub fn authorize_url(
 ) -> Result<String, String> {
     let outlook_scopes = format!("{OUTLOOK_SCOPES} {OUTLOOK_PHOTO_SCOPE}");
     let calendar_scopes = format!("openid email {GOOGLE_CALENDAR_SCOPE}");
+    let contacts_scopes = format!("openid email {GOOGLE_CONTACTS_SCOPE}");
     let (base, scope) = match client.provider.as_str() {
         "gmail" => (GOOGLE_AUTHORIZE_URL, GOOGLE_SCOPES),
         GOOGLE_CALENDAR_PROVIDER => (GOOGLE_AUTHORIZE_URL, calendar_scopes.as_str()),
+        GOOGLE_CONTACTS_PROVIDER => (GOOGLE_AUTHORIZE_URL, contacts_scopes.as_str()),
         "outlook" => (OUTLOOK_AUTHORIZE_URL, outlook_scopes.as_str()),
         _ => return Err("unsupported oauth provider".to_string()),
     };
@@ -152,8 +156,8 @@ pub fn exchange_code(
     post_token(client.token_url(), form, "oauth code exchange")
 }
 
-/// Refresh a desktop Google Calendar grant.
-pub fn refresh_google_calendar(client: &Client, refresh_token: &str) -> Result<Tokens, String> {
+/// Refresh a desktop Google DAV grant without requesting additional scopes.
+pub fn refresh_google_dav(client: &Client, refresh_token: &str) -> Result<Tokens, String> {
     post_token(
         client.token_url(),
         vec![
@@ -162,7 +166,7 @@ pub fn refresh_google_calendar(client: &Client, refresh_token: &str) -> Result<T
             ("refresh_token", refresh_token),
             ("grant_type", "refresh_token"),
         ],
-        "Google Calendar token refresh",
+        "Google token refresh",
     )
 }
 
@@ -431,6 +435,23 @@ mod tests {
         assert_eq!(calendar["access_type"], "offline");
         assert_eq!(calendar["prompt"], "consent");
         assert_eq!(calendar["login_hint"], "calendar@example.test");
+
+        let contacts = query(
+            authorize_url(
+                &client(GOOGLE_CONTACTS_PROVIDER),
+                "http://127.0.0.1:1",
+                "st",
+                "ch",
+                "",
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            contacts["scope"],
+            format!("openid email {GOOGLE_CONTACTS_SCOPE}")
+        );
+        assert_eq!(contacts["access_type"], "offline");
+        assert_eq!(contacts["prompt"], "consent");
 
         assert!(authorize_url(&client("yahoo"), "", "", "", "").is_err());
     }

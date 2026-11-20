@@ -91,6 +91,19 @@ pub(crate) async fn dispatch(
         m if m.starts_with("pgp.") => openpgp::dispatch(engine, req, out).await,
 
         m if m.starts_with("caldav.") => caldav::dispatch(engine, req, out).await,
+        m if m.starts_with("carddav.") => {
+            let engine = engine.clone();
+            let method = m.to_string();
+            let params = p.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                meron_core::carddav::dispatch(&engine, &method, &params)
+            })
+            .await??;
+            if !matches!(m, "carddav.accounts" | "carddav.contacts") {
+                crate::emit(out, "carddav.changed", serde_json::json!({})).await;
+            }
+            Ok(result)
+        }
 
         "account.list"
         | "account.connect"
