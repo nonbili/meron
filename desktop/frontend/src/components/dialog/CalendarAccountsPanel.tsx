@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown, KeyRound, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { formatThreadDate } from '../../lib/date'
@@ -37,6 +37,7 @@ import { COLOR_PRESETS } from '../../lib/colorPresets'
 import { SettingRow, SettingsGroup, Switch } from './AccountSettingsRows'
 import { CalendarPickerDialog } from './CalendarPickerDialog'
 import { CalendarColorEditor } from '../calendar/CalendarColorEditor'
+import { PlainHttpWarning } from '../field/PlainHttpWarning'
 
 type CalendarFormValues = { server?: string; email: string }
 
@@ -51,6 +52,9 @@ export function CalendarAccountsPanel() {
   const [mailboxId, setMailboxId] = useState('')
   const [discovering, setDiscovering] = useState(false)
   const [connectingGoogle, setConnectingGoogle] = useState(false)
+  // Bumped to abandon a Google sign-in left in the browser: its late answer
+  // still lists the account but no longer holds the panel.
+  const googleAttempt = useRef(0)
   const googleConfigured = !!useValue(ui$.system)?.gmail_oauth_configured
   const activeMailboxId = useValue(ui$.selectedAccount)
   const mailboxes = useValue(accounts$).filter(
@@ -75,18 +79,25 @@ export function CalendarAccountsPanel() {
   }
 
   const connectGoogle = async (options: Parameters<typeof connectGoogleCalendar>[0]) => {
+    const attempt = ++googleAttempt.current
+    const live = () => googleAttempt.current === attempt
     setConnectingGoogle(true)
     try {
       const id = await connectGoogleCalendar(options)
-      if (id && !options.accountId) {
+      if (live() && id && !options.accountId) {
         setNewAccountId(id)
         setPickingAccountId(id)
       }
     } catch (err) {
-      showToast(errorMessage(err, t('settings.calendars.addFailed')), 'error')
+      if (live()) showToast(errorMessage(err, t('settings.calendars.addFailed')), 'error')
     } finally {
-      setConnectingGoogle(false)
+      if (live()) setConnectingGoogle(false)
     }
+  }
+
+  const cancelGoogle = () => {
+    googleAttempt.current++
+    setConnectingGoogle(false)
   }
 
   const findCalendar = async () => {
@@ -129,6 +140,16 @@ export function CalendarAccountsPanel() {
           </Button>
         )}
       </div>
+      {connectingGoogle && (
+        <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-raised/80 px-3.5 py-2.5">
+          <p role="status" className="min-w-0 flex-1 text-xs text-secondary">
+            {t('accounts.oauth.waitingForSignIn', { provider: 'Google' })}
+          </p>
+          <Button variant="secondary" size="sm" onClick={cancelGoogle}>
+            {t('buttons.cancel')}
+          </Button>
+        </div>
+      )}
       {mailbox && !adding && (
         <SettingsGroup title={t('settings.calendars.findForMailbox')}>
           <form
@@ -222,6 +243,9 @@ export function CalendarAccountForm({
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Bumped when a connect is cancelled: a server that does not answer must
+  // not hold the form, and its late answer is ignored.
+  const attempt = useRef(0)
   const accounts = useValue(accounts$)
   const serverUrl = server.trim()
   const login = username.trim().toLowerCase()
@@ -239,6 +263,8 @@ export function CalendarAccountForm({
 
   const submit = async () => {
     if (!canSubmit || (initial?.server && !serverUrl.startsWith('https://'))) return
+    const current = ++attempt.current
+    const live = () => attempt.current === current
     setBusy(true)
     setError('')
     try {
@@ -249,11 +275,11 @@ export function CalendarAccountForm({
         mail_account_id: password ? undefined : mailAccount?.id,
         display_name: name.trim(),
       })
-      onDone()
+      if (live()) onDone()
     } catch (err) {
-      setError(errorMessage(err, t('settings.calendars.addFailed')))
+      if (live()) setError(errorMessage(err, t('settings.calendars.addFailed')))
     } finally {
-      setBusy(false)
+      if (live()) setBusy(false)
     }
   }
 
@@ -296,6 +322,7 @@ export function CalendarAccountForm({
         value={password}
         onChange={(event) => setPassword(event.target.value)}
       />
+      <PlainHttpWarning server={server} mailPassword={!password && !!mailAccount} />
       <p className="text-[0.6875rem] text-secondary">{t('settings.calendars.passwordHint')}</p>
       <TextInput
         fieldSize="md"
@@ -310,7 +337,16 @@ export function CalendarAccountForm({
         </p>
       )}
       <div className="flex justify-end gap-2">
-        <Button variant="secondary" size="sm" onClick={onDone} disabled={busy}>
+        <Button
+          variant="secondary"
+          size="sm"
+          // While connecting, stop and keep the form to fix it; then close.
+          onClick={() => {
+            if (!busy) return onDone()
+            attempt.current++
+            setBusy(false)
+          }}
+        >
           {t(optional ? 'buttons.skip' : 'buttons.cancel')}
         </Button>
         <Button type="submit" size="sm" disabled={!canSubmit}>

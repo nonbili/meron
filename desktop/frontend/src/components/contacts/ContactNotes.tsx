@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import Markdown from 'react-markdown'
 import { Pencil, Plus } from 'lucide-react'
@@ -9,7 +9,23 @@ import { useTranslation } from '../../lib/i18n'
 import { openExternal } from '../../lib/native'
 import { Button } from '../button/Button'
 
-export function ContactNotes({ addr }: { addr: string }) {
+export function ContactNotes({
+  addr,
+  title,
+  icon,
+  action,
+  footer,
+}: {
+  addr: string
+  /** Defaults to "Notes". */
+  title?: string
+  /** Shown in the heading while the note is not being edited. */
+  action?: ReactNode
+  /** Shown before the title: where this note is kept. */
+  icon?: ReactNode
+  /** Shown under the note while it is not being edited. */
+  footer?: ReactNode
+}) {
   const { t } = useTranslation()
   const key = contactKey(addr)
   const note = useValue(contactNotes$[key])
@@ -37,41 +53,18 @@ export function ContactNotes({ addr }: { addr: string }) {
       setPreview(false)
     }
   }
-  const rendered = (
-    <div className="break-words text-sm leading-relaxed text-primary [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h3]:font-semibold [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-hover [&_pre]:p-2 [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_code]:text-[0.8125rem] [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-secondary [&_a]:text-accent [&_a]:underline">
-      <Markdown
-        skipHtml
-        components={{
-          // Never load remote images from a private note. Links are explicit
-          // user actions through the same native handler as message links.
-          img: ({ alt }) => <span>{alt}</span>,
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              onAuxClick={(event) => event.preventDefault()}
-              onClick={(event) => {
-                event.preventDefault()
-                if (href && /^(https?:|mailto:)/i.test(href)) openExternal(href)
-              }}
-            >
-              {children}
-            </a>
-          ),
-        }}
-      >
-        {text}
-      </Markdown>
-    </div>
-  )
+  const rendered = <NoteMarkdown text={text} />
   const tab = (active: boolean) =>
     clsx(
       'rounded-md px-2 py-1 text-[0.6875rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40',
       active ? 'bg-hover text-primary' : 'text-secondary hover:text-primary',
     )
   return (
-    <section className="border-b border-border/50 px-2 pt-1 pb-4" aria-label={t('contacts.notes')}>
+    <section className="border-b border-border/50 px-2 pt-1 pb-4" aria-label={title ?? t('contacts.notes')}>
       <div className="flex h-8 items-center gap-2">
-        <h2 className="min-w-0 flex-1 text-xs font-semibold text-secondary">{t('contacts.notes')}</h2>
+        {icon}
+        <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-secondary">{title ?? t('contacts.notes')}</h2>
+        {note?.loaded && !editorOpen && action}
         {note?.loaded && !editorOpen && text && (
           <button
             className="-mr-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[0.6875rem] font-semibold text-secondary transition-colors hover:bg-hover hover:text-primary"
@@ -162,11 +155,42 @@ export function ContactNotes({ addr }: { addr: string }) {
           {t('contacts.notesPlaceholder')}
         </button>
       )}
+      {note?.loaded && !editorOpen && text && footer}
       {note?.loaded && note.error && (
         <p role="status" className="mt-2 text-xs text-red-500">
           {t('contacts.notesSaveError')}
         </p>
       )}
     </section>
+  )
+}
+
+/** A note as Markdown, safe to show: no remote images, links opened natively. */
+export function NoteMarkdown({ text }: { text: string }) {
+  return (
+    <div className="break-words text-sm leading-relaxed text-primary [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h3]:font-semibold [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-hover [&_pre]:p-2 [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_code]:text-[0.8125rem] [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-secondary [&_a]:text-accent [&_a]:underline">
+      <Markdown
+        skipHtml
+        components={{
+          // Never load remote images from a private note. Links are explicit
+          // user actions through the same native handler as message links.
+          img: ({ alt }) => <span>{alt}</span>,
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              onAuxClick={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.preventDefault()
+                if (href && /^(https?:|mailto:)/i.test(href)) openExternal(href)
+              }}
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {text}
+      </Markdown>
+    </div>
   )
 }

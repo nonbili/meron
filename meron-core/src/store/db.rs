@@ -725,7 +725,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 31;
+pub(super) const SCHEMA_VERSION: i64 = 32;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -852,21 +852,42 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if version < 31 {
         tx.execute_batch(
-            "CREATE TABLE carddav_accounts (
+            "CREATE TABLE IF NOT EXISTS carddav_accounts (
                 id TEXT PRIMARY KEY, server TEXT NOT NULL, username TEXT NOT NULL,
                 google INTEGER NOT NULL DEFAULT 0, UNIQUE(server, username)
             );
-            CREATE TABLE carddav_books (
+            CREATE TABLE IF NOT EXISTS carddav_books (
                 id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES carddav_accounts(id) ON DELETE CASCADE,
                 url TEXT NOT NULL, name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
                 sync_token TEXT NOT NULL DEFAULT '', UNIQUE(account, url)
             );
-            CREATE TABLE carddav_cards (
+            CREATE TABLE IF NOT EXISTS carddav_cards (
                 book TEXT NOT NULL REFERENCES carddav_books(id) ON DELETE CASCADE,
                 url TEXT NOT NULL, etag TEXT NOT NULL, name TEXT NOT NULL, emails TEXT NOT NULL,
                 invalid INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(book, url)
             );
             PRAGMA user_version = 31;",
+        )?;
+    }
+    if version < 32 {
+        // Contact notes sync as the vCard NOTE. Forget each book's sync token
+        // and each card's version so the next sync reads every card again
+        // and fills them in: a card still showing no note must not be
+        // written over a note it has on the server.
+        let has_note: bool = tx.query_row(
+            "SELECT count(*) > 0 FROM pragma_table_info('carddav_cards') WHERE name = 'note'",
+            [],
+            |row| row.get(0),
+        )?;
+        if !has_note {
+            tx.execute_batch(
+                "ALTER TABLE carddav_cards ADD COLUMN note TEXT NOT NULL DEFAULT '';",
+            )?;
+        }
+        tx.execute_batch(
+            "UPDATE carddav_books SET sync_token = '';
+            UPDATE carddav_cards SET etag = '';
+            PRAGMA user_version = 32;",
         )?;
     }
     tx.commit()?;
@@ -1644,6 +1665,28 @@ mod tests {
         )
         .unwrap();
         assert_eq!(visible(), 1);
+    }
+
+    #[test]
+    fn v32_makes_every_cached_card_download_again() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        conn.execute_batch(
+            r#"INSERT INTO carddav_accounts(id, server, username) VALUES ('a', 'https://dav.example.test/', 'cora@example.test');
+            INSERT INTO carddav_books(id, account, url, name, sync_token) VALUES ('b', 'a', '/b/', 'Work', 'token-1');
+            INSERT INTO carddav_cards(book, url, etag, name, emails) VALUES ('b', '/b/1.vcf', '"v1"', 'Ada', '[]');
+            PRAGMA user_version = 31;"#,
+        )
+        .unwrap();
+        run_migrations(&conn).unwrap();
+        let (token, etag): (String, String) = conn
+            .query_row(
+                "SELECT book.sync_token, card.etag FROM carddav_cards card JOIN carddav_books book ON book.id = card.book",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((token.as_str(), etag.as_str()), ("", ""));
     }
 
     #[test]

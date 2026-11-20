@@ -49,6 +49,41 @@ const SABRE_HOME: &str = r##"<?xml version="1.0"?>
 const STALWART_SYNC: &str = r#"<?xml version="1.0" encoding="UTF-8"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>/dav/cal/alice%40mail.test/default/a.ics</D:href><D:propstat><D:prop><D:getetag>"11"</D:getetag></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response><D:response><D:href>/dav/cal/alice%40mail.test/default/b.ics</D:href><D:status>HTTP/1.1 404 Not Found</D:status></D:response><D:sync-token>https://mail.test/dav/sync/9</D:sync-token></D:multistatus>"#;
 
 #[test]
+fn only_connection_failures_count_as_unreachable() {
+    use ureq::{Error, Timeout};
+    assert!(super::unreachable(&Error::Timeout(Timeout::Connect)));
+    assert!(super::unreachable(&Error::HostNotFound));
+    // The server took the connection; another endpoint may still answer.
+    assert!(!super::unreachable(&Error::Timeout(Timeout::Global)));
+    assert!(!super::unreachable(&Error::Io(
+        std::io::ErrorKind::ConnectionReset.into()
+    )));
+}
+
+#[test]
+fn an_unreachable_server_fails_once_with_the_reason() {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let client = Client::new(
+        &format!("http://127.0.0.1:{port}/dav/"),
+        "user1@mail.localhost",
+        "fictional-password",
+        None,
+    )
+    .unwrap();
+    let err = client.discover().unwrap_err();
+    assert!(err.is::<Unreachable>(), "{err:#}");
+    assert!(
+        err.to_string()
+            .starts_with("Could not reach the calendar server: PROPFIND http://127.0.0.1:"),
+        "{err:#}"
+    );
+}
+
+#[test]
 fn multistatus_keeps_successful_props_only() {
     let ms = xml::parse_multistatus(SABRE_HOME).unwrap();
     assert_eq!(ms.responses.len(), 4);

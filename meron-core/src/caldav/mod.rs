@@ -10,7 +10,7 @@
 //! calendar home, so each is tried until a `calendar-home-set` turns up.
 //! Nextcloud, Stalwart, Radicale, Fastmail and iCloud all answer one of these.
 
-mod discovery;
+pub(crate) mod discovery;
 pub mod ics;
 pub mod service;
 pub mod store;
@@ -57,6 +57,46 @@ impl fmt::Display for AuthFailed {
 }
 
 impl std::error::Error for AuthFailed {}
+
+/// The server could not be reached at all (refused, timed out, bad TLS).
+/// Every URL discovery tries is on the same origin, so none of the others
+/// would answer either.
+#[derive(Debug)]
+struct Unreachable(String);
+
+impl fmt::Display for Unreachable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Could not reach the calendar server: {}", self.0)
+    }
+}
+
+impl std::error::Error for Unreachable {}
+
+/// How long to wait for a server to accept a connection; one that is down
+/// or not listening on that port should fail fast, not after the whole
+/// request timeout.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Whether a request failed before reaching the server at all (no route,
+/// refused, connect timeout): every other endpoint on that origin would too.
+/// A server that accepted the connection but then failed may still answer
+/// elsewhere.
+pub(crate) fn unreachable(err: &ureq::Error) -> bool {
+    match err {
+        ureq::Error::HostNotFound | ureq::Error::ConnectionFailed => true,
+        ureq::Error::Timeout(timeout) => {
+            matches!(timeout, ureq::Timeout::Resolve | ureq::Timeout::Connect)
+        }
+        ureq::Error::Io(err) => matches!(
+            err.kind(),
+            std::io::ErrorKind::ConnectionRefused
+                | std::io::ErrorKind::HostUnreachable
+                | std::io::ErrorKind::NetworkUnreachable
+                | std::io::ErrorKind::AddrNotAvailable
+        ),
+        _ => false,
+    }
+}
 
 /// Google throttled this account. Stop the whole sync, not just one object.
 #[derive(Debug)]
@@ -541,9 +581,17 @@ impl Client {
                 .allow_non_standard_methods(true)
                 .http_status_as_error(false)
                 .max_redirects(0)
+                .timeout_connect(Some(CONNECT_TIMEOUT))
                 .timeout_global(Some(Duration::from_secs(timeout)))
                 .run()
-                .with_context(|| format!("{method} {}", redacted(&url)))?;
+                .map_err(|err| {
+                    let reason = format!("{method} {}: {err}", redacted(&url));
+                    if unreachable(&err) {
+                        anyhow::Error::new(Unreachable(reason))
+                    } else {
+                        anyhow!(reason)
+                    }
+                })?;
             let status = response.status().as_u16();
             let header = |name: &str| {
                 response
@@ -658,7 +706,7 @@ impl Client {
                 }
                 Ok(None) => {}
                 // A wrong password is the answer, not a reason to keep probing.
-                Err(err) if err.is::<AuthFailed>() => return Err(err),
+                Err(err) if err.is::<AuthFailed>() || err.is::<Unreachable>() => return Err(err),
                 Err(err) => last_error = Some(err),
             }
         }

@@ -24,6 +24,8 @@ struct Card {
     etag: String,
     name: String,
     emails: BTreeSet<String>,
+    /// The vCard NOTE: the contact's note, shared with other clients.
+    note: String,
     invalid: bool,
 }
 
@@ -38,6 +40,16 @@ impl Card {
         );
         let vcard = VCard::parse(text).map_err(|_| anyhow!("server returned an invalid vCard"))?;
         let name = display_name(vcard.entries.iter());
+        let note = vcard
+            .entries
+            .iter()
+            .filter(|entry| entry.name == VCardProperty::Note)
+            .flat_map(|entry| &entry.values)
+            .find_map(|value| match value {
+                VCardValue::Text(text) if !text.trim().is_empty() => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
         let mut emails = BTreeSet::new();
         for entry in vcard.entries {
             for value in entry.values {
@@ -63,6 +75,7 @@ impl Card {
             etag: etag.into(),
             name,
             emails,
+            note,
             invalid: false,
         })
     }
@@ -73,6 +86,7 @@ impl Card {
             etag: etag.into(),
             name: String::new(),
             emails: BTreeSet::new(),
+            note: String::new(),
             invalid: true,
         }
     }
@@ -178,39 +192,69 @@ pub fn dispatch(engine: &Engine, method: &str, p: &Value) -> Result<Value> {
     if method == "carddav.contacts" {
         return editing::list(&*lock(engine)?, required("book_id")?, p);
     }
+    if method == "carddav.cardsFor" {
+        return editing::cards_for(&*lock(engine)?, required("email")?);
+    }
+    if method == "carddav.discoverServer" {
+        let found = crate::caldav::discovery::discover_server(
+            required("email")?,
+            crate::caldav::discovery::Dav::Contacts,
+        );
+        return Ok(json!({"server_url": found.map(|url| url.to_string())}));
+    }
+    if method == "carddav.add" {
+        let server = client::server_url(required("server_url")?)?;
+        ensure!(
+            server.as_str() != client::GOOGLE_DISCOVERY,
+            "Use Connect Google Contacts for this server"
+        );
+        let username = required("username")?.trim();
+        ensure!(
+            !username.is_empty() && !username.contains(':'),
+            "invalid CardDAV username"
+        );
+        // Left blank, with a mail account on the same login: that
+        // account's password, read here so it never reaches the UI.
+        let reused = match (
+            p["password"].as_str().unwrap_or_default(),
+            p["mail_account_id"].as_str(),
+        ) {
+            ("", Some(mail)) if !mail.is_empty() => Some(
+                crate::caldav::service::mail_account_password(engine, mail, username)?,
+            ),
+            _ => None,
+        };
+        let password = match &reused {
+            Some(password) => password.as_str(),
+            None => required("password")?,
+        };
+        let client = Client::basic(server, username, password)?;
+        let found = client.discover()?;
+        // Only the save waits its turn: a server that never answers (or an
+        // abandoned attempt still running) must not block the next one.
+        let _guard = engine
+            .carddav_operation
+            .lock()
+            .map_err(|_| anyhow!("address book lock poisoned"))?;
+        let id = save_account(
+            engine,
+            &client,
+            username,
+            Secrets {
+                password: password.into(),
+                ..Default::default()
+            },
+            &found,
+            false,
+        )?;
+        return Ok(json!({"account_id": id}));
+    }
     // One mutation at a time; never hold the database mutex during a DAV request.
     let _guard = engine
         .carddav_operation
         .try_lock()
         .map_err(|_| anyhow!("address book operation already in progress"))?;
     let result = match method {
-        "carddav.add" => {
-            let server = client::server_url(required("server_url")?)?;
-            ensure!(
-                server.as_str() != client::GOOGLE_DISCOVERY,
-                "Use Connect Google Contacts for this server"
-            );
-            let username = required("username")?.trim();
-            ensure!(
-                !username.is_empty() && !username.contains(':'),
-                "invalid CardDAV username"
-            );
-            let password = required("password")?;
-            let client = Client::basic(server, username, password)?;
-            let found = client.discover()?;
-            let id = save_account(
-                engine,
-                &client,
-                username,
-                Secrets {
-                    password: password.into(),
-                    ..Default::default()
-                },
-                &found,
-                false,
-            )?;
-            json!({"account_id": id})
-        }
         "carddav.addGoogle" => {
             let email = required("email")?.trim().to_ascii_lowercase();
             ensure!(
@@ -340,7 +384,7 @@ fn account_client(engine: &Engine, account: &Account) -> Result<Client> {
             "CardDAV password is missing; connect the account again"
         );
         Client::basic(
-            client::server_url(&account.server).map_err(|err| anyhow!("{err}. For a saved HTTP account, enable HTTPS on the server and connect using its HTTPS URL."))?,
+            client::server_url(&account.server)?,
             &account.username,
             &secret.password,
         )
@@ -433,9 +477,9 @@ fn sync_book(engine: &Engine, client: &Client, saved: &SavedBook, google: bool) 
         )?;
     }
     for card in cards {
-        tx.execute("INSERT INTO carddav_cards(book, url, etag, name, emails, invalid) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            ON CONFLICT(book, url) DO UPDATE SET etag=excluded.etag, name=excluded.name, emails=excluded.emails, invalid=excluded.invalid",
-            params![saved.id, card.url, card.etag, card.name, serde_json::to_string(&card.emails)?, card.invalid])?;
+        tx.execute("INSERT INTO carddav_cards(book, url, etag, name, emails, note, invalid) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ON CONFLICT(book, url) DO UPDATE SET etag=excluded.etag, name=excluded.name, emails=excluded.emails, note=excluded.note, invalid=excluded.invalid",
+            params![saved.id, card.url, card.etag, card.name, serde_json::to_string(&card.emails)?, card.note, card.invalid])?;
     }
     tx.execute(
         "UPDATE carddav_books SET sync_token=?1 WHERE id=?2",
@@ -454,4 +498,100 @@ pub(crate) fn contacts(db: &Connection) -> Result<Vec<(String, String)>> {
     Ok(stmt
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    struct Host;
+    impl crate::engine::EngineHost for Host {
+        fn open_db(&self) -> anyhow::Result<rusqlite::Connection> {
+            crate::store::open_at(":memory:")
+        }
+        fn apply_secret(&self, _: &rusqlite::Connection, _: &str, _: &mut crate::imap::Creds) {}
+        fn store_secret(
+            &self,
+            _: &rusqlite::Connection,
+            _: &str,
+            _: &crate::secrets::Secrets,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn cards_for_finds_an_address_in_enabled_books_only() {
+        let engine = crate::engine::Engine::new(Box::new(Host)).unwrap();
+        engine
+            .db
+            .lock()
+            .unwrap()
+            .execute_batch(
+                r#"INSERT INTO carddav_accounts(id, server, username) VALUES ('a', 'https://dav.example.test/', 'cora@example.test');
+                INSERT INTO carddav_books(id, account, url, name, enabled) VALUES
+                    ('work', 'a', '/work/', 'Work', 1), ('old', 'a', '/old/', 'Old', 0);
+                INSERT INTO carddav_cards(book, url, etag, name, emails, invalid) VALUES
+                    ('work', '/work/1.vcf', '"1"', 'Ada Lane', '["ada@example.test","ada@home.example.test"]', 0),
+                    ('work', '/work/2.vcf', '"2"', 'Broken', '["ada@example.test"]', 1),
+                    ('old', '/old/1.vcf', '"3"', 'Ada (old)', '["ada@example.test"]', 0),
+                    ('work', '/work/3.vcf', '"4"', 'Ben Hall', '["ben@example.test"]', 0),
+                    ('work', '/work/4.vcf', '"5"', 'Éva Kis', '["Éva@example.test"]', 0);"#,
+            )
+            .unwrap();
+        let found = super::dispatch(
+            &engine,
+            "carddav.cardsFor",
+            &json!({"email": " ADA@example.test "}),
+        )
+        .unwrap();
+        let eva = super::dispatch(
+            &engine,
+            "carddav.cardsFor",
+            &json!({"email": "éva@example.test"}),
+        )
+        .unwrap();
+        assert_eq!(eva["cards"][0]["name"], "Éva Kis");
+        assert_eq!(
+            found,
+            json!({"cards": [{
+                "book_id": "work",
+                "book_name": "Work",
+                "id": "/work/1.vcf",
+                "version": "\"1\"",
+                "name": "Ada Lane",
+                "emails": ["ada@example.test", "ada@home.example.test"],
+                "account": "cora@example.test",
+                "google": false,
+                "note": "",
+            }]})
+        );
+    }
+
+    #[test]
+    fn adding_does_not_wait_for_another_operation_to_reach_the_server() {
+        let engine = crate::engine::Engine::new(Box::new(Host)).unwrap();
+        // A sync, or an abandoned add, still running.
+        let _busy = engine.carddav_operation.lock().unwrap();
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let err = super::dispatch(
+            &engine,
+            "carddav.add",
+            &json!({
+                "server_url": format!("http://127.0.0.1:{port}/"),
+                "username": "user1@mail.localhost",
+                "password": "fictional-password",
+            }),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .starts_with("Could not reach the CardDAV server"),
+            "{err:#}"
+        );
+    }
 }

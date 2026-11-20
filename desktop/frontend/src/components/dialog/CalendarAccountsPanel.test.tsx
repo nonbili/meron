@@ -119,6 +119,26 @@ describe('finding calendars for existing mail accounts', () => {
     expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe('')
   })
 
+  it('cancels a connection to a server that does not answer', async () => {
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (method: string, payload: unknown) =>
+      method === 'caldav.add' ? new Promise(() => {}) : invoke(method, payload)
+    render(<CalendarAccountsPanel />)
+    await find()
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'fictional-app-password' } })
+    await act(async () => fireEvent.submit(screen.getByLabelText('Server').closest('form')!))
+    expect(screen.getByRole('button', { name: 'Connecting…' })).toBeTruthy()
+    const cancel = screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement
+    expect(cancel.disabled).toBe(false)
+    fireEvent.click(cancel)
+    // The form stays, as typed, to fix the address.
+    expect((screen.getByLabelText('Server') as HTMLInputElement).value).toBe(discoveredServer)
+    expect((screen.getByLabelText('Password') as HTMLInputElement).value).toBe('fictional-app-password')
+    expect((screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByLabelText('Server')).toBeNull()
+  })
+
   it('falls back to manual setup while keeping the mailbox address filled in', async () => {
     server = null
     render(<CalendarAccountsPanel />)
@@ -153,6 +173,25 @@ describe('finding calendars for existing mail accounts', () => {
       { method: 'caldav.connectGoogle', payload: { account_id: undefined, login_hint: mailbox.email } },
     ])
     expect(calls.some(({ method }) => method === 'caldav.discoverServer')).toBe(false)
+  })
+
+  it('lets an abandoned Google sign-in be cancelled', async () => {
+    let finish: (value: unknown) => void = () => {}
+    ;(window as any).go.main.App.Invoke = async (method: string, payload: unknown) => {
+      calls.push({ method, payload })
+      if (method === 'caldav.connectGoogle') return new Promise((resolve) => (finish = resolve))
+      return { accounts: calendarAccounts }
+    }
+    ui$.selectedAccount.set(google.id)
+    render(<CalendarAccountsPanel />)
+    await find()
+    expect(screen.getByRole('status').textContent).toContain('Google')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('status')).toBeNull()
+    expect((screen.getByRole('button', { name: 'Add account' }) as HTMLButtonElement).disabled).toBe(false)
+    // A sign-in finished after cancelling opens no picker.
+    await act(async () => finish({ account_id: googleCalendars.id, accounts: [googleCalendars] }))
+    expect(screen.queryByRole('dialog', { name: 'Choose calendars to sync' })).toBeNull()
   })
 
   it('opens a picker after authorization and saves each calendar choice', async () => {

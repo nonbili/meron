@@ -1,5 +1,6 @@
-//! RFC 6764 service discovery. Unlike Client::discover, this never sends
-//! calendar or mail credentials (or the mailbox name) to the server.
+//! RFC 6764 service discovery for CalDAV and CardDAV. Unlike the clients'
+//! own discovery, this never sends calendar, contacts or mail credentials
+//! (or the mailbox name) to the server.
 
 use std::time::{Duration, Instant};
 
@@ -7,19 +8,47 @@ use hickory_resolver::{Resolver, proto::rr::RData};
 use rand::Rng;
 use url::{Host, Url};
 
-const WELL_KNOWN: &str = "/.well-known/caldav";
 const TIMEOUT: Duration = Duration::from_secs(3);
 
-pub(super) fn discover_server(email: &str) -> Option<Url> {
+/// Which DAV service to look for.
+#[derive(Clone, Copy)]
+pub(crate) enum Dav {
+    Calendars,
+    Contacts,
+}
+
+impl Dav {
+    fn name(self) -> &'static str {
+        match self {
+            Dav::Calendars => "caldav",
+            Dav::Contacts => "carddav",
+        }
+    }
+
+    /// The DAV header token a server of this kind advertises (RFC 4791 §5.1,
+    /// RFC 6352 §6.1).
+    fn token(self) -> &'static str {
+        match self {
+            Dav::Calendars => "calendar-access",
+            Dav::Contacts => "addressbook",
+        }
+    }
+}
+
+pub(crate) fn discover_server(email: &str, dav: Dav) -> Option<Url> {
     let (mailbox, domain) = email.trim().rsplit_once('@')?;
     if mailbox.is_empty() {
         return None;
     }
     let domain = dns_domain(domain)?;
-    match lookup_srv(&domain) {
-        Service::Advertised(url) => Some(probe(url.clone()).unwrap_or(url)),
+    let well_known = format!("/.well-known/{}", dav.name());
+    match lookup_srv(&domain, dav) {
+        Service::Advertised(url) => Some(probe(url.clone(), dav).unwrap_or(url)),
         Service::Unavailable => None,
-        Service::Unlisted => probe(Url::parse(&format!("https://{domain}{WELL_KNOWN}")).ok()?),
+        Service::Unlisted => probe(
+            Url::parse(&format!("https://{domain}{well_known}")).ok()?,
+            dav,
+        ),
     }
 }
 
@@ -45,7 +74,7 @@ enum Service {
     Unlisted,
 }
 
-fn lookup_srv(domain: &str) -> Service {
+fn lookup_srv(domain: &str, dav: Dav) -> Service {
     let lookup = || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -53,7 +82,7 @@ fn lookup_srv(domain: &str) -> Service {
             .ok()?;
         runtime.block_on(async {
             let resolver = Resolver::builder_tokio().ok()?.build().ok()?;
-            let name = format!("_caldavs._tcp.{domain}.");
+            let name = format!("_{}s._tcp.{domain}.", dav.name());
             let response = tokio::time::timeout(TIMEOUT, resolver.srv_lookup(&name))
                 .await
                 .ok()?
@@ -76,8 +105,12 @@ fn lookup_srv(domain: &str) -> Service {
                     if srv.port == 0 {
                         return None;
                     }
-                    let url =
-                        Url::parse(&format!("https://{host}:{}{WELL_KNOWN}", srv.port)).ok()?;
+                    let url = Url::parse(&format!(
+                        "https://{host}:{}/.well-known/{}",
+                        srv.port,
+                        dav.name()
+                    ))
+                    .ok()?;
                     Some((srv.priority, srv.weight, url))
                 })
                 .collect::<Vec<_>>();
@@ -145,7 +178,7 @@ fn safe_endpoint(url: &Url) -> bool {
         && url.fragment().is_none()
 }
 
-fn probe(mut url: Url) -> Option<Url> {
+fn probe(mut url: Url, dav: Dav) -> Option<Url> {
     let agent = crate::proxy::agent().ok()?;
     let deadline = Instant::now() + TIMEOUT;
     for _ in 0..=4 {
@@ -167,22 +200,21 @@ fn probe(mut url: Url) -> Option<Url> {
                 .join(response.headers().get("location")?.to_str().ok()?)
                 .ok()?;
         } else {
-            // A redirect or a generic 401 alone is not evidence of CalDAV.
-            let dav = response.headers().get_all("dav");
+            // A redirect or a generic 401 alone is not evidence of the service.
+            let headers = response.headers().get_all("dav");
             return (matches!(status, 200..=299 | 401 | 403)
-                && advertises_caldav(dav.iter().filter_map(|header| header.to_str().ok())))
+                && advertises(
+                    headers.iter().filter_map(|header| header.to_str().ok()),
+                    dav,
+                ))
             .then_some(url);
         }
     }
     None
 }
 
-fn advertises_caldav<'a>(mut headers: impl Iterator<Item = &'a str>) -> bool {
-    headers.any(|value| {
-        value
-            .split(',')
-            .any(|token| token.trim() == "calendar-access")
-    })
+fn advertises<'a>(mut headers: impl Iterator<Item = &'a str>, dav: Dav) -> bool {
+    headers.any(|value| value.split(',').any(|token| token.trim() == dav.token()))
 }
 
 #[cfg(test)]
@@ -234,12 +266,19 @@ mod tests {
     }
 
     #[test]
-    fn a_plain_webdav_server_is_not_a_calendar_server() {
-        assert!(advertises_caldav(
-            ["1, 2", "calendar-access, calendar-schedule"].into_iter()
+    fn a_plain_webdav_server_is_not_a_calendar_or_contacts_server() {
+        assert!(advertises(
+            ["1, 2", "calendar-access, calendar-schedule"].into_iter(),
+            Dav::Calendars
         ));
-        assert!(!advertises_caldav(
-            ["1, 2", "calendar-access-extra"].into_iter()
+        assert!(!advertises(
+            ["1, 2", "calendar-access-extra"].into_iter(),
+            Dav::Calendars
         ));
+        assert!(!advertises(
+            ["1, 2", "calendar-access"].into_iter(),
+            Dav::Contacts
+        ));
+        assert!(advertises(["1, 3, addressbook"].into_iter(), Dav::Contacts));
     }
 }

@@ -50,6 +50,57 @@ pub(super) fn list(db: &Connection, book: &str, p: &Value) -> Result<Value> {
     Ok(json!({"contacts": cards, "more": more}))
 }
 
+/// The editable cards holding `email`, in every enabled address book: what
+/// a directory entry (one per address) is saved as.
+pub(super) fn cards_for(db: &Connection, email: &str) -> Result<Value> {
+    let mut stmt = db.prepare(
+        "SELECT card.book, book.name, card.url, card.etag, card.name, card.emails,
+                account.username, account.google, card.note
+         FROM carddav_cards card JOIN carddav_books book ON book.id=card.book
+         JOIN carddav_accounts account ON account.id=book.account
+         WHERE book.enabled AND NOT card.invalid
+         ORDER BY book.name COLLATE NOCASE, card.name COLLATE NOCASE, card.url",
+    )?;
+    // Matched in Rust, not SQLite's ASCII-only lower(): the directory folds
+    // case the same way, so a card is found for every address it lists.
+    let wanted = email.trim().to_lowercase();
+    let cards = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
+                r.get::<_, String>(6)?,
+                r.get::<_, bool>(7)?,
+                r.get::<_, String>(8)?,
+            ))
+        })?
+        .map(|row| {
+            let (book_id, book_name, id, version, name, emails, account, google, note) = row?;
+            let emails = serde_json::from_str::<Vec<String>>(&emails)?;
+            if !emails.iter().any(|known| known.to_lowercase() == wanted) {
+                return Ok(None);
+            }
+            Ok(Some(json!({
+                "book_id": book_id,
+                "book_name": book_name,
+                "id": id,
+                "version": version,
+                "name": name,
+                "emails": emails,
+                "account": account,
+                "google": google,
+                "note": note,
+            })))
+        })
+        .filter_map(Result::transpose)
+        .collect::<Result<Vec<_>>>()?;
+    Ok(json!({ "cards": cards }))
+}
+
 pub(super) fn mutate(engine: &Engine, book_id: &str, method: &str, p: &Value) -> Result<Value> {
     let account: Account = accounts(&*lock(engine)?)?
         .into_iter()
@@ -105,6 +156,8 @@ pub(super) fn mutate(engine: &Engine, book_id: &str, method: &str, p: &Value) ->
 struct Draft {
     name: String,
     emails: Vec<String>,
+    /// The new NOTE; None leaves the card's note as it is.
+    note: Option<String>,
 }
 
 impl Draft {
@@ -125,9 +178,21 @@ impl Draft {
                 emails.push(value.into());
             }
         }
+        // Meron lists book contacts by address: one without any would be
+        // left on the server where Meron can no longer reach it.
+        ensure!(!emails.is_empty(), "Add at least one email address");
+        let note = match &p["note"] {
+            Value::Null => None,
+            value => {
+                let note = value.as_str().context("invalid contact note")?.trim();
+                ensure!(note.len() <= 65536, "The note is too long");
+                Some(note.to_owned())
+            }
+        };
         Ok(Self {
             name: name.into(),
             emails,
+            note,
         })
     }
 
@@ -147,6 +212,10 @@ impl Draft {
                 .iter()
                 .map(|email| entry(Prop::Email, Val::Text(email.clone()))),
         );
+        if let Some(note) = self.note.as_ref().filter(|note| !note.is_empty()) {
+            card.entries
+                .push(entry(Prop::Note, Val::Text(note.clone())));
+        }
         let mut output = String::new();
         card.write_to(
             &mut output,
@@ -210,7 +279,10 @@ impl Draft {
                 ),
                 "Unsupported nested vCard content"
             );
-            let value = if ["FN", "EMAIL"].iter().any(|p| prop.eq_ignore_ascii_case(p)) {
+            let value = if ["FN", "EMAIL", "NOTE"]
+                .iter()
+                .any(|p| prop.eq_ignore_ascii_case(p))
+            {
                 let card = VCard::parse(&format!(
                     "BEGIN:VCARD\r\n{version}\r\n{line}\r\nEND:VCARD\r\n"
                 ))
@@ -231,6 +303,16 @@ impl Draft {
         let has_n = parsed
             .iter()
             .any(|(_, _, prop, _)| prop.eq_ignore_ascii_case("N"));
+        // The NOTE Meron shows (see Card::parse): the first with text. Only
+        // that one is replaced; other notes, and their parameters, stay.
+        let shown_note = parsed.iter().position(|(_, _, prop, item)| {
+            prop.eq_ignore_ascii_case("NOTE")
+                && item.as_ref().is_some_and(|item| {
+                    item.values
+                        .iter()
+                        .any(|value| matches!(value, Val::Text(text) if !text.trim().is_empty()))
+                })
+        });
         let rename = old_name != self.name;
         ensure!(!rename || !self.name.is_empty(), "Enter a contact name");
         let rewrite_n = rename && (!old_name.is_empty() || !has_n);
@@ -238,8 +320,34 @@ impl Draft {
         let mut removed_groups = std::collections::BTreeSet::new();
         let mut kept_groups = std::collections::BTreeSet::new();
         let mut present = Vec::new();
-        let mut kept = Vec::new();
-        for (line, group, prop, item) in parsed {
+        // The new note, written where the shown one was so it stays the one
+        // shown; appended when the card had none.
+        let mut new_note = match self.note.as_ref().filter(|note| !note.is_empty()) {
+            Some(note) => {
+                let mut line = String::new();
+                entry(Prop::Note, Val::Text(note.clone())).write_to(&mut line, v4)?;
+                Some(line.trim_end_matches("\r\n").to_owned())
+            }
+            None => None,
+        };
+        let mut kept: Vec<(std::borrow::Cow<str>, &str)> = Vec::new();
+        for (index, (line, group, prop, item)) in parsed.into_iter().enumerate() {
+            if self.note.is_some() && shown_note == Some(index) {
+                if let Some(note) = new_note.take() {
+                    // Only the text changes: the group and parameters
+                    // (`item1.NOTE;LANGUAGE=fr:`) are the line's own.
+                    let text = note
+                        .replace("\r\n ", "")
+                        .split_once(':')
+                        .map(|(_, text)| text.to_owned())
+                        .unwrap_or_default();
+                    kept.push((format!("{}:{text}", property_prefix(line)).into(), group));
+                    if !group.is_empty() {
+                        kept_groups.insert(group.to_ascii_lowercase());
+                    }
+                }
+                continue;
+            }
             if (rename && prop.eq_ignore_ascii_case("FN"))
                 || (rewrite_n && prop.eq_ignore_ascii_case("N"))
             {
@@ -272,12 +380,12 @@ impl Draft {
             {
                 kept_groups.insert(group.to_ascii_lowercase());
             }
-            kept.push((line, group));
+            kept.push((line.into(), group));
         }
         for (line, group) in kept {
             let group = group.to_ascii_lowercase();
             if !removed_groups.contains(&group) || kept_groups.contains(&group) {
-                output.push_str(line);
+                output.push_str(&line);
                 output.push_str("\r\n");
             }
         }
@@ -292,9 +400,27 @@ impl Draft {
                 entry(Prop::Email, Val::Text(email.clone())).write_to(&mut output, v4)?;
             }
         }
+        if let Some(note) = new_note {
+            output.push_str(&note);
+            output.push_str("\r\n");
+        }
         output.push_str("END:VCARD\r\n");
         Ok(output)
     }
+}
+
+/// A content line up to the colon before its value: group, name and
+/// parameters. A colon inside a quoted parameter value does not end it.
+fn property_prefix(line: &str) -> &str {
+    let mut quoted = false;
+    for (i, c) in line.char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            ':' if !quoted => return &line[..i],
+            _ => {}
+        }
+    }
+    line
 }
 
 fn same_email(a: &str, b: &str) -> bool {
@@ -353,6 +479,7 @@ mod tests {
             let draft = Draft {
                 name: card.name,
                 emails: vec!["new@example.test".into()],
+                note: None,
             };
             let result = draft.edit_raw(&raw).unwrap();
             assert!(result.contains(n));
@@ -363,11 +490,57 @@ mod tests {
     }
 
     #[test]
+    fn notes_are_read_replaced_and_cleared() {
+        let raw = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:n\r\nFN:Cora Fixture\r\nNOTE:Met at the fair\\, 2025\\nLikes tea\r\nEMAIL:cora@example.test\r\nEND:VCARD\r\n";
+        let card = super::super::Card::parse("n.vcf", "v1", raw).unwrap();
+        assert_eq!(card.note, "Met at the fair, 2025\nLikes tea");
+        let draft = |note: &str| Draft {
+            name: "Cora Fixture".into(),
+            emails: vec!["cora@example.test".into()],
+            note: Some(note.into()),
+        };
+        let replaced = draft("# Plans\nCall on Friday").edit_raw(raw).unwrap();
+        let card = super::super::Card::parse("n.vcf", "v2", &replaced).unwrap();
+        assert_eq!(card.note, "# Plans\nCall on Friday");
+        assert_eq!(replaced.matches("NOTE").count(), 1);
+        let cleared = draft("").edit_raw(raw).unwrap();
+        assert!(!cleared.contains("NOTE"), "{cleared}");
+        // The edited note keeps its own group and parameters.
+        let grouped = raw.replace(
+            "NOTE:Met at the fair\\, 2025\\nLikes tea",
+            "item1.NOTE;LANGUAGE=en;X-SRC=\"a:b\":Met at the fair",
+        );
+        let edited = draft("Call on Friday, 3pm").edit_raw(&grouped).unwrap();
+        assert!(
+            edited.contains("item1.NOTE;LANGUAGE=en;X-SRC=\"a:b\":Call on Friday\\, 3pm\r\n"),
+            "{edited}"
+        );
+        // Only the note shown is replaced; another, with its parameters, stays.
+        let two = raw.replace("EMAIL:", "NOTE;LANGUAGE=fr:Rencontrée au salon\r\nEMAIL:");
+        let edited = draft("Call on Friday").edit_raw(&two).unwrap();
+        assert!(
+            edited.contains("NOTE;LANGUAGE=fr:Rencontrée au salon\r\n"),
+            "{edited}"
+        );
+        assert!(!edited.contains("Met at the fair"), "{edited}");
+        assert_eq!(
+            super::super::Card::parse("n.vcf", "v3", &edited)
+                .unwrap()
+                .note,
+            "Call on Friday"
+        );
+        let created = draft("New note").serialize(None, "uid-1", false).unwrap();
+        let card = super::super::Card::parse("c.vcf", "v1", &created).unwrap();
+        assert_eq!(card.note, "New note");
+    }
+
+    #[test]
     fn editing_preserves_unrelated_fields_and_email_metadata() {
         let raw = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:test-contact\r\nFN:Cora Fixture\r\nN:Fixture;Cora;;;\r\nTEL;TYPE=WORK:+1-202-555-0100\r\nNOTE:An example note\r\nEMAIL;TYPE=WORK:cora@example.test\r\nEMAIL:old@example.test\r\nEND:VCARD\r\n";
         let draft = Draft {
             name: "Cora Edited".into(),
             emails: vec!["cora@example.test".into(), "new@example.test".into()],
+            note: None,
         };
         let output = draft.serialize(Some(raw), "", true).unwrap();
         let parse = |text: &str| VCard::parse(text).unwrap().entries;
@@ -404,6 +577,7 @@ mod tests {
         let draft = Draft {
             name: "Cora Fixture".into(),
             emails: vec!["new@example.test".into()],
+            note: None,
         };
         let output = draft.edit_raw(raw).unwrap();
         assert_eq!(

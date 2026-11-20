@@ -26,7 +26,7 @@ pub fn dispatch(engine: &Engine, method: &str, params: &Value) -> Result<Value> 
     let conn = || engine.db.lock().map_err(|_| anyhow!("store lock poisoned"));
     match method {
         "caldav.discoverServer" => Ok(json!({
-            "server_url": super::discovery::discover_server(required("email")?)
+            "server_url": super::discovery::discover_server(required("email")?, super::discovery::Dav::Calendars)
                 .map(|url| url.to_string()),
         })),
         "caldav.accounts" => Ok(json!({ "accounts": accounts_payload(&*conn()?)? })),
@@ -140,7 +140,7 @@ pub struct NewAccount<'a> {
 /// The password a mail account signs in with, when it signs in with one
 /// and its login is `username`: the same server account often has
 /// calendars too, and the same password opens them.
-pub(super) fn mail_account_password(
+pub(crate) fn mail_account_password(
     engine: &Engine,
     mail_account_id: &str,
     username: &str,

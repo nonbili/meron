@@ -62,6 +62,17 @@ export async function saveContactNote(addr: string) {
   }
 }
 
+/** Drop the note kept on this device once `moved`, its text, is in an
+ * address book: not if it has been edited since, which would lose that. */
+export async function clearContactNote(addr: string, moved: string) {
+  const key = contactKey(addr)
+  await loadContactNote(key)
+  const note = contactNotes$[key].peek()
+  if (!note?.loaded || note.saved.trim() !== moved || note.draft.trim() !== moved) return
+  contactNotes$[key].draft.set('')
+  await saveContactNote(key)
+}
+
 const pins = persistedField(
   contacts$.pinned,
   'pinned_contacts',

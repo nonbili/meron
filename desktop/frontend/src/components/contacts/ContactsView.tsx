@@ -1,7 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { ArrowUpDown, BookUser, Check, ChevronLeft, Copy, Pin, PinOff, SquarePen, Users, X } from 'lucide-react'
+import {
+  ArrowUpDown,
+  BookUser,
+  Check,
+  ChevronLeft,
+  Cloud,
+  CloudUpload,
+  Copy,
+  Lock,
+  Mail,
+  Pencil,
+  Plus,
+  Pin,
+  PinOff,
+  SquarePen,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+} from 'lucide-react'
 import { invoke } from '../../lib/bridge'
+import { errorMessage } from '../../lib/errors'
 import { useTranslation } from '../../lib/i18n'
 import { copyText } from '../../lib/native'
 import { formatContact } from '../../lib/contacts'
@@ -11,17 +31,34 @@ import { openComposeTab, openThreadTab } from '../../states/compose'
 import type { Contact, Message } from '../../types'
 import { Avatar } from '../avatar/Avatar'
 import { ThreadListItem } from '../threads/ThreadListItem'
-import { CONTACT_SORTS, contactKey, contacts$, toggleContactPin } from '../../states/contacts'
+import {
+  CONTACT_SORTS,
+  clearContactNote,
+  contactKey,
+  contactNotes$,
+  contacts$,
+  loadContactNote,
+  toggleContactPin,
+} from '../../states/contacts'
 import type { ContactSort } from '../../states/contacts'
 import { MenuItem } from '../menu/MenuItem'
 import { MenuSurface } from '../menu/MenuSurface'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
-import { ui$ } from '../../states/ui'
+import { confirmAction, showToast, ui$ } from '../../states/ui'
 import { mail$ } from '../../states/mail'
 import { IconButton } from '../button/IconButton'
 import { useNarrowWindow } from '../../lib/useNarrowWindow'
-import { ContactNotes } from './ContactNotes'
+import { ContactNotes, NoteMarkdown } from './ContactNotes'
 import { AddressBooks } from './AddressBooks'
+import {
+  ContactEditor,
+  bookLabel,
+  deleteBookCard,
+  type AddressBook,
+  type BookCard,
+  type EditorResult,
+} from './ContactEditor'
+import { Button } from '../button/Button'
 
 const SORT_LABELS = {
   frequent: 'contacts.sortFrequent',
@@ -66,6 +103,148 @@ export function ContactsView() {
   const [page, setPage] = useState('')
   const [loadedAddr, setLoadedAddr] = useState('')
   const historyAddr = useRef('')
+  // Enabled address books (where a new contact can go), and the cards saved
+  // in them for the open contact's address.
+  const [books, setBooks] = useState<AddressBook[]>([])
+  const [cards, setCards] = useState<BookCard[]>([])
+  // The address whose cards `cards` holds, so "only in your mail" is not
+  // shown before they have loaded.
+  const [cardsAddr, setCardsAddr] = useState('')
+  // The address whose card lookup failed: neither "only in your mail" nor
+  // its cards can be claimed then.
+  const [cardsFailed, setCardsFailed] = useState('')
+  const [editor, setEditor] = useState<null | {
+    card?: BookCard
+    name?: string
+    email?: string
+    note?: string
+    /** The note is the one kept on this device: drop that copy once saved. */
+    movesLocalNote?: boolean
+  }>(null)
+  // The note kept only on this device for the open contact. Once the contact
+  // is in an address book, its note lives on the card instead.
+  const localNoteState = useValue(contactNotes$[contactKey(selectedAddr)])
+  const localNote = localNoteState?.loaded ? localNoteState.saved.trim() : ''
+  useEffect(() => {
+    if (selectedAddr) void loadContactNote(selectedAddr)
+  }, [selectedAddr])
+
+  const localNoteEditing = !!localNoteState && localNoteState.draft !== localNoteState.saved
+  /** Once confirmed, add the device note to a card's note on the server,
+   * then drop it here. Whoever can read that address book will see it. */
+  async function moveLocalNote(addr: string, card: BookCard, text: string) {
+    const confirmed = await confirmAction({
+      title: t('contacts.moveNoteTitle', { defaultValue: 'Move note' }),
+      message: t('contacts.moveNoteConfirm', {
+        book: bookLabel(card.book_name, card.account),
+        defaultValue:
+          'Move this note to {book}? It is added to the contact there, and anyone with access to that address book will see it.',
+      }),
+      confirmLabel: t('contacts.moveNoteConfirmLabel', { defaultValue: 'Move' }),
+    })
+    if (!confirmed) return
+    try {
+      // Always written, version-checked, even if the cached note seems to
+      // hold it already: the cache may be behind the server, and a repeated
+      // note is better than a lost one.
+      const result = await invoke<{ sync_error?: string }>('carddav.updateContact', {
+        book_id: card.book_id,
+        contact_id: card.id,
+        version: card.version,
+        name: card.name,
+        emails: card.emails,
+        note: card.note.trim() ? `${card.note.trim()}\n\n${text}` : text,
+      })
+      // Saved on the server even when the refresh after it failed; only the
+      // copy here is behind until the next sync.
+      if (result?.sync_error)
+        showToast(
+          t('contacts.editorRefreshWarning', {
+            defaultValue:
+              'The change was saved on the server, but contacts could not refresh. Use Sync now in Address books.',
+          }),
+          'error',
+        )
+      await clearContactNote(addr, text)
+    } catch (err) {
+      showToast(
+        errorMessage(
+          err,
+          t('contacts.moveNoteFailed', { defaultValue: 'Could not save the note to the address book.' }),
+        ),
+        'error',
+      )
+    } finally {
+      setRetry((n) => n + 1)
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    void invoke<{
+      accounts: { username: string; books: { id: string; name: string; enabled: boolean }[] }[]
+    }>('carddav.accounts')
+      .then((res) => {
+        if (!cancelled)
+          setBooks(
+            (res?.accounts ?? []).flatMap((account) =>
+              account.books
+                .filter((book) => book.enabled)
+                .map(({ id, name }) => ({
+                  id,
+                  name,
+                  account: account.username,
+                })),
+            ),
+          )
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [retry])
+
+  // Cards show only once `cardsAddr` names the open address, so another
+  // contact's never do; a refresh keeps the current ones until it answers.
+  useEffect(() => {
+    setCardsFailed('')
+    if (!selectedAddr) return
+    let cancelled = false
+    void invoke<{ cards: BookCard[] }>('carddav.cardsFor', { email: selectedAddr })
+      .then((res) => {
+        if (cancelled) return
+        setCards(res?.cards ?? [])
+        setCardsAddr(selectedAddr)
+      })
+      .catch(() => {
+        if (!cancelled) setCardsFailed(selectedAddr)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedAddr, retry])
+
+  // The open editor, for a save that finishes after it was left with Back.
+  const openEditor = useRef(editor)
+  openEditor.current = editor
+
+  function editorDone(result: EditorResult) {
+    const editing = editor?.card
+    if (result && editor?.movesLocalNote && editor.note) void clearContactNote(selectedAddr, editor.note)
+    setRetry((n) => n + 1)
+    // Left before the server answered: the change is saved, but whatever is
+    // open now (another editor, another contact) stays as it is.
+    if (openEditor.current !== editor) return
+    setEditor(null)
+    // Deleted: stay, as the address may still be in mail.
+    if (!result) return
+    const addr = editing || selectedAddr ? selectedAddr : result.emails[0]
+    if (addr && result.emails.some((email) => contactKey(email) === contactKey(addr))) {
+      contacts$.selected.set({ name: result.name, addr })
+    } else if (editing) {
+      contacts$.selected.set(null)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -192,7 +371,9 @@ export function ContactsView() {
   return (
     <section className="flex min-h-0 min-w-0 w-full shrink-0 flex-col border-l border-border/60 bg-chats min-[901px]:w-[340px]">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/50 pl-3 pr-1.5 text-sm font-semibold">
-        {selected ? (
+        {editor ? (
+          <IconButton icon={ChevronLeft} size="sm" label={t('buttons.back')} onClick={() => setEditor(null)} />
+        ) : selected ? (
           <IconButton
             icon={ChevronLeft}
             size="sm"
@@ -206,8 +387,22 @@ export function ContactsView() {
         ) : (
           <Users size={17} className="text-accent" />
         )}
-        <h1 className="min-w-0 flex-1 truncate">{t('contacts.title')}</h1>
-        {!selected && (
+        <h1 className="min-w-0 flex-1 truncate">
+          {editor
+            ? editor.card
+              ? t('contacts.editContact', { defaultValue: 'Edit contact' })
+              : t('contacts.newContact', { defaultValue: 'New contact' })
+            : t('contacts.title')}
+        </h1>
+        {!editor && !selected && !addressBooks && books.length > 0 && (
+          <IconButton
+            icon={UserPlus}
+            size="sm"
+            label={t('contacts.newContact', { defaultValue: 'New contact' })}
+            onClick={() => setEditor({})}
+          />
+        )}
+        {!editor && !selected && (
           <IconButton
             icon={BookUser}
             size="sm"
@@ -216,7 +411,7 @@ export function ContactsView() {
             onClick={() => setAddressBooks(!addressBooks)}
           />
         )}
-        {selected && (
+        {!editor && selected && (
           <IconButton
             icon={isPinned(selected) ? PinOff : Pin}
             size="sm"
@@ -226,7 +421,18 @@ export function ContactsView() {
         )}
         <IconButton icon={X} size="sm" label={t('buttons.close')} onClick={() => ui$.contactsOpen.set(false)} />
       </header>
-      {!selected && addressBooks ? (
+      {editor ? (
+        <ContactEditor
+          key={editor.card?.id ?? 'new'}
+          card={editor.card}
+          initialName={editor.name}
+          initialEmail={editor.email}
+          initialNote={editor.note}
+          books={books}
+          onCancel={() => setEditor(null)}
+          onDone={editorDone}
+        />
+      ) : !selected && addressBooks ? (
         <AddressBooks onChange={() => setRetry((n) => n + 1)} />
       ) : !selected ? (
         <>
@@ -341,7 +547,110 @@ export function ContactsView() {
             )}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            <ContactNotes key={selected.addr} addr={selected.addr} />
+            {cardsAddr === selected.addr && (
+              <section className="pb-2">
+                <h2 className="px-2 pt-1 pb-1.5 text-xs font-semibold text-secondary">
+                  {t('contacts.addressBook', { defaultValue: 'Address book' })}
+                </h2>
+                {cards.map((card) => (
+                  <div key={`${card.book_id}\n${card.id}`}>
+                    <div className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-hover">
+                      <BookUser size={16} aria-hidden className="shrink-0 text-accent" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm">{card.book_name}</span>
+                        <span className="block truncate text-xs text-secondary">
+                          {card.google ? `Google Contacts · ${card.account}` : card.account}
+                        </span>
+                      </span>
+                      <IconButton
+                        icon={Pencil}
+                        size="sm"
+                        label={t('contacts.editContact', { defaultValue: 'Edit contact' })}
+                        onClick={() => setEditor({ card })}
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        size="sm"
+                        label={t('contacts.editorDelete', { defaultValue: 'Delete contact' })}
+                        className="text-rose-600 hover:text-rose-600 dark:text-rose-400"
+                        onClick={() =>
+                          void deleteBookCard(card, t).then((deleted) => {
+                            if (deleted) setRetry((n) => n + 1)
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
+                {!cards.length && (
+                  <div className="flex items-center gap-2.5 px-2 py-1.5">
+                    <Mail size={16} aria-hidden className="shrink-0 text-secondary" />
+                    <span className="min-w-0 flex-1 text-sm text-secondary">
+                      {t('contacts.onlyInMail', { defaultValue: 'Only in your mail' })}
+                    </span>
+                    {books.length > 0 && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        leftIcon={Plus}
+                        onClick={() =>
+                          setEditor({
+                            name: selected.name,
+                            email: selected.addr,
+                            note: localNote || undefined,
+                            movesLocalNote: !!localNote,
+                          })
+                        }
+                      >
+                        {t('contacts.saveToAddressBook', { defaultValue: 'Save to address book' })}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+            {cardsFailed === selected.addr && (
+              <button className="px-2 pb-2 text-xs text-accent" onClick={() => setRetry((n) => n + 1)}>
+                {t('contacts.addressBookRetry', { defaultValue: 'Could not check the address book. Try again' })}
+              </button>
+            )}
+            {(cardsAddr === selected.addr && !cards.length) || cardsFailed === selected.addr ? (
+              <ContactNotes key={selected.addr} addr={selected.addr} />
+            ) : (
+              cardsAddr === selected.addr && (
+                <>
+                  {/* Saved in an address book: each place a note is kept says
+                      so, and moving one up is the user's choice. */}
+                  {(localNote || localNoteEditing) && (
+                    <ContactNotes
+                      key={selected.addr}
+                      addr={selected.addr}
+                      icon={<Lock size={12} aria-hidden className="shrink-0 text-secondary" />}
+                      title={t('contacts.deviceNote', { defaultValue: 'Note only on this device' })}
+                      footer={
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {cards.map((card) => (
+                            <Button
+                              key={`${card.book_id}\n${card.id}`}
+                              variant="secondary"
+                              size="sm"
+                              leftIcon={CloudUpload}
+                              title={bookLabel(card.book_name, card.account)}
+                              onClick={() => void moveLocalNote(selected.addr, card, localNote)}
+                            >
+                              {t('contacts.moveNote', { book: card.book_name, defaultValue: 'Move to {book}' })}
+                            </Button>
+                          ))}
+                        </div>
+                      }
+                    />
+                  )}
+                  {cards.map((card) => (
+                    <BookNote key={`${card.book_id}\n${card.id}`} card={card} onEdit={() => setEditor({ card })} />
+                  ))}
+                </>
+              )
+            )}
             <h2 className="px-2 pt-4 pb-2 text-xs font-semibold text-secondary">{t('contacts.recentConversations')}</h2>
             {!selected ? (
               <p className="p-3 text-sm text-secondary">{t('contacts.select')}</p>
@@ -387,6 +696,43 @@ export function ContactsView() {
             )}
           </div>
         </div>
+      )}
+    </section>
+  )
+}
+
+/** A contact's note as its address book keeps it, shared with other clients. */
+function BookNote({ card, onEdit }: { card: BookCard; onEdit: () => void }) {
+  const { t } = useTranslation()
+  const label = bookLabel(card.book_name, card.account)
+  return (
+    <section className="border-b border-border/50 px-2 pt-1 pb-4" aria-label={label}>
+      <div className="flex h-8 items-center gap-2">
+        <Cloud size={12} aria-hidden className="shrink-0 text-secondary" />
+        <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-secondary" title={label}>
+          {label}
+        </h2>
+        {card.note && (
+          <button
+            className="-mr-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[0.6875rem] font-semibold text-secondary transition-colors hover:bg-hover hover:text-primary"
+            aria-label={t('contacts.editNote', { defaultValue: 'Edit note' })}
+            onClick={onEdit}
+          >
+            <Pencil size={12} className="stroke-[2.5]" />
+            {t('contacts.notesEdit')}
+          </button>
+        )}
+      </div>
+      {card.note ? (
+        <NoteMarkdown text={card.note} />
+      ) : (
+        <button
+          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-left text-sm text-secondary transition-colors hover:border-accent/50 hover:text-accent"
+          onClick={onEdit}
+        >
+          <Plus size={14} className="stroke-[2.5]" />
+          {t('contacts.notesPlaceholder')}
+        </button>
       )}
     </section>
   )

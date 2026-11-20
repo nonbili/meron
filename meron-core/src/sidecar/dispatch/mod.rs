@@ -99,7 +99,13 @@ pub(crate) async fn dispatch(
                 meron_core::carddav::dispatch(&engine, &method, &params)
             })
             .await??;
-            if !matches!(m, "carddav.accounts" | "carddav.contacts") {
+            if !matches!(
+                m,
+                "carddav.accounts"
+                    | "carddav.contacts"
+                    | "carddav.cardsFor"
+                    | "carddav.discoverServer"
+            ) {
                 crate::emit(out, "carddav.changed", serde_json::json!({})).await;
             }
             Ok(result)

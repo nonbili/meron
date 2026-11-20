@@ -26,6 +26,27 @@ impl std::fmt::Display for Unauthorized {
 
 impl std::error::Error for Unauthorized {}
 
+/// The server could not be reached at all (refused, timed out, bad TLS).
+/// Every URL discovery tries is on the same origin, so none of the others
+/// would answer either.
+#[derive(Debug)]
+struct Unreachable(String);
+
+impl std::fmt::Display for Unreachable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Could not reach the CardDAV server: {}", self.0)
+    }
+}
+
+impl std::error::Error for Unreachable {}
+
+/// How long to wait for a server to accept a connection; one that is down
+/// or not listening on that port should fail fast, not after the whole
+/// request timeout.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Accept `host`, `host/path` or a full URL; plain `http` only when the user
+/// typed it, as for CalDAV.
 pub(super) fn server_url(input: &str) -> Result<Url> {
     let input = input.trim();
     ensure!(!input.is_empty(), "enter a CardDAV server URL");
@@ -38,15 +59,6 @@ pub(super) fn server_url(input: &str) -> Result<Url> {
     ensure!(
         matches!(url.scheme(), "http" | "https") && url.host_str().is_some() && clean(&url),
         "use an HTTP(S) server URL without credentials, query or fragment"
-    );
-    ensure!(
-        url.scheme() == "https"
-            || match url.host() {
-                Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
-                Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
-                _ => false,
-            },
-        "Use HTTPS for CardDAV; unencrypted HTTP is allowed only on loopback IP addresses"
     );
     Ok(url)
 }
@@ -144,13 +156,16 @@ impl Client {
                 .allow_non_standard_methods(true)
                 .http_status_as_error(false)
                 .max_redirects(0)
+                .timeout_connect(Some(CONNECT_TIMEOUT))
                 .timeout_global(Some(Duration::from_secs(30)))
                 .run()
-                .map_err(|_| {
+                .map_err(|err| {
                     if method == "POST" {
                         anyhow::anyhow!("Google Contacts did not confirm creation. Sync and check whether the contact exists before retrying.")
+                    } else if crate::caldav::unreachable(&err) {
+                        Unreachable(err.to_string()).into()
                     } else {
-                        anyhow::anyhow!("CardDAV {method} request failed")
+                        anyhow::anyhow!("CardDAV {method} request failed: {err}")
                     }
                 })?;
             let status = response.status().as_u16();
@@ -270,7 +285,7 @@ impl Client {
             match self.discover_from(url) {
                 Ok(books) if !books.is_empty() => return Ok(books),
                 Ok(_) => {}
-                Err(err) if err.is::<Unauthorized>() => return Err(err),
+                Err(err) if err.is::<Unauthorized>() || err.is::<Unreachable>() => return Err(err),
                 Err(err) => last_error = Some(err),
             }
         }
@@ -624,6 +639,50 @@ fn canonical_member(url: &Url) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unreachable_server_fails_once_with_the_reason() {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let client = Client::basic(
+            server_url(&format!("http://127.0.0.1:{port}/dav/")).unwrap(),
+            "user1@mail.localhost",
+            "fictional-password",
+        )
+        .unwrap();
+        let Err(err) = client.discover() else {
+            panic!("discovery reached a closed port");
+        };
+        assert!(err.is::<Unreachable>(), "{err:#}");
+        assert!(
+            err.to_string()
+                .starts_with("Could not reach the CardDAV server"),
+            "{err:#}"
+        );
+    }
+
+    #[test]
+    fn server_url_keeps_typed_http_and_defaults_to_https() {
+        assert_eq!(
+            server_url(" dav.example.test/books ").unwrap().as_str(),
+            "https://dav.example.test/books"
+        );
+        assert_eq!(
+            server_url("http://192.0.2.10:4080").unwrap().as_str(),
+            "http://192.0.2.10:4080/"
+        );
+        for input in [
+            "",
+            "ftp://dav.example.test",
+            "https://user:pw@dav.example.test",
+            "https://dav.example.test/?q=1",
+        ] {
+            assert!(server_url(input).is_err(), "{input}");
+        }
+    }
     use std::{io::Write, net::TcpListener};
 
     fn fixture(
