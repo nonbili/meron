@@ -32,7 +32,9 @@ fn str_param(p: &Value, key: &str) -> String {
 
 fn client(p: &Value) -> Result<oauth::Client, String> {
     match p.get("provider").and_then(Value::as_str).unwrap_or("") {
-        provider @ ("gmail" | "outlook") => Ok(default_oauth_client(provider)),
+        provider @ ("gmail" | "outlook" | oauth::GOOGLE_CALENDAR_PROVIDER) => {
+            Ok(default_oauth_client(provider))
+        }
         _ => Err("unsupported oauth provider".to_string()),
     }
 }
@@ -44,7 +46,7 @@ fn authorize_url(p: &Value) -> Result<Value, String> {
         &str_param(p, "redirect_uri"),
         &str_param(p, "state"),
         &str_param(p, "code_challenge"),
-        "",
+        &str_param(p, "login_hint"),
     )?;
     Ok(json!({ "url": url }))
 }

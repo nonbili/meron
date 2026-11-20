@@ -217,6 +217,346 @@ fn helpers() {
     );
 }
 
+const GOOGLE_COLLECTION: &str = "/caldav/v2/calendar%40example.test/events";
+
+fn google_properties(ctag: &str) -> String {
+    format!(
+        r#"<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/">
+        <d:response><d:href>{GOOGLE_COLLECTION}</d:href><d:propstat><d:prop>
+        <d:resourcetype><d:collection/><c:calendar/></d:resourcetype><d:displayname>Primary</d:displayname>
+        <cs:getctag>{ctag}</cs:getctag>
+        </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>"#
+    )
+}
+
+fn google_fixture() -> (Client, std::net::TcpListener) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let mut client = Client::google("calendar@example.test", "fixture-token").unwrap();
+    assert!(same_member(
+        &client.server,
+        &Url::parse(&format!(
+            "https://apidata.googleusercontent.com{GOOGLE_COLLECTION}"
+        ))
+        .unwrap()
+    ));
+    assert!(!client.trusts(&Url::parse("https://other.example.test/").unwrap()));
+    client.server = Url::parse(&format!("{origin}{GOOGLE_COLLECTION}")).unwrap();
+    (client, listener)
+}
+
+fn serve_google(
+    listener: std::net::TcpListener,
+    responses: Vec<(&'static str, String, String)>,
+) -> std::sync::mpsc::Receiver<String> {
+    use std::io::Write;
+    let (requests, received) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for (status, headers, body) in responses {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = crate::test_support::read_http_request(&mut stream);
+            assert!(
+                request
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer fixture-token")
+            );
+            requests.send(request).unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len(),
+            ).unwrap();
+        }
+    });
+    received
+}
+
+fn google_store(client: &Client, read_only: bool) -> (rusqlite::Connection, store::DavCalendar) {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    store::save_account(
+        &conn,
+        &store::DavAccount {
+            id: "dav-1".into(),
+            google: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let calendar = store::reconcile_calendars(
+        &conn,
+        "dav-1",
+        &[Calendar {
+            url: client.server.to_string(),
+            read_only,
+            ..Default::default()
+        }],
+    )
+    .unwrap()
+    .remove(0);
+    (conn, calendar)
+}
+
+#[test]
+fn google_primary_calendar_imports_and_recovers_from_expired_sync_token() {
+    use std::time::Duration;
+
+    let event_url = format!("{GOOGLE_COLLECTION}/event.ics");
+    let event_props = r#"<d:propstat><d:prop><d:getetag>"1"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"#;
+    let snapshot = format!(
+        r#"<d:multistatus xmlns:d="DAV:"><d:response><d:href>{event_url}</d:href>{event_props}</d:response><d:sync-token>first</d:sync-token></d:multistatus>"#
+    );
+    let ics = "BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:fictional-event
+DTSTAMP:20261119T080000Z
+DTSTART:20261120T090000Z
+DTEND:20261120T100000Z
+SUMMARY:Planning
+END:VEVENT
+END:VCALENDAR
+";
+    let fetched = format!(
+        r#"<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:response><d:href>{event_url}</d:href><d:propstat><d:prop>
+        <d:getetag>"1"</d:getetag><c:calendar-data><![CDATA[{ics}]]></c:calendar-data>
+        </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>"#
+    );
+
+    let (client, listener) = google_fixture();
+    let received = serve_google(listener, [
+        ("207 Multi-Status", google_properties("one")),
+        ("207 Multi-Status", snapshot),
+        ("207 Multi-Status", fetched),
+        ("207 Multi-Status", google_properties("two")),
+        ("403 Forbidden", r#"<d:error xmlns:d="DAV:"><d:valid-sync-token/></d:error>"#.into()),
+        ("207 Multi-Status", r#"<d:multistatus xmlns:d="DAV:"><d:sync-token>second</d:sync-token></d:multistatus>"#.into()),
+    ].into_iter().map(|(status, body)| (status, String::new(), body)).collect());
+    let err = client.delete_calendar(client.server.as_str()).unwrap_err();
+    assert!(err.to_string().contains("outside the primary calendar"));
+    let (conn, previous) = google_store(&client, true);
+    assert_eq!(synced(&conn, &client).pulled, 1);
+    let calendars = store::calendars(&conn, "dav-1").unwrap();
+    assert_eq!(calendars.len(), 1);
+    assert_eq!(calendars[0].id, previous.id);
+    assert!(!calendars[0].read_only);
+    assert_eq!(calendars[0].components, ["VEVENT"]);
+    assert_eq!(calendars[0].sync_token, "first");
+    assert_eq!(
+        crate::store::all_events(&conn).unwrap()[0].title,
+        "Planning"
+    );
+
+    assert_eq!(synced(&conn, &client).pulled, 1);
+    let current = store::calendar(&conn, &calendars[0].id).unwrap().unwrap();
+    assert_eq!(current.sync_token, "second");
+    assert!(crate::store::all_events(&conn).unwrap().is_empty());
+
+    for (method, body) in [
+        ("PROPFIND", "<d:propfind"),
+        ("REPORT", "<d:sync-token></d:sync-token>"),
+        ("REPORT", "<c:calendar-multiget"),
+        ("PROPFIND", "<d:propfind"),
+        ("REPORT", "<d:sync-token>first</d:sync-token>"),
+        ("REPORT", "<d:sync-token></d:sync-token>"),
+    ] {
+        let request = received.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(request.starts_with(method), "{request}");
+        assert!(request.contains(body), "{request}");
+    }
+}
+
+#[test]
+fn google_sync_writes_events_to_the_server_assigned_url() {
+    use crate::calendar::events::{self, EventInput};
+    use std::time::Duration;
+
+    // Google can return a different path and spell @ inconsistently.
+    let location = format!("{}/google-id.ics", GOOGLE_COLLECTION.replace("%40", "@"));
+    let canonical = format!("{GOOGLE_COLLECTION}/google-id.ics");
+    let (client, listener) = google_fixture();
+    let (conn, calendar) = google_store(&client, false);
+    let mut input = EventInput {
+        title: "Planning".into(),
+        start: 1_795_251_600,
+        end: 1_795_255_200,
+        repeat: "weekly".into(),
+        calendar: Some(calendar.id.clone()),
+        ..Default::default()
+    };
+    let event = events::create_event(&conn, &input).unwrap();
+    let id = event["event"]["id"].as_str().unwrap();
+    let queued = store::object_for_event(&conn, id).unwrap().unwrap();
+    let ics = crate::store::event(&conn, id).unwrap().unwrap().ics;
+    let edited = ics.replace("SUMMARY:Planning", "SUMMARY:Updated planning");
+    let remote = ics.replace("SUMMARY:Planning", "SUMMARY:Edited on another device");
+    let delta = |token: &str, props: &str| {
+        format!(
+            r#"<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:response>
+        <d:href>{canonical}</d:href>{props}</d:response><d:sync-token>{token}</d:sync-token></d:multistatus>"#
+        )
+    };
+    let propstat = |etag: &str, data: &str| {
+        format!(
+            r#"<d:propstat><d:prop><d:getetag>"{etag}"</d:getetag>{data}</d:prop>
+        <d:status>HTTP/1.1 200 OK</d:status></d:propstat>"#
+        )
+    };
+    let received = serve_google(
+        listener,
+        vec![
+            ("207 Multi-Status", "".into(), google_properties("one")),
+            ("404 Not Found", "".into(), "".into()),
+            (
+                "207 Multi-Status",
+                "".into(),
+                r#"<d:multistatus xmlns:d="DAV:"/>"#.into(),
+            ),
+            (
+                "201 Created",
+                format!("Location: {location}\r\n"),
+                "".into(),
+            ),
+            (
+                "207 Multi-Status",
+                "".into(),
+                delta("first", &propstat("1", "")),
+            ),
+            (
+                "207 Multi-Status",
+                "".into(),
+                delta(
+                    "first",
+                    &propstat(
+                        "1",
+                        &format!("<c:calendar-data><![CDATA[{ics}]]></c:calendar-data>"),
+                    ),
+                ),
+            ),
+            ("207 Multi-Status", "".into(), google_properties("one")),
+            ("204 No Content", "ETag: \"2\"\r\n".into(), "".into()),
+            (
+                "207 Multi-Status",
+                "".into(),
+                delta("second", &propstat("2", "")),
+            ),
+            (
+                "207 Multi-Status",
+                "".into(),
+                delta(
+                    "second",
+                    &propstat(
+                        "2",
+                        &format!("<c:calendar-data><![CDATA[{edited}]]></c:calendar-data>"),
+                    ),
+                ),
+            ),
+            ("207 Multi-Status", "".into(), google_properties("two")),
+            ("412 Precondition Failed", "".into(), "".into()),
+            ("200 OK", "ETag: \"3\"\r\n".into(), remote.clone()),
+            (
+                "207 Multi-Status",
+                "".into(),
+                delta("third", &propstat("3", "")),
+            ),
+            (
+                "207 Multi-Status",
+                "".into(),
+                delta(
+                    "third",
+                    &propstat(
+                        "3",
+                        &format!("<c:calendar-data><![CDATA[{remote}]]></c:calendar-data>"),
+                    ),
+                ),
+            ),
+            ("207 Multi-Status", "".into(), google_properties("three")),
+            ("204 No Content", "".into(), "".into()),
+            (
+                "207 Multi-Status",
+                "".into(),
+                delta("fourth", "<d:status>HTTP/1.1 404 Not Found</d:status>"),
+            ),
+        ],
+    );
+
+    assert_eq!(synced(&conn, &client).pushed, 1);
+    let created = store::object_for_event(&conn, id).unwrap().unwrap();
+    assert!(created.url.ends_with(&location));
+    assert_eq!(created.etag, "\"1\"");
+    assert!(
+        store::object(&conn, &calendar.id, &queued.url)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(crate::store::all_events(&conn).unwrap().len(), 1);
+
+    input.title = "Updated planning".into();
+    events::update_event(&conn, id, &input).unwrap();
+    assert_eq!(synced(&conn, &client).pushed, 1);
+    assert_eq!(
+        store::object_for_event(&conn, id).unwrap().unwrap().etag,
+        "\"2\""
+    );
+
+    input.title = "Local stale edit".into();
+    events::update_event(&conn, id, &input).unwrap();
+    assert_eq!(synced(&conn, &client).pushed, 0);
+    assert_eq!(
+        crate::store::event(&conn, id).unwrap().unwrap().title,
+        "Edited on another device"
+    );
+
+    events::delete_event(&conn, id).unwrap();
+    assert_eq!(synced(&conn, &client).pushed, 1);
+    assert!(store::objects(&conn, &calendar.id).unwrap().is_empty());
+    assert!(crate::store::all_events(&conn).unwrap().is_empty());
+
+    let requests: Vec<_> = (0..18)
+        .map(|_| received.recv_timeout(Duration::from_secs(2)).unwrap())
+        .collect();
+    let creates = &requests[3];
+    assert!(creates.starts_with("PUT "));
+    assert!(!creates.to_ascii_lowercase().contains("if-none-match:"));
+    assert!(requests[2].contains("calendar-query"));
+    let edit = &requests[7];
+    assert!(edit.starts_with(&format!("PUT {location} ")));
+    assert!(edit.to_ascii_lowercase().contains("if-match: \"1\""));
+    assert!(edit.contains("SUMMARY:Updated planning"));
+    assert!(edit.contains("RRULE:FREQ=WEEKLY"));
+    let delete = &requests[16];
+    assert!(delete.starts_with(&format!("DELETE {location} ")));
+    assert!(delete.to_ascii_lowercase().contains("if-match: \"3\""));
+}
+
+#[test]
+fn google_create_retry_recovers_an_event_at_another_url() {
+    let (client, listener) = google_fixture();
+    let ics =
+        "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:fictional-retry\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    let canonical = format!("{GOOGLE_COLLECTION}/already-created.ics");
+    let received = serve_google(
+        listener,
+        vec![
+            ("404 Not Found", "".into(), "".into()),
+            (
+                "207 Multi-Status",
+                "".into(),
+                format!(
+                    r#"<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:response><d:href>{canonical}</d:href>
+            <d:propstat><d:prop><c:calendar-data><![CDATA[{ics}]]></c:calendar-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+            </d:response></d:multistatus>"#
+                ),
+            ),
+        ],
+    );
+    let queued = format!("{}/fictional-retry.ics", client.server);
+    let written = client.put(&queued, ics, None).unwrap();
+    assert!(written.url.ends_with(&canonical));
+    assert!(written.etag.is_empty());
+    assert_eq!(received.into_iter().count(), 2);
+}
+
 /// Round trip against a live server, such as the Stalwart in `~/repo/mservers`:
 ///
 /// ```sh

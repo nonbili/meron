@@ -66,6 +66,7 @@ pub struct DavAccount {
     pub username: String,
     pub display_name: String,
     pub home: String,
+    pub google: bool,
     pub last_sync_at: i64,
     pub last_error: String,
     /// Minutes between automatic syncs; 0 syncs only when asked.
@@ -128,7 +129,7 @@ pub struct DavObject {
 }
 
 const ACCOUNT_COLUMNS: &str = "id, server_url, username, display_name, home, last_sync_at,
-    last_error, json_extract(json, '$.sync_interval')";
+    last_error, json_extract(json, '$.sync_interval'), json_extract(json, '$.google')";
 
 fn read_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavAccount> {
     Ok(DavAccount {
@@ -137,6 +138,7 @@ fn read_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavAccount> {
         username: row.get(2)?,
         display_name: row.get(3)?,
         home: row.get(4)?,
+        google: row.get::<_, Option<bool>>(8)?.unwrap_or(false),
         last_sync_at: row.get(5)?,
         last_error: row.get(6)?,
         sync_interval: row
@@ -160,11 +162,12 @@ pub fn account(conn: &Connection, id: &str) -> Result<Option<DavAccount>> {
 pub fn save_account(conn: &Connection, account: &DavAccount) -> Result<()> {
     let now = now_unix();
     conn.execute(
-        "INSERT INTO dav_accounts (id, server_url, username, display_name, home, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+        "INSERT INTO dav_accounts (id, server_url, username, display_name, home, created_at, updated_at, json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, json_object('google', ?7))
          ON CONFLICT(id) DO UPDATE SET
            server_url = excluded.server_url, username = excluded.username,
            display_name = excluded.display_name, home = excluded.home,
+           json = json_set(dav_accounts.json, '$.google', ?7),
            updated_at = excluded.updated_at",
         params![
             account.id,
@@ -172,7 +175,8 @@ pub fn save_account(conn: &Connection, account: &DavAccount) -> Result<()> {
             account.username,
             account.display_name,
             account.home,
-            now
+            now,
+            account.google,
         ],
     )?;
     Ok(())

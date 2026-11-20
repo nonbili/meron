@@ -195,12 +195,21 @@ struct HttpResponse {
     /// The URL that answered, after redirects: relative hrefs resolve here.
     url: Url,
     etag: String,
+    location: String,
     body: String,
+}
+
+/// The resource accepted by the server. Google can choose its URL on creation.
+#[derive(Debug)]
+pub struct Written {
+    pub url: String,
+    pub etag: String,
 }
 
 pub struct Client {
     agent: ureq::Agent,
     authorization: String,
+    google: bool,
     /// The server the user named. Requests go only where it is trusted to
     /// send them (see [`Client::trusts`]), and the password only there.
     server: Url,
@@ -219,8 +228,38 @@ impl Client {
         Ok(Self {
             agent,
             authorization: format!("Basic {token}"),
+            google: false,
             server: parse_server_url(server)?,
         })
+    }
+
+    pub fn google(email: &str, access_token: &str) -> Result<Self> {
+        let mut server = Url::parse("https://apidata.googleusercontent.com/caldav/v2/")?;
+        server
+            .path_segments_mut()
+            .map_err(|_| anyhow!("invalid Google CalDAV endpoint"))?
+            .pop_if_empty()
+            .push(email)
+            .push("events");
+        Ok(Self {
+            agent: proxy::agent_for(proxy::global().as_ref())?,
+            authorization: format!("Bearer {access_token}"),
+            google: true,
+            server,
+        })
+    }
+
+    pub fn primary_calendar(&self) -> Result<Calendar> {
+        let (base, ms) = self.calendar_properties(&self.server, "0")?;
+        let mut calendars = calendars_in(&base, &ms)?;
+        let mut calendar = calendars
+            .pop()
+            .ok_or_else(|| anyhow!("Google primary calendar not found"))?;
+        if !calendars.is_empty() {
+            bail!("Google returned multiple calendars for the primary calendar");
+        }
+        calendar.components = vec!["VEVENT".into()];
+        Ok(calendar)
     }
 
     /// Whether `url` belongs to the server the user named: its own origin,
@@ -262,6 +301,12 @@ impl Client {
         headers: &[(&str, &str)],
         body: Option<&str>,
     ) -> Result<HttpResponse> {
+        if self.google && !matches!(method, "GET" | "PROPFIND" | "REPORT") {
+            if !matches!(method, "PUT" | "DELETE") {
+                bail!("Google Calendar supports changes to events here");
+            }
+            self.check_google_event_url(url)?;
+        }
         let mut url = url.clone();
         // A sync-collection or multiget answer can be a whole calendar.
         let timeout = if method == "REPORT" { 120 } else { 30 };
@@ -330,6 +375,7 @@ impl Client {
                 continue;
             }
             let etag = header("etag");
+            let location = header("location");
             let body = response
                 .body_mut()
                 .with_config()
@@ -337,12 +383,18 @@ impl Client {
                 .read_to_string()
                 .with_context(|| format!("read {method} {}", redacted(&url)))?;
             if status == 401 {
+                if self.google {
+                    bail!(
+                        "Google Calendar rejected the authorization. Reconnect Google Calendar to resume syncing."
+                    );
+                }
                 return Err(AuthFailed.into());
             }
             return Ok(HttpResponse {
                 status,
                 url,
                 etag,
+                location,
                 body,
             });
         }
@@ -446,7 +498,11 @@ impl Client {
 
     /// The calendars directly inside a calendar home.
     pub fn calendars(&self, home: &str) -> Result<Vec<Calendar>> {
-        let home = Url::parse(home)?;
+        let (base, ms) = self.calendar_properties(&Url::parse(home)?, "1")?;
+        calendars_in(&base, &ms)
+    }
+
+    fn calendar_properties(&self, url: &Url, depth: &str) -> Result<(Url, Multistatus)> {
         let body = propfind_body(&[
             (DAV, "resourcetype"),
             (DAV, "displayname"),
@@ -456,8 +512,7 @@ impl Client {
             (APPLE, "calendar-color"),
             (CALDAV, "supported-calendar-component-set"),
         ]);
-        let (base, ms) = self.multistatus("PROPFIND", &home, "1", &body)?;
-        calendars_in(&base, &ms)
+        self.multistatus("PROPFIND", url, depth, &body)
     }
 
     /// Every object in a calendar with its etag, for servers without
@@ -649,18 +704,59 @@ impl Client {
         }
     }
 
-    /// Create (`etag` `None`) or replace (`Some(etag)`) an object. Returns
-    /// the new etag, or empty when the server did not send one — it may have
-    /// rewritten the object, so the caller should fetch it again.
-    pub fn put(&self, url: &str, ics: &str, etag: Option<&str>) -> Result<String> {
+    /// Create (`etag` `None`) or replace (`Some(etag)`) an object.
+    pub fn put(&self, url: &str, ics: &str, etag: Option<&str>) -> Result<Written> {
         let url = Url::parse(url)?;
-        let precondition = match etag {
-            Some(etag) => ("If-Match", etag),
-            None => ("If-None-Match", "*"),
-        };
-        let response = self.send("PUT", &url, &[precondition], Some(ics))?;
+        let mut headers = Vec::new();
+        let mut create_uid = None;
+        if let Some(etag) = etag {
+            headers.push(("If-Match", etag));
+        } else if self.google {
+            self.check_google_event_url(&url)?;
+            // Google implements If-Match but not If-None-Match. Check the
+            // requested URL and the UID before using an unconditional PUT.
+            // A PUT whose response was lost may already exist at another URL.
+            let uid =
+                ics::uid_of(ics).ok_or_else(|| anyhow!("Google Calendar event has no UID"))?;
+            if let Some(object) = self.get(url.as_str())? {
+                if ics::uid_of(&object.ics).as_deref() != Some(uid.as_str()) {
+                    bail!("Google Calendar already has a different event at this URL");
+                }
+                let url = Url::parse(&object.url)?;
+                self.check_google_event_url(&url)?;
+                return Ok(Written {
+                    url: url.to_string(),
+                    etag: String::new(),
+                });
+            }
+            if let Some(url) = self.google_event_by_uid(&uid)? {
+                // Let the pull fetch the authoritative version at this URL.
+                return Ok(Written {
+                    url: url.to_string(),
+                    etag: String::new(),
+                });
+            }
+            create_uid = Some(uid);
+        } else {
+            headers.push(("If-None-Match", "*"));
+        }
+        let response = self.send("PUT", &url, &headers, Some(ics))?;
         match response.status {
-            200..=299 => Ok(response.etag),
+            200..=299 => {
+                let url = if self.google && !response.location.is_empty() {
+                    let url = response.url.join(&response.location)?;
+                    self.check_google_event_url(&url)?;
+                    url
+                } else if let Some(uid) = create_uid {
+                    self.google_event_by_uid(&uid)?.unwrap_or(response.url)
+                } else {
+                    response.url
+                };
+                Ok(Written {
+                    url: url.to_string(),
+                    etag: response.etag,
+                })
+            }
             412 => Err(PreconditionFailed.into()),
             403 | 409 if response.body.contains("no-uid-conflict") => Err(UidConflict.into()),
             status => bail!(
@@ -669,6 +765,50 @@ impl Client {
                 response.body.trim()
             ),
         }
+    }
+
+    fn check_google_event_url(&self, url: &Url) -> Result<()> {
+        let parent = url.join(".")?;
+        if !same_member(&parent, &as_collection(self.server.clone()))
+            || !url
+                .path_segments()
+                .and_then(Iterator::last)
+                .is_some_and(|name| !name.is_empty())
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || !url.username().is_empty()
+            || url.password().is_some()
+        {
+            bail!("Google Calendar returned a URL outside the primary calendar's events");
+        }
+        Ok(())
+    }
+
+    fn google_event_by_uid(&self, uid: &str) -> Result<Option<Url>> {
+        let body = format!(
+            r#"<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+<d:prop><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR">
+<c:comp-filter name="VEVENT"><c:prop-filter name="UID"><c:text-match>{}</c:text-match>
+</c:prop-filter></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>"#,
+            escape(uid)
+        );
+        let (base, ms) = self.multistatus("REPORT", &self.server, "1", &body)?;
+        let mut matches = ms.responses.iter().filter(|response| {
+            response
+                .prop_text(CALDAV, "calendar-data")
+                .and_then(ics::uid_of)
+                .as_deref()
+                == Some(uid)
+        });
+        let Some(response) = matches.next() else {
+            return Ok(None);
+        };
+        if matches.next().is_some() {
+            bail!("Google Calendar returned multiple events with the same UID");
+        }
+        let url = base.join(&response.href)?;
+        self.check_google_event_url(&url)?;
+        Ok(Some(url))
     }
 
     /// Create an event calendar in `home`. Returns its URL.
@@ -775,6 +915,9 @@ impl Client {
 
     /// Delete an object. Gone already counts as deleted.
     pub fn delete(&self, url: &str, etag: Option<&str>) -> Result<()> {
+        if self.google && etag.is_none_or(str::is_empty) {
+            bail!("Google Calendar did not return an event version for deletion");
+        }
         let url = Url::parse(url)?;
         let headers: Vec<(&str, &str)> = etag.map(|e| ("If-Match", e)).into_iter().collect();
         let response = self.send("DELETE", &url, &headers, None)?;

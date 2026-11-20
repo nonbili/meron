@@ -69,6 +69,7 @@ export const ui$ = observable({
   setupOpen: false,
   setupMode: 'gmail' as SetupMode,
   reconnectAccountId: '',
+  googleCalendarSetupEmail: '',
   settingsOpen: false,
   aboutOpen: false,
   changelogOpen: false,

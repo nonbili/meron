@@ -6,6 +6,7 @@ import { errorMessage } from '../../lib/errors'
 import {
   SYNC_INTERVALS,
   addCalendarAccount,
+  connectGoogleCalendar,
   createCalendar,
   deleteCalendar,
   setSyncInterval,
@@ -22,6 +23,7 @@ import {
 } from '../../states/caldav'
 import { useValue } from '@legendapp/state/react'
 import { calendarColor } from '../../states/calendar'
+import { showToast, ui$ } from '../../states/ui'
 import { Button } from '../button/Button'
 import { SelectInput, TextInput } from '../field/Field'
 import { ColorSwatchPicker } from '../field/ColorSwatchPicker'
@@ -34,6 +36,19 @@ export function CalendarAccountsPanel() {
   const { t } = useTranslation()
   const accounts = useValue(caldav$.accounts)
   const [adding, setAdding] = useState(false)
+  const [connectingGoogle, setConnectingGoogle] = useState(false)
+  const googleConfigured = !!useValue(ui$.system)?.gmail_oauth_configured
+
+  const connectGoogle = async (account?: CalendarAccount) => {
+    setConnectingGoogle(true)
+    try {
+      await connectGoogleCalendar(account ? { accountId: account.id, email: account.username } : undefined)
+    } catch (err) {
+      showToast(errorMessage(err, t('settings.calendars.addFailed')), 'error')
+    } finally {
+      setConnectingGoogle(false)
+    }
+  }
 
   useEffect(() => {
     void loadCalendarAccounts()
@@ -46,13 +61,20 @@ export function CalendarAccountsPanel() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <p className="max-w-lg text-xs text-secondary">{t('settings.calendars.intro')}</p>
-        {!adding && (
-          <Button size="sm" leftIcon={Plus} onClick={() => setAdding(true)}>
-            {t('settings.calendars.add')}
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {googleConfigured && (
+            <Button variant="secondary" size="sm" disabled={connectingGoogle} onClick={() => void connectGoogle()}>
+              {connectingGoogle ? t('settings.calendars.connecting') : t('settings.calendars.connectGoogle')}
+            </Button>
+          )}
+          {!adding && (
+            <Button size="sm" leftIcon={Plus} onClick={() => setAdding(true)}>
+              {t('settings.calendars.add')}
+            </Button>
+          )}
+        </div>
       </div>
       {adding && <AddAccountForm onDone={() => setAdding(false)} />}
       {accounts.length === 0 && !adding && (
@@ -61,7 +83,12 @@ export function CalendarAccountsPanel() {
         </p>
       )}
       {accounts.map((account) => (
-        <AccountCard key={account.id} account={account} />
+        <AccountCard
+          key={account.id}
+          account={account}
+          onReconnect={googleConfigured ? () => void connectGoogle(account) : undefined}
+          connectingGoogle={connectingGoogle}
+        />
       ))}
     </div>
   )
@@ -154,7 +181,15 @@ function AddAccountForm({ onDone }: { onDone: () => void }) {
   )
 }
 
-function AccountCard({ account }: { account: CalendarAccount }) {
+function AccountCard({
+  account,
+  onReconnect,
+  connectingGoogle,
+}: {
+  account: CalendarAccount
+  onReconnect?: () => void
+  connectingGoogle: boolean
+}) {
   const { t } = useTranslation()
   const [syncing, setSyncing] = useState(false)
   const [password, setPassword] = useState<string | null>(null)
@@ -205,9 +240,17 @@ function AccountCard({ account }: { account: CalendarAccount }) {
           <Button variant="secondary" size="sm" leftIcon={RefreshCw} disabled={syncing} onClick={() => void sync()}>
             {t('settings.calendars.syncNow')}
           </Button>
-          <Button variant="ghost" size="sm" leftIcon={KeyRound} onClick={() => setPassword('')}>
-            {t('settings.calendars.updatePassword')}
-          </Button>
+          {account.google ? (
+            onReconnect && (
+              <Button variant="ghost" size="sm" leftIcon={KeyRound} disabled={connectingGoogle} onClick={onReconnect}>
+                {t('accounts.actions.reconnectAccount')}
+              </Button>
+            )
+          ) : (
+            <Button variant="ghost" size="sm" leftIcon={KeyRound} onClick={() => setPassword('')}>
+              {t('settings.calendars.updatePassword')}
+            </Button>
+          )}
           <Button variant="danger" size="sm" leftIcon={Trash2} onClick={() => void removeCalendarAccount(account)}>
             {t('settings.calendars.remove')}
           </Button>
@@ -260,9 +303,9 @@ function AccountCard({ account }: { account: CalendarAccount }) {
         }
       />
       {eventCalendars.map((calendar) => (
-        <CalendarRow key={calendar.id} calendar={calendar} />
+        <CalendarRow key={calendar.id} calendar={calendar} manageCollection={!account.google} />
       ))}
-      <NewCalendar accountId={account.id} />
+      {!account.google && <NewCalendar accountId={account.id} />}
     </SettingsGroup>
   )
 }
@@ -291,7 +334,7 @@ function AccountName({ account }: { account: CalendarAccount }) {
 
 /** One calendar: shown or not, and, behind its edit button, its name and
  * colour, which change on the server too. */
-function CalendarRow({ calendar }: { calendar: CalendarAccountCalendar }) {
+function CalendarRow({ calendar, manageCollection }: { calendar: CalendarAccountCalendar; manageCollection: boolean }) {
   const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   return (
@@ -318,12 +361,22 @@ function CalendarRow({ calendar }: { calendar: CalendarAccountCalendar }) {
           </span>
         }
       />
-      {editing && <CalendarEditor calendar={calendar} onDone={() => setEditing(false)} />}
+      {editing && (
+        <CalendarEditor calendar={calendar} manageCollection={manageCollection} onDone={() => setEditing(false)} />
+      )}
     </>
   )
 }
 
-function CalendarEditor({ calendar, onDone }: { calendar: CalendarAccountCalendar; onDone: () => void }) {
+function CalendarEditor({
+  calendar,
+  manageCollection,
+  onDone,
+}: {
+  calendar: CalendarAccountCalendar
+  manageCollection: boolean
+  onDone: () => void
+}) {
   const { t } = useTranslation()
   const [name, setName] = useState(calendar.name)
   const [error, setError] = useState('')
@@ -347,9 +400,7 @@ function CalendarEditor({ calendar, onDone }: { calendar: CalendarAccountCalenda
         void run({ name: trimmed }).then((ok) => ok && onDone())
       }}
     >
-      {/* Someone else's calendar keeps its name; its colour can still be
-          chosen, for this device. */}
-      {!calendar.read_only && (
+      {manageCollection && !calendar.read_only && (
         <div className="flex items-center gap-2">
           <TextInput
             className="flex-1"
@@ -370,11 +421,13 @@ function CalendarEditor({ calendar, onDone }: { calendar: CalendarAccountCalenda
         }}
       />
       {error && <p className="text-xs text-rose-500 select-text">{error}</p>}
-      <div>
-        <Button variant="danger" size="sm" leftIcon={Trash2} onClick={() => void deleteCalendar(calendar)}>
-          {t('settings.calendars.deleteCalendar')}
-        </Button>
-      </div>
+      {manageCollection && (
+        <div>
+          <Button variant="danger" size="sm" leftIcon={Trash2} onClick={() => void deleteCalendar(calendar)}>
+            {t('settings.calendars.deleteCalendar')}
+          </Button>
+        </div>
+      )}
     </form>
   )
 }

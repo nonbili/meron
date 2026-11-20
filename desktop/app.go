@@ -73,12 +73,10 @@ type App struct {
 	droppedPaths []string
 	droppedAt    time.Time
 
-	oauthMu          sync.Mutex
-	oauthState       string
-	oauthVerifier    string
-	oauthProvider    string
-	oauthRedirectURI string
-	oauthProfile     *ExchangedProfile
+	oauthMu       sync.Mutex
+	oauthState    string
+	oauthProvider string
+	oauthProfile  *ExchangedProfile
 
 	mailtoMu      sync.Mutex
 	pendingMailto []string
@@ -445,8 +443,12 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.gmailBegin()
 	case "oauth.outlookBegin":
 		return a.outlookBegin()
-	case "oauth.gmailPollProfile", "oauth.outlookPollProfile":
-		return a.oauthPollProfile(), nil
+	case "oauth.gmailPollProfile":
+		return a.oauthPollProfile("gmail"), nil
+	case "oauth.outlookPollProfile":
+		return a.oauthPollProfile("outlook"), nil
+	case "caldav.connectGoogle":
+		return a.connectGoogleCalendar(payload)
 	case "mail.sync":
 		return a.mailSync(payload)
 	case "watch.start", "watch.stop":
@@ -570,7 +572,7 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		}
 		// Synced calendar accounts; the password in caldav.add and
 		// caldav.setPassword is never logged (Invoke logs only the name).
-		if strings.HasPrefix(command, "caldav.") {
+		if strings.HasPrefix(command, "caldav.") && command != "caldav.addGoogle" {
 			return a.calendarInvoke(command, payload)
 		}
 		return nil, fmt.Errorf("unknown command: %s", command)

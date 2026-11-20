@@ -4,6 +4,7 @@ import { invoke } from '../../lib/bridge'
 import { boot } from '../../boot'
 import { ui$, type SetupMode } from '../../states/ui'
 import { accounts$ } from '../../states/accounts'
+import { settings$ } from '../../states/settings'
 import { clearSyncErrorFor } from '../../states/connectivity'
 import { openMailAccount } from '../../states/kanban'
 import { nextRssAccountDisplayName } from '../../states/feeds'
@@ -225,7 +226,16 @@ export function useAccountDialog() {
         ui$.reconnectAccountId.set('')
         ui$.setupOpen.set(false)
         await boot()
-        selectCreatedAccount(before, added.account?.id)
+        const created = selectCreatedAccount(before, added.account?.id)
+        if (
+          provider === 'gmail' &&
+          !reconnectAccount &&
+          created &&
+          !before.has(created.id) &&
+          settings$.calendarEnabled.peek()
+        ) {
+          ui$.googleCalendarSetupEmail.set(created.email)
+        }
       }
     } catch (err) {
       console.error('Failed to poll profile', err)

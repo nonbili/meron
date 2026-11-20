@@ -9,8 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	wailsRuntime "meron/internal/desktopruntime"
@@ -154,13 +154,41 @@ func (a *App) outlookBegin() (any, error) {
 	return a.beginOAuth("outlook")
 }
 
-// beginOAuth runs the shared PKCE authorization-code setup for any provider:
-// it generates state + verifier, arms the loopback callback listener, builds
-// the provider's authorization URL, and opens the system browser. The active
-// provider is recorded so the (shared) callback handler knows which token
-// endpoint and profile source to use.
+// beginOAuth starts a mailbox sign-in whose result the account dialog polls.
 func (a *App) beginOAuth(provider string) (any, error) {
 	state := randomBase64URL(32)
+	a.oauthMu.Lock()
+	a.oauthState = state
+	a.oauthProvider = provider
+	a.oauthProfile = nil
+	a.oauthMu.Unlock()
+	return a.startOAuth(provider, state, "", func(profile *ExchangedProfile, err error) {
+		if err != nil {
+			a.logf("oauth callback failed (provider=%s): %v", provider, err)
+			return
+		}
+		a.oauthMu.Lock()
+		defer a.oauthMu.Unlock()
+		if a.oauthState == state {
+			a.oauthProfile = profile
+		}
+	})
+}
+
+func (a *App) oauthPollProfile(provider string) any {
+	a.oauthMu.Lock()
+	defer a.oauthMu.Unlock()
+	if a.oauthProvider != provider || a.oauthProfile == nil {
+		return map[string]any{"exchanged": false}
+	}
+	profile := a.oauthProfile
+	a.oauthProfile = nil
+	return map[string]any{"exchanged": true, "profile": profile}
+}
+
+// startOAuth opens the browser and binds PKCE state to this attempt's
+// listener. Calendar consent and mailbox sign-in can run independently.
+func (a *App) startOAuth(provider, state, loginHint string, complete func(*ExchangedProfile, error)) (any, error) {
 	verifier := randomBase64URL(32)
 	challengeBytes := sha256.Sum256([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(challengeBytes[:])
@@ -168,106 +196,80 @@ func (a *App) beginOAuth(provider string) (any, error) {
 		return nil, a.engineUnavailable()
 	}
 
-	// Bind an ephemeral loopback port up front so the redirect URI carries the
-	// real port (RFC 8252). The same URI must be used at the token exchange, so
-	// it's stored on the App for the callback handler / fallback path to read.
 	listener, err := net.Listen("tcp", oauthLoopbackHost+":0")
 	if err != nil {
 		return nil, fmt.Errorf("start OAuth callback listener: %w", err)
 	}
 	redirectURI := "http://" + listener.Addr().String()
-
 	res, err := a.sidecar.Call("oauth.authorizeUrl", map[string]any{
 		"provider":       provider,
 		"redirect_uri":   redirectURI,
 		"state":          state,
 		"code_challenge": challenge,
+		"login_hint":     loginHint,
 	})
 	if err != nil {
 		listener.Close()
 		return nil, err
 	}
 	authURL, _ := res.(map[string]any)["url"].(string)
-
-	a.oauthMu.Lock()
-	a.oauthState = state
-	a.oauthVerifier = verifier
-	a.oauthProvider = provider
-	a.oauthRedirectURI = redirectURI
-	a.oauthProfile = nil
-	a.oauthMu.Unlock()
-
-	a.logf("oauth.begin: provider=%s callback listening on %s", provider, redirectURI)
-	go a.serveOAuthRedirect(listener)
-
+	go a.serveOAuthRedirect(listener, provider, state, verifier, redirectURI, complete)
 	if a.ctx != nil {
 		wailsRuntime.BrowserOpenURL(a.ctx, authURL)
 	}
-	a.logf("oauth.begin: provider=%s opened external browser", provider)
 	return map[string]any{"url": authURL, "needs_external_browser": true}, nil
 }
 
-func (a *App) oauthPollProfile() any {
-	a.oauthMu.Lock()
-	defer a.oauthMu.Unlock()
-	if a.oauthProfile == nil {
-		return map[string]any{"exchanged": false}
-	}
-	profile := a.oauthProfile
-	a.oauthProfile = nil
-	a.logf("oauth.pollProfile: returning exchanged profile for %s", profile.Email)
-	return map[string]any{"exchanged": true, "profile": profile}
-}
-
-func (a *App) serveOAuthRedirect(listener net.Listener) {
+func (a *App) serveOAuthRedirect(listener net.Listener, provider, state, verifier, redirectURI string, complete func(*ExchangedProfile, error)) {
 	defer listener.Close()
 
 	server := &http.Server{ReadHeaderTimeout: 10 * time.Second}
-	server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		a.oauthMu.Lock()
-		expectedState := a.oauthState
-		verifier := a.oauthVerifier
-		provider := a.oauthProvider
-		redirectURI := a.oauthRedirectURI
-		a.oauthState = ""
-		a.oauthVerifier = ""
-		a.oauthMu.Unlock()
+	var claimed atomic.Bool
+	timer := time.AfterFunc(3*time.Minute, func() {
+		if claimed.CompareAndSwap(false, true) {
+			_ = server.Close()
+			complete(nil, errors.New("Sign-in timed out. Try again."))
+		}
+	})
+	defer timer.Stop()
 
-		if r.URL.Query().Get("error") != "" {
-			a.logf("oauth callback returned error: %s", r.URL.Query().Get("error"))
-			http.Error(w, "The provider did not authorize the request.", http.StatusBadRequest)
-			go server.Shutdown(context.Background())
+	server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/" || r.URL.Query().Get("state") != state {
+			http.Error(w, "Authorization state did not match this sign-in.", http.StatusBadRequest)
 			return
 		}
-		if expectedState == "" || r.URL.Query().Get("state") != expectedState {
-			a.logf("oauth callback rejected: state mismatch")
-			http.Error(w, "Authorization state did not match this sign-in.", http.StatusBadRequest)
-			go server.Shutdown(context.Background())
+		if !claimed.CompareAndSwap(false, true) {
+			http.Error(w, "This sign-in has already ended.", http.StatusBadRequest)
+			return
+		}
+		timer.Stop()
+		defer func() { go server.Shutdown(context.Background()) }()
+
+		if r.URL.Query().Get("error") != "" {
+			http.Error(w, "The provider did not authorize the request.", http.StatusBadRequest)
+			complete(nil, errors.New("Sign-in was declined"))
 			return
 		}
 		code := r.URL.Query().Get("code")
-		if code == "" || verifier == "" {
-			a.logf("oauth callback rejected: code_present=%t verifier_present=%t", code != "", verifier != "")
+		if code == "" {
 			http.Error(w, "Missing authorization code.", http.StatusBadRequest)
-			go server.Shutdown(context.Background())
+			complete(nil, errors.New("Sign-in returned no authorization code"))
+			return
+		}
+		profile, err := a.exchangeOAuthCode(provider, code, verifier, redirectURI)
+		if err != nil {
+			http.Error(w, "Sign-in failed. Return to Meron and try again.", http.StatusBadGateway)
+			complete(nil, err)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, "<html><body style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-align:center;padding-top:100px;background-color:#f8fafc;color:#1e293b;\"><h1>Authenticated</h1><p>You can close this tab and return to Meron.</p></body></html>")
-		go server.Shutdown(context.Background())
-
-		profile, err := a.exchangeOAuthCode(provider, code, verifier, redirectURI)
-		if err != nil {
-			a.logf("oauth exchange failed (provider=%s): %v", provider, err)
-			fmt.Fprintf(os.Stderr, "meron: OAuth exchange failed: %v\n", err)
-			return
-		}
-		a.oauthMu.Lock()
-		a.oauthProfile = profile
-		a.oauthMu.Unlock()
-		a.logf("oauth callback exchanged profile for %s (provider=%s)", profile.Email, provider)
+		complete(profile, nil)
 	})
-	_ = server.Serve(listener)
+	err := server.Serve(listener)
+	if claimed.CompareAndSwap(false, true) {
+		complete(nil, fmt.Errorf("OAuth callback listener: %w", err))
+	}
 }
 
 // exchangeOAuthCode swaps an authorization code for tokens and the account

@@ -32,7 +32,7 @@ export function AccountDialogOAuth({ ctl, isSetup }: { ctl: AccountDialogControl
             <div key={provider.mode} className="flex flex-col gap-1.5">
               <button
                 type="button"
-                disabled={waitingForGoogle || !provider.configured}
+                disabled={waitingForGoogle || ctl.loading || !provider.configured}
                 onClick={() => void beginOAuth(provider.mode)}
                 className={`w-full flex items-center justify-center border bg-chats font-semibold transition-all ${
                   isSetup

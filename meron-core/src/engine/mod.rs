@@ -73,7 +73,11 @@ pub fn default_oauth_client(provider: &str) -> crate::oauth::Client {
             ..Default::default()
         },
         _ => crate::oauth::Client {
-            provider: "gmail".to_string(),
+            provider: if provider == crate::oauth::GOOGLE_CALENDAR_PROVIDER {
+                provider.to_string()
+            } else {
+                "gmail".to_string()
+            },
             client_id: or_env(&defaults.google_client_id, "MERON_GOOGLE_CLIENT_ID"),
             client_secret: or_env(&defaults.google_client_secret, "MERON_GOOGLE_CLIENT_SECRET"),
             token_url: defaults.google_token_url.trim().to_string(),
@@ -165,10 +169,9 @@ pub struct Engine {
     /// Platform integration: opens the SQLite store and loads/stores per-account
     /// secrets (OS keychain on desktop, the keyed DB on mobile).
     pub host: Arc<dyn EngineHost>,
-    /// CalDAV passwords seen this run. With `MERON_KEYRING=off` the host
-    /// keeps nothing, and this is where they live until restart, as mail
-    /// passwords do in `accounts`.
-    pub dav_passwords: std::sync::Mutex<HashMap<String, String>>,
+    /// CalDAV credentials cached for this run, including when the host has no keychain.
+    pub(crate) dav_credentials:
+        std::sync::Mutex<HashMap<String, crate::caldav::service::Credentials>>,
     /// CalDAV accounts with a sync in flight, so overlapping triggers (a
     /// timer, an edit, a manual refresh) run one at a time.
     pub dav_syncing: std::sync::Mutex<HashSet<String>>,
@@ -461,7 +464,7 @@ impl Engine {
             pool: std::sync::Mutex::new(HashMap::new()),
             connect_locks: std::sync::Mutex::new(HashMap::new()),
             host: Arc::from(host),
-            dav_passwords: std::sync::Mutex::new(HashMap::new()),
+            dav_credentials: std::sync::Mutex::new(HashMap::new()),
             dav_syncing: std::sync::Mutex::new(HashSet::new()),
         }
     }

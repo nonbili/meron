@@ -23,6 +23,7 @@ export type CalendarAccount = {
   id: string
   server_url: string
   username: string
+  google: boolean
   display_name: string
   /** Epoch seconds of the last sync that finished cleanly; 0 for never. */
   last_sync_at: number
@@ -70,6 +71,16 @@ export async function addCalendarAccount(input: {
   display_name?: string
 }) {
   setAccounts(await invoke<{ accounts?: CalendarAccount[] }>('caldav.add', input))
+  refreshCalendars()
+}
+
+export async function connectGoogleCalendar(options?: { accountId?: string; email?: string }) {
+  setAccounts(
+    await invoke<{ accounts?: CalendarAccount[] }>('caldav.connectGoogle', {
+      account_id: options?.accountId,
+      login_hint: options?.email,
+    }),
+  )
   refreshCalendars()
 }
 

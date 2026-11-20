@@ -11,7 +11,8 @@ use serde_json::{Value, json};
 use super::Client;
 use super::store::{self, DavAccount};
 use super::sync::{self, Report};
-use crate::engine::Engine;
+use crate::engine::{Engine, default_oauth_client};
+use crate::oauth::{self, GOOGLE_CALENDAR_PROVIDER};
 use crate::secrets::Secrets;
 
 /// Run one `caldav.*` request: the vocabulary desktop and mobile share.
@@ -34,6 +35,17 @@ pub fn dispatch(engine: &Engine, method: &str, params: &Value) -> Result<Value> 
                 password: text("password"),
                 display_name: text("display_name"),
             },
+        ),
+        "caldav.addGoogle" => add_google(
+            engine,
+            required("email")?,
+            required("access_token")?,
+            required("refresh_token")?,
+            params
+                .get("expires_in")
+                .and_then(Value::as_i64)
+                .unwrap_or(3600),
+            text("account_id"),
         ),
         "caldav.setPassword" => set_password(engine, required("account_id")?, text("password")),
         "caldav.remove" => remove_account(
@@ -125,7 +137,8 @@ pub fn add_account(engine: &Engine, new: &NewAccount<'_>) -> Result<Value> {
     let server = super::parse_server_url(new.server_url)?;
     let same_account = |conn: &rusqlite::Connection| -> Result<Option<DavAccount>> {
         Ok(store::accounts(conn)?.into_iter().find(|a| {
-            a.username == username
+            !a.google
+                && a.username == username
                 && super::parse_server_url(&a.server_url).is_ok_and(|known| known == server)
         }))
     };
@@ -177,10 +190,100 @@ pub fn add_account(engine: &Engine, new: &NewAccount<'_>) -> Result<Value> {
     Ok(json!({ "account_id": id, "accounts": accounts_payload(&*lock(engine)?)? }))
 }
 
+/// Connect the signed-in user's primary calendar. An existing account keeps
+/// its calendar IDs, local settings, and sync state when reauthorized.
+fn add_google(
+    engine: &Engine,
+    email: &str,
+    access_token: &str,
+    refresh_token: &str,
+    expires_in: i64,
+    reconnect_id: &str,
+) -> Result<Value> {
+    let email = email.trim().to_ascii_lowercase();
+    if !email.contains('@') {
+        bail!("Google sign-in did not return an email address");
+    }
+    let client = Client::google(&email, access_token)?;
+    let calendar = client.primary_calendar()?;
+    let credentials = Credentials {
+        secrets: Secrets {
+            access_token: Some(access_token.to_string()),
+            refresh_token: Some(refresh_token.to_string()),
+            ..Default::default()
+        },
+        expires_at: crate::store::now_unix().saturating_add(expires_in),
+    };
+
+    let conn = lock(engine)?;
+    let existing = store::accounts(&conn)?
+        .into_iter()
+        .find(|account| account.google && account.username == email);
+    if !reconnect_id.is_empty()
+        && existing
+            .as_ref()
+            .is_none_or(|account| account.id != reconnect_id)
+    {
+        bail!("Sign in with the Google account you are reconnecting");
+    }
+    let id = if let Some(account) = existing {
+        save_google_credentials(engine, &conn, &account.id, &credentials)?;
+        account.id
+    } else {
+        let id = crate::tasks::new_id("dav");
+        let transaction = conn.unchecked_transaction()?;
+        store::save_account(
+            &transaction,
+            &DavAccount {
+                id: id.clone(),
+                server_url: client.server.to_string(),
+                username: email,
+                display_name: "Google Calendar".into(),
+                google: true,
+                ..Default::default()
+            },
+        )?;
+        store::reconcile_calendars(&transaction, &id, &[calendar])?;
+        save_google_credentials(engine, &transaction, &id, &credentials)?;
+        if let Err(err) = transaction.commit() {
+            let _ = engine.host.delete_secret(&conn, &id);
+            return Err(err.into());
+        }
+        id
+    };
+    remember_credentials(engine, &id, credentials);
+    Ok(json!({ "account_id": id, "accounts": accounts_payload(&conn)? }))
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct Credentials {
+    secrets: Secrets,
+    expires_at: i64,
+}
+
+fn save_google_credentials(
+    engine: &Engine,
+    conn: &rusqlite::Connection,
+    id: &str,
+    credentials: &Credentials,
+) -> Result<()> {
+    engine.host.store_secret(
+        conn,
+        id,
+        &Secrets {
+            refresh_token: credentials.secrets.refresh_token.clone(),
+            ..Default::default()
+        },
+    )
+}
+
 /// Replace an account's password, after checking the server takes it.
 pub fn set_password(engine: &Engine, account_id: &str, password: &str) -> Result<Value> {
     let account = store::account(&*lock(engine)?, account_id)?
         .ok_or_else(|| anyhow!("no such CalDAV account: {account_id}"))?;
+    if account.google {
+        bail!("Reconnect with Google to update this calendar account");
+    }
     let client = client(&account.server_url, &account.username, password)?;
     match account.home.as_str() {
         "" => client.discover().map(drop)?,
@@ -226,8 +329,8 @@ pub fn remove_account(engine: &Engine, account_id: &str, discard_unsent: bool) -
     }
     store::delete_account(&conn, account_id)?;
     engine.host.delete_secret(&conn, account_id)?;
-    if let Ok(mut passwords) = engine.dav_passwords.lock() {
-        passwords.remove(account_id);
+    if let Ok(mut credentials) = engine.dav_credentials.lock() {
+        credentials.remove(account_id);
     }
     Ok(json!({ "accounts": accounts_payload(&conn)? }))
 }
@@ -262,10 +365,53 @@ pub fn set_calendar_enabled(
 /// finish: well inside the desktop's timeout for the call.
 const MUTATION_WAIT: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// A client for an account, with its stored password.
+/// A client authenticated with the account's current credentials.
 fn account_client(engine: &Engine, account: &DavAccount) -> Result<Client> {
-    let password = password(engine, &account.id)?;
-    client(&account.server_url, &account.username, &password)
+    let credentials = credentials(engine, &account.id)?;
+    if !account.google {
+        if credentials.secrets.password.is_empty() {
+            bail!("no password stored for this calendar account; enter it again");
+        }
+        return client(
+            &account.server_url,
+            &account.username,
+            &credentials.secrets.password,
+        );
+    }
+    if credentials.expires_at > crate::store::now_unix() + 60
+        && let Some(access) = &credentials.secrets.access_token
+    {
+        return Client::google(&account.username, access);
+    }
+    let refresh = credentials
+        .secrets
+        .refresh_token
+        .as_deref()
+        .ok_or_else(|| anyhow!("Reconnect Google Calendar to resume syncing"))?;
+    let oauth = default_oauth_client(GOOGLE_CALENDAR_PROVIDER);
+    let tokens = oauth::refresh_google_calendar(&oauth, refresh).map_err(anyhow::Error::msg)?;
+    let client = Client::google(&account.username, &tokens.access_token)?;
+    let refreshed = Credentials {
+        expires_at: crate::store::now_unix().saturating_add(tokens.expires_in.unwrap_or(3600)),
+        secrets: Secrets {
+            access_token: Some(tokens.access_token),
+            refresh_token: Some(tokens.refresh_token.unwrap_or_else(|| refresh.to_string())),
+            ..Default::default()
+        },
+    };
+    let conn = lock(engine)?;
+    // Reauthorization can finish while the old grant is being refreshed.
+    // Keep the newer credentials in that case.
+    if cached_credentials(engine, &account.id).is_some_and(|current| {
+        current.secrets.refresh_token == credentials.secrets.refresh_token
+            && current.secrets.access_token == credentials.secrets.access_token
+    }) {
+        if refreshed.secrets.refresh_token != credentials.secrets.refresh_token {
+            save_google_credentials(engine, &conn, &account.id, &refreshed)?;
+        }
+        remember_credentials(engine, &account.id, refreshed);
+    }
+    Ok(client)
 }
 
 /// Make a new event calendar on the account's server, and show it here.
@@ -281,6 +427,9 @@ pub fn create_calendar(
     }
     let account = store::account(&*lock(engine)?, account_id)?
         .ok_or_else(|| anyhow!("no such CalDAV account: {account_id}"))?;
+    if account.google {
+        bail!("create calendars in Google Calendar");
+    }
     let client = account_client(engine, &account)?;
     // No sync of the account in between: one that listed the calendars
     // before this one was made would drop it here when it applied.
@@ -350,7 +499,7 @@ pub fn update_calendar(
     // it, would put the old name or colour back here.
     let _sync = SyncGuard::claim_within(engine, &account.id, MUTATION_WAIT)
         .ok_or_else(|| anyhow!("a sync of this account is still running; try again"))?;
-    let refused = if calendar.read_only {
+    let refused = if account.google || calendar.read_only {
         true
     } else {
         match account_client(engine, &account)?.update_calendar(&calendar.url, name, color) {
@@ -382,6 +531,9 @@ pub fn delete_calendar(engine: &Engine, calendar_id: &str) -> Result<Value> {
             .ok_or_else(|| anyhow!("no such CalDAV account: {}", calendar.account))?;
         (calendar, account)
     };
+    if account.google {
+        bail!("delete calendars in Google Calendar");
+    }
     // A sync halfway through would bring the calendar's events back. Waited
     // for before the server is asked, and not for long, so a busy account
     // fails here rather than after the calendar is already gone.
@@ -418,9 +570,7 @@ pub fn sync(engine: &Engine, account_id: Option<&str>, automatic: bool) -> Resul
                 error: "a sync of this account is still running".into(),
                 ..Default::default()
             },
-            Some(_guard) => match password(engine, &account.id)
-                .and_then(|password| client(&account.server_url, &account.username, &password))
-            {
+            Some(_guard) => match account_client(engine, account) {
                 Ok(client) => sync::sync_account(&*engine.db, &client, &account.id),
                 Err(err) => {
                     let error = format!("{err:#}");
@@ -463,6 +613,7 @@ pub fn accounts_payload(conn: &rusqlite::Connection) -> Result<Value> {
             "id": account.id,
             "server_url": account.server_url,
             "username": account.username,
+            "google": account.google,
             "display_name": account.display_name,
             "last_sync_at": account.last_sync_at,
             "last_error": account.last_error,
@@ -501,32 +652,45 @@ fn client(server: &str, username: &str, password: &str) -> Result<Client> {
 }
 
 fn remember_password(engine: &Engine, account_id: &str, password: &str) {
-    if let Ok(mut passwords) = engine.dav_passwords.lock() {
-        passwords.insert(account_id.to_string(), password.to_string());
+    remember_credentials(
+        engine,
+        account_id,
+        Credentials {
+            secrets: Secrets {
+                password: password.to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+}
+
+fn remember_credentials(engine: &Engine, account_id: &str, credentials: Credentials) {
+    if let Ok(mut cache) = engine.dav_credentials.lock() {
+        cache.insert(account_id.to_string(), credentials);
     }
 }
 
-fn password(engine: &Engine, account_id: &str) -> Result<String> {
-    if let Some(password) = engine
-        .dav_passwords
-        .lock()
-        .ok()
-        .and_then(|p| p.get(account_id).cloned())
-    {
-        return Ok(password);
+fn cached_credentials(engine: &Engine, account_id: &str) -> Option<Credentials> {
+    engine.dav_credentials.lock().ok()?.get(account_id).cloned()
+}
+
+fn credentials(engine: &Engine, account_id: &str) -> Result<Credentials> {
+    if let Some(credentials) = cached_credentials(engine, account_id) {
+        return Ok(credentials);
     }
-    let stored = {
-        let conn = engine
-            .db
-            .lock()
-            .map_err(|_| anyhow!("store lock poisoned"))?;
-        engine.host.load_secret(&conn, account_id).password
+    let conn = lock(engine)?;
+    if let Some(credentials) = cached_credentials(engine, account_id) {
+        return Ok(credentials);
+    }
+    let credentials = Credentials {
+        secrets: engine.host.load_secret(&conn, account_id),
+        ..Default::default()
     };
-    if stored.is_empty() {
-        bail!("no password stored for this calendar account; enter it again");
+    if !credentials.secrets.is_empty() {
+        remember_credentials(engine, account_id, credentials.clone());
     }
-    remember_password(engine, account_id, &stored);
-    Ok(stored)
+    Ok(credentials)
 }
 
 struct SyncGuard<'a> {

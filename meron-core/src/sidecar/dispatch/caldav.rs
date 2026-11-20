@@ -28,7 +28,7 @@ pub(crate) async fn dispatch(
 
     match req.method.as_str() {
         // A new account, or a calendar turned on, has events to fetch.
-        "caldav.add" | "caldav.setPassword" => {
+        "caldav.add" | "caldav.addGoogle" | "caldav.setPassword" => {
             let account = result
                 .get("account_id")
                 .and_then(Value::as_str)
@@ -65,7 +65,9 @@ pub(crate) async fn dispatch(
         }
         "caldav.sync" => {
             emit(out, "caldav.changed", json!({})).await;
-            if result["pulled"].as_u64().unwrap_or(0) > 0 {
+            if result["pulled"].as_u64().unwrap_or(0) > 0
+                || result["pushed"].as_u64().unwrap_or(0) > 0
+            {
                 emit(out, "calendar.changed", json!({ "method": req.method })).await;
             }
         }
@@ -103,8 +105,8 @@ pub(crate) fn spawn_sync(engine: Arc<Engine>, out: Writer, account: Option<Strin
         .await;
         match result {
             Ok(Ok(report)) => {
-                // What landed before a failure is shown all the same.
-                if report.pulled > 0 {
+                // Publish local changes made while reconciling uploads too.
+                if report.pulled > 0 || report.pushed > 0 {
                     emit(&out, "calendar.changed", json!({ "method": "caldav.sync" })).await;
                 }
                 if !report.error.is_empty() {

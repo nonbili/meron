@@ -12,14 +12,15 @@
 //! user may have edited, deleted or undone a deletion meanwhile — and a pull
 //! lands only in a calendar that is still there and still shown.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};
 use rusqlite::Connection;
 
 use super::store::{self, CHANGED, CREATED, DELETED, DavCalendar, DavObject};
 use super::{
-    AuthFailed, Calendar, Client, Entry, PreconditionFailed, SyncTokenInvalid, UidConflict, ics,
+    AuthFailed, Calendar, Client, Entry, PreconditionFailed, SyncTokenInvalid, UidConflict,
+    Written, ics,
 };
 use crate::store as db;
 
@@ -116,7 +117,9 @@ fn sync_calendars(
     let account = db
         .with(|conn| store::account(conn, account_id))?
         .ok_or_else(|| anyhow!("no such CalDAV account: {account_id}"))?;
-    let listed = if account.home.is_empty() {
+    let listed = if account.google {
+        vec![client.primary_calendar()?]
+    } else if account.home.is_empty() {
         let found = client.discover()?;
         db.with(|conn| {
             store::save_account(
@@ -156,16 +159,16 @@ fn sync_calendars(
     // first everywhere; a server that refuses one for its UID, still in the
     // old calendar, gets the deletion first and the create retried after.
     let mut uid_conflicts = HashSet::new();
-    let mut conflicts = HashSet::new();
+    let mut needs_pull = HashSet::new();
     for pass in [Pass::Writes, Pass::Deletions] {
-        for calendar in &synced {
+        for calendar in synced.iter().filter(|c| !account.google || !c.read_only) {
             match push(db, client, calendar, pass, &mut uid_conflicts) {
                 Ok(pushed) => {
                     report.pushed += pushed.sent;
                     // The server's copy replaced each refused edit here.
                     report.pulled += pushed.conflicts;
-                    if pushed.conflicts > 0 {
-                        conflicts.insert(calendar.id.clone());
+                    if pushed.conflicts > 0 || (account.google && pushed.sent > 0) {
+                        needs_pull.insert(calendar.id.clone());
                     }
                     if let Some(err) = pushed.error {
                         report.fail(err.context(format!("calendar {}", calendar.name)));
@@ -178,9 +181,17 @@ fn sync_calendars(
     }
     for calendar in synced {
         let remote = listed.iter().find(|c| c.url == calendar.url);
-        let conflicted = conflicts.contains(&calendar.id);
+        let needs_pull = needs_pull.contains(&calendar.id);
         let mut done = Report::default();
-        let result = sync_calendar(db, client, calendar, remote, conflicted, &mut done);
+        let result = sync_calendar(
+            db,
+            client,
+            calendar,
+            remote,
+            needs_pull,
+            account.google,
+            &mut done,
+        );
         report.add(done);
         match result {
             Ok(()) => {}
@@ -192,17 +203,39 @@ fn sync_calendars(
     Ok(())
 }
 
+// An empty sync token returns a full snapshot, so missing objects are deletions.
+fn full_sync_changes(mut changes: super::Changes, known: &[DavObject]) -> super::Changes {
+    let reported: HashSet<_> = changes
+        .changed
+        .iter()
+        .map(|entry| entry.url.as_str())
+        .chain(changes.removed.iter().map(String::as_str))
+        .collect();
+    let missing: Vec<_> = known
+        .iter()
+        .filter(|object| !reported.contains(object.url.as_str()))
+        .map(|object| object.url.clone())
+        .collect();
+    changes.removed.extend(missing);
+    changes
+}
+
 fn sync_calendar(
     db: &impl Db,
     client: &Client,
     calendar: &DavCalendar,
     remote: Option<&Calendar>,
-    conflicted: bool,
+    needs_pull: bool,
+    google: bool,
     report: &mut Report,
 ) -> Result<()> {
     // What is still pending: creates refused for a UID until its deletion
     // went, and anything edited since the passes above.
-    let pushed = push(db, client, calendar, Pass::Writes, &mut HashSet::new())?;
+    let pushed = if google && calendar.read_only {
+        Pushed::default()
+    } else {
+        push(db, client, calendar, Pass::Writes, &mut HashSet::new())?
+    };
     report.pushed += pushed.sent;
     report.pulled += pushed.conflicts;
     // An edit the server refuses stays queued; the pull goes ahead.
@@ -212,18 +245,55 @@ fn sync_calendar(
     let remote_ctag = remote.map(|r| r.ctag.as_str()).unwrap_or_default();
     // Nothing changed on the server since the last sync, and nothing was sent
     // or refused just now that would have changed it.
-    let quiet = pushed.sent == 0 && pushed.conflicts == 0 && !conflicted;
+    let quiet = pushed.sent == 0 && pushed.conflicts == 0 && !needs_pull;
     // Some servers answer a sync token they no longer know with everything
     // they hold, which looks like a delta and so hides deletions. A daily
     // full listing catches those.
-    let relist = crate::store::now_unix() - calendar.listed_at > RELIST_AFTER_SECS;
+    let relist = !google && crate::store::now_unix() - calendar.listed_at > RELIST_AFTER_SECS;
     if quiet && !relist && !remote_ctag.is_empty() && remote_ctag == calendar.ctag {
         return Ok(());
     }
 
     let known = db.with(|conn| store::objects(conn, &calendar.id))?;
     let supports_sync = remote.is_some_and(|r| !r.sync_token.is_empty());
-    let delta = if supports_sync && !relist {
+    let delta = if google {
+        let token = &calendar.sync_token;
+        let (mut changes, full) = match client.changes(&calendar.url, token) {
+            Ok(changes) => (changes, token.is_empty()),
+            Err(err) if err.is::<SyncTokenInvalid>() && !token.is_empty() => {
+                (client.changes(&calendar.url, "")?, true)
+            }
+            Err(err) => return Err(err),
+        };
+        // Location, REPORT, and the saved href may encode the same path
+        // differently (for example @ versus %40 in the account segment).
+        let href_key = |url: &str| {
+            percent_encoding::percent_decode_str(url)
+                .decode_utf8_lossy()
+                .into_owned()
+        };
+        let urls: HashMap<_, _> = known
+            .iter()
+            .map(|object| (href_key(&object.url), &object.url))
+            .collect();
+        for url in changes
+            .changed
+            .iter_mut()
+            .map(|entry| &mut entry.url)
+            .chain(&mut changes.removed)
+        {
+            if let Some(known) = urls.get(&href_key(url)) {
+                url.clone_from(known);
+            }
+        }
+        if full {
+            changes = full_sync_changes(changes, &known);
+        }
+        if changes.sync_token.is_empty() {
+            return Err(anyhow!("Google Calendar did not return a sync token"));
+        }
+        Some(changes)
+    } else if supports_sync && !relist {
         match client.changes(&calendar.url, &calendar.sync_token) {
             Ok(changes) => Some(changes),
             Err(err) if err.is::<SyncTokenInvalid>() => None,
@@ -246,10 +316,11 @@ fn sync_calendar(
             (listed, removed, token)
         }
     };
-    // Our own writes come back in the delta with the etag we already have.
+    // Read Google's copy after writes too. Google can rewrite the event and
+    // return the rewritten version's etag in response to the PUT.
     let to_fetch: Vec<String> = changed
         .iter()
-        .filter(|entry| !is_current(&known, entry))
+        .filter(|entry| (google && !quiet) || !is_current(&known, entry))
         .map(|entry| entry.url.clone())
         .collect();
     let fetched = if to_fetch.is_empty() {
@@ -430,15 +501,22 @@ fn push_write(
     if !create && etag.is_empty() {
         match client.get(&row.url)? {
             Some(current) => etag = current.etag,
+            None if client.google => {
+                take_server_copy(db, client, calendar, &row)?;
+                return Ok(Sent::Conflict);
+            }
             None => create = true,
         }
     }
     let etag = Some(etag.as_str()).filter(|e| !e.is_empty());
+    if client.google && !create && etag.is_none() {
+        return Err(anyhow!(
+            "Google Calendar did not return an event version for editing"
+        ));
+    }
     match client.put(&row.url, &event.ics, if create { None } else { etag }) {
-        Ok(etag) => {
-            // An empty etag (the server sent none) leaves the version to the
-            // pull, which fetches the object and its version together.
-            db.with(|conn| complete_write(conn, &row, &event.ics, &etag))?;
+        Ok(written) => {
+            db.with(|conn| complete_write(conn, &row, &event.ics, written))?;
             Ok(Sent::Done)
         }
         // Server wins: its copy replaces the edit here, now.
@@ -455,7 +533,7 @@ fn push_write(
 }
 
 /// Record a PUT that went through, against the queue row as it is now.
-fn complete_write(conn: &Connection, sent: &DavObject, ics: &str, etag: &str) -> Result<()> {
+fn complete_write(conn: &Connection, sent: &DavObject, ics: &str, written: Written) -> Result<()> {
     let saved = match store::object(conn, &sent.calendar, &sent.url)? {
         // Deleted, or moved to another calendar, while the create was out:
         // the server has it now, so it has to go from there too, after the
@@ -486,13 +564,43 @@ fn complete_write(conn: &Connection, sent: &DavObject, ics: &str, etag: &str) ->
             ..current
         },
     };
+    let saved = DavObject {
+        etag: written.etag,
+        ..saved
+    };
+    if written.url == saved.url {
+        return store::save_object(conn, &saved);
+    }
+
+    // Updating the queue key and the moves waiting for this object must
+    // land together. The event itself retains its local ID.
+    let tx = conn.unchecked_transaction()?;
+    if let Some(previous) = store::object(&tx, &saved.calendar, &written.url)? {
+        if !previous.state.is_empty() {
+            return Err(anyhow!(
+                "calendar event URL changed to an object with pending edits"
+            ));
+        }
+        if !previous.local_id.is_empty() && previous.local_id != saved.local_id {
+            if let Some(event) = db::event(&tx, &previous.local_id)?
+                && ics::uid_of(&event.ics) != ics::uid_of(ics)
+            {
+                return Err(anyhow!("calendar event URL changed to a different event"));
+            }
+            db::delete_event(&tx, &previous.local_id)?;
+        }
+    }
+    store::delete_object(&tx, &saved.calendar, &saved.url)?;
+    store::retarget_moves(&tx, &saved.url, &written.url)?;
     store::save_object(
-        conn,
+        &tx,
         &DavObject {
-            etag: etag.to_string(),
+            url: written.url,
             ..saved
         },
-    )
+    )?;
+    tx.commit()?;
+    Ok(())
 }
 
 /// The server refused a write because its copy changed: fetch that copy and
