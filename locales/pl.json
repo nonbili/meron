@@ -111,7 +111,7 @@
   "accounts.setup.feedAccountHint": "Utwórz konto teraz; możesz dodać więcej kanałów w dowolnym momencie za pomocą „+” nad listą kanałów.",
   "accounts.setup.caldavFound": "Znaleziono serwer kalendarza dla Twojej domeny pocztowej. Możesz go połączyć teraz lub później w sekcji Ustawienia → Kalendarze.",
   "accounts.setup.connectCalendar": "Połącz kalendarz",
-  "accounts.setup.googleCalendarAccess": "Synchronizuj wydarzenia z głównego kalendarza w obu kierunkach. Google prosi o pełny dostęp do kalendarza, aby nawiązać połączenie przez CalDAV. Możesz go połączyć później w sekcji Ustawienia → Kalendarze.",
+  "accounts.setup.googleCalendarAccess": "Synchronizuj swoje kalendarze Google. Możesz edytować wydarzenia w kalendarzach, do których masz uprawnienia do zapisu. Google prosi o pełny dostęp do kalendarza, aby nawiązać połączenie przez CalDAV. Możesz połączyć się później w sekcji Ustawienia → Kalendarze.",
   "accounts.setup.imapSmtpAccount": "Konto IMAP/SMTP",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "Hasło",

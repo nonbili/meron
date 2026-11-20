@@ -109,7 +109,7 @@
   "accounts.setup.connectCalendar": "Connect calendar",
   "accounts.setup.connectMailAccount": "Connect a Mail Account",
   "accounts.setup.feedAccountHint": "An RSS account can contain multiple feeds. Add the first feed now, or add feeds later from the account menu.",
-  "accounts.setup.googleCalendarAccess": "Sync events in your primary calendar both ways. Google asks for full Calendar access to connect through CalDAV. You can connect later in Settings → Calendars.",
+  "accounts.setup.googleCalendarAccess": "Sync your Google calendars. You can edit events on calendars where you have write access. Google asks for full Calendar access to connect through CalDAV. You can connect later in Settings → Calendars.",
   "accounts.setup.imapSmtpAccount": "IMAP / SMTP account",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "Password",

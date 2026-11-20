@@ -111,7 +111,7 @@
   "accounts.setup.feedAccountHint": "أنشئ الحساب الآن؛ يمكنك إضافة المزيد من الخلاصات في أي وقت باستخدام زر \"+\" الموجود أعلى قائمة الخلاصات.",
   "accounts.setup.caldavFound": "عثرنا على خادم تقويم لنطاق بريدك الإلكتروني. يمكنك الربط الآن أو لاحقًا من الإعدادات ← التقويمات.",
   "accounts.setup.connectCalendar": "ربط التقويم",
-  "accounts.setup.googleCalendarAccess": "زامن أحداث تقويمك الأساسي في الاتجاهين. تطلب Google إذن الوصول الكامل إلى التقويم للاتصال عبر CalDAV. يمكنك الربط لاحقًا من الإعدادات ← التقويمات.",
+  "accounts.setup.googleCalendarAccess": "زامن تقاويم Google الخاصة بك. يمكنك تعديل الأحداث في التقاويم التي لديك إذن الكتابة فيها. تطلب Google إذن الوصول الكامل إلى التقويم للاتصال عبر CalDAV. يمكنك الربط لاحقًا من الإعدادات ← التقويمات.",
   "accounts.setup.imapSmtpAccount": "حساب IMAP/SMTP",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "كلمة المرور",

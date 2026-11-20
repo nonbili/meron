@@ -111,7 +111,7 @@
   "accounts.setup.feedAccountHint": "Crie a conta agora; adicione mais feeds a qualquer momento com o \"+\" acima da lista de feeds.",
   "accounts.setup.caldavFound": "Encontramos um servidor de agenda para seu domínio de e-mail. Você pode conectá-lo agora ou mais tarde em Configurações → Agendas.",
   "accounts.setup.connectCalendar": "Conectar agenda",
-  "accounts.setup.googleCalendarAccess": "Sincronize os eventos da sua agenda principal nos dois sentidos. O Google solicita acesso total à agenda para a conexão via CalDAV. Você pode conectá-la mais tarde em Configurações → Agendas.",
+  "accounts.setup.googleCalendarAccess": "Sincronize suas agendas do Google. Você pode editar eventos nas agendas em que tem permissão de escrita. O Google solicita acesso total à agenda para a conexão via CalDAV. Você pode fazer a conexão mais tarde em Configurações → Agendas.",
   "accounts.setup.imapSmtpAccount": "Conta IMAP/SMTP",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "Senha",

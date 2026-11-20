@@ -194,7 +194,7 @@ pub fn add_account(engine: &Engine, new: &NewAccount<'_>) -> Result<Value> {
     Ok(json!({ "account_id": id, "accounts": accounts_payload(&*lock(engine)?)? }))
 }
 
-/// Connect the signed-in user's primary calendar. An existing account keeps
+/// Connect the signed-in user's calendars. An existing account keeps
 /// its calendar IDs, local settings, and sync state when reauthorized.
 fn add_google(
     engine: &Engine,
@@ -209,7 +209,16 @@ fn add_google(
         bail!("Google sign-in did not return an email address");
     }
     let client = Client::google(&email, access_token)?;
-    let calendar = client.primary_calendar()?;
+    // Verify CalDAV is enabled as well as Calendar List: events use CalDAV.
+    let primary = client.primary_calendar()?;
+    let mut calendars = client
+        .google_calendars()?
+        .unwrap_or_else(|| vec![primary.clone()]);
+    for calendar in &mut calendars {
+        if calendar.url == client.server.as_str() {
+            calendar.url.clone_from(&primary.url);
+        }
+    }
     let credentials = Credentials {
         secrets: Secrets {
             access_token: Some(access_token.to_string()),
@@ -247,7 +256,7 @@ fn add_google(
                 ..Default::default()
             },
         )?;
-        store::reconcile_calendars(&transaction, &id, &[calendar])?;
+        store::reconcile_calendars(&transaction, &id, &calendars)?;
         save_google_credentials(engine, &transaction, &id, &credentials)?;
         if let Err(err) = transaction.commit() {
             let _ = engine.host.delete_secret(&conn, &id);

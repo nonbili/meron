@@ -14,7 +14,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use rand::Rng as _;
 use rusqlite::Connection;
 
@@ -144,8 +144,20 @@ fn sync_calendars(
     report: &mut Report,
 ) -> Result<()> {
     let account_id = &account.id;
-    let listed = if account.google {
-        vec![client.primary_calendar()?]
+    let mut listed = if account.google {
+        if let Some(calendars) = client.google_calendars()? {
+            calendars
+        } else {
+            let primary = client.primary_calendar()?;
+            if db
+                .with(|conn| store::calendars(conn, account_id))?
+                .iter()
+                .any(|c| !super::same_google_collection_str(&c.url, &primary.url))
+            {
+                bail!("Enable the Google Calendar API to sync secondary calendars");
+            }
+            vec![primary]
+        }
     } else if account.home.is_empty() {
         let found = client.discover()?;
         db.with(|conn| {
@@ -167,6 +179,19 @@ fn sync_calendars(
         if store::account(conn, account_id)?.is_none() {
             return Ok(None);
         }
+        if account.google {
+            // Keep existing IDs and settings when CalDAV and Calendar List
+            // spell the same collection differently (for example @ vs %40).
+            let known = store::calendars(conn, account_id)?;
+            for remote in &mut listed {
+                if let Some(calendar) = known
+                    .iter()
+                    .find(|c| super::same_google_collection_str(&c.url, &remote.url))
+                {
+                    remote.url.clone_from(&calendar.url);
+                }
+            }
+        }
         let before = store::event_count(conn, account_id)?;
         let calendars = store::reconcile_calendars(conn, account_id, &listed)?;
         // A calendar gone from the server takes its events with it.
@@ -176,10 +201,11 @@ fn sync_calendars(
     let Some(calendars) = calendars else {
         return Ok(());
     };
-    let synced: Vec<&DavCalendar> = calendars
+    let synced: Vec<_> = calendars
         .iter()
         .filter(|c| c.enabled && c.supports("VEVENT"))
-        .collect();
+        .map(|c| Ok((c, client.for_calendar(&c.url)?)))
+        .collect::<Result<_>>()?;
 
     // A move creates the event in its new calendar before deleting it from
     // the old, so a failed create never leaves it on neither. Creates go
@@ -188,7 +214,10 @@ fn sync_calendars(
     let mut uid_conflicts = HashSet::new();
     let mut needs_pull = HashSet::new();
     for pass in [Pass::Writes, Pass::Deletions] {
-        for calendar in synced.iter().filter(|c| !account.google || !c.read_only) {
+        for (calendar, client) in synced
+            .iter()
+            .filter(|(c, _)| !account.google || !c.read_only)
+        {
             match push(db, client, calendar, pass, &mut uid_conflicts) {
                 Ok(pushed) => {
                     report.pushed += pushed.sent;
@@ -209,13 +238,13 @@ fn sync_calendars(
             }
         }
     }
-    for calendar in synced {
+    for (calendar, client) in synced {
         let remote = listed.iter().find(|c| c.url == calendar.url);
         let needs_pull = needs_pull.contains(&calendar.id);
         let mut done = Report::default();
         let result = sync_calendar(
             db,
-            client,
+            &client,
             calendar,
             remote,
             needs_pull,
@@ -262,6 +291,13 @@ fn sync_calendar(
     // What is still pending: creates refused for a UID until its deletion
     // went, and anything edited since the passes above.
     let pushed = if google && calendar.read_only {
+        if db.with(|conn| store::unsent(conn, &calendar.account, Some(&calendar.id)))? > 0 {
+            // Keep unsent edits (and moves waiting for this destination) safe.
+            // They can resume if access is restored, but this sync is incomplete.
+            report.fail(anyhow!(
+                "Google Calendar is read-only; pending edits were kept"
+            ));
+        }
         Pushed::default()
     } else {
         push(db, client, calendar, Pass::Writes, &mut HashSet::new())?
@@ -378,7 +414,14 @@ fn sync_calendar(
         for url in &removed {
             pulled += apply_removal(conn, calendar, url)? as usize;
         }
-        store::set_synced(conn, &calendar.id, remote_ctag, &token, listed)?;
+        // Calendar List has no ctag. Keep the empty value reserved for a
+        // pending refetch after a push, including pushes made before upgrade.
+        let saved_ctag = if google && remote_ctag.is_empty() {
+            "meron:google-list"
+        } else {
+            remote_ctag
+        };
+        store::set_synced(conn, &calendar.id, saved_ctag, &token, listed)?;
         Ok(pulled)
     })?;
     Ok(())

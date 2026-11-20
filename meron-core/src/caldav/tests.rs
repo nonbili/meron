@@ -242,6 +242,7 @@ fn google_fixture() -> (Client, std::net::TcpListener) {
     ));
     assert!(!client.trusts(&Url::parse("https://other.example.test/").unwrap()));
     client.server = Url::parse(&format!("{origin}{GOOGLE_COLLECTION}")).unwrap();
+    client.google_list_url = None;
     (client, listener)
 }
 
@@ -298,6 +299,199 @@ fn google_store(client: &Client, read_only: bool) -> (rusqlite::Connection, stor
 }
 
 #[test]
+fn google_calendar_list_disabled_does_not_remove_existing_secondary_calendars() {
+    let (mut client, listener) = google_fixture();
+    client.google_list_url = Some(
+        client
+            .server
+            .join("/calendar/v3/users/me/calendarList")
+            .unwrap(),
+    );
+    let (conn, primary) = google_store(&client, false);
+    let secondary = google_collection(client.server.clone(), "shared@group.example.test").unwrap();
+    let calendars = store::reconcile_calendars(
+        &conn,
+        "dav-1",
+        &[
+            Calendar {
+                url: primary.url,
+                ..Default::default()
+            },
+            Calendar {
+                url: secondary.to_string(),
+                ..Default::default()
+            },
+        ],
+    )
+    .unwrap();
+    let _requests = serve_google(
+        listener,
+        vec![
+            (
+                "403 Forbidden",
+                "".into(),
+                r#"{"error":{"details":[{"reason":"SERVICE_DISABLED"}]}}"#.into(),
+            ),
+            ("207 Multi-Status", "".into(), google_properties("one")),
+        ],
+    );
+    let report = sync::sync_account(&conn, &client, "dav-1");
+    assert!(
+        report.error.contains("Enable the Google Calendar API"),
+        "{report:?}"
+    );
+    let current = store::calendars(&conn, "dav-1").unwrap();
+    assert_eq!(current.len(), 2);
+    assert_eq!(current[1].id, calendars[1].id);
+}
+
+#[test]
+fn google_sync_discovers_multiple_pages_and_writes_to_the_selected_calendar() {
+    use crate::calendar::events::{self, EventInput};
+    use std::time::Duration;
+
+    let (mut client, listener) = google_fixture();
+    client.google_list_url = Some(
+        client
+            .server
+            .join("/calendar/v3/users/me/calendarList")
+            .unwrap(),
+    );
+    let (conn, primary) = google_store(&client, false);
+    let work = google_collection(client.server.clone(), "work@group.example.test").unwrap();
+    let shared = google_collection(client.server.clone(), "shared@group.example.test").unwrap();
+    let page_one = r##"{"kind":"calendar#calendarList","nextPageToken":"next+page","items":[
+        {"id":"calendar@example.test","primary":true,"accessRole":"owner","summary":"Primary"},
+        {"id":"work@group.example.test","accessRole":"writer","summary":"Work","summaryOverride":"Studio","backgroundColor":"#abcdef"}] }"##;
+    let page_two = r#"{"kind":"calendar#calendarList","items":[
+        {"id":"shared@group.example.test","accessRole":"reader","summary":"Shared"},
+        {"id":"busy@group.example.test","accessRole":"freeBusyReader"}] }"#;
+    let delta = |token: &str| {
+        format!(
+            r#"<d:multistatus xmlns:d="DAV:"><d:sync-token>{token}</d:sync-token></d:multistatus>"#
+        )
+    };
+    let received = serve_google(
+        listener,
+        vec![
+            ("200 OK", "".into(), page_one.into()),
+            ("200 OK", "".into(), page_two.into()),
+            ("207 Multi-Status", "".into(), delta("primary-1")),
+            ("207 Multi-Status", "".into(), delta("work-1")),
+            ("207 Multi-Status", "".into(), delta("shared-1")),
+            ("200 OK", "".into(), page_one.into()),
+            ("200 OK", "".into(), page_two.into()),
+            ("404 Not Found", "".into(), "".into()),
+            (
+                "207 Multi-Status",
+                "".into(),
+                r#"<d:multistatus xmlns:d="DAV:"/>"#.into(),
+            ),
+            (
+                "201 Created",
+                format!("Location: {}/created.ics\r\n", work.path()),
+                "".into(),
+            ),
+            ("207 Multi-Status", "".into(), delta("primary-2")),
+            ("207 Multi-Status", "".into(), delta("work-2")),
+            ("200 OK", "".into(), page_one.replace("writer", "reader")),
+            ("200 OK", "".into(), page_two.into()),
+            ("207 Multi-Status", "".into(), delta("primary-3")),
+            ("207 Multi-Status", "".into(), delta("work-3")),
+        ],
+    );
+    assert_eq!(synced(&conn, &client), sync::Report::default());
+    let calendars = store::calendars(&conn, "dav-1").unwrap();
+    assert_eq!(calendars.len(), 3);
+    assert_eq!(calendars[0].id, primary.id);
+    assert_eq!(calendars[0].sync_token, "primary-1");
+    assert_eq!(calendars[1].url, work.as_str());
+    assert_eq!(calendars[1].name, "Studio");
+    assert_eq!(calendars[1].color, "#abcdef");
+    assert_eq!(calendars[1].sync_token, "work-1");
+    assert_eq!(calendars[2].url, shared.as_str());
+    assert_eq!(calendars[2].sync_token, "shared-1");
+    assert!(calendars[2].read_only);
+    let input = EventInput {
+        title: "Planning".into(),
+        start: 1_795_251_600,
+        end: 1_795_255_200,
+        calendar: Some(calendars[2].id.clone()),
+        ..Default::default()
+    };
+    assert!(events::create_event(&conn, &input).is_err());
+    store::set_enabled(&conn, &calendars[2].id, false).unwrap();
+    let created = events::create_event(
+        &conn,
+        &EventInput {
+            calendar: Some(calendars[1].id.clone()),
+            ..input
+        },
+    )
+    .unwrap();
+    let id = created["event"]["id"].as_str().unwrap();
+    assert_eq!(synced(&conn, &client).pushed, 1);
+    let object = store::object_for_event(&conn, id).unwrap().unwrap();
+    assert_eq!(object.url, format!("{work}/created.ics"));
+    assert!(
+        !store::calendar(&conn, &calendars[2].id)
+            .unwrap()
+            .unwrap()
+            .enabled
+    );
+
+    let requests: Vec<_> = (0..12)
+        .map(|_| received.recv_timeout(Duration::from_secs(2)).unwrap())
+        .collect();
+    assert!(requests[0].starts_with("GET /calendar/v3/users/me/calendarList?"));
+    assert!(requests[1].contains("pageToken=next%2Bpage"));
+    assert!(requests[4].starts_with(&format!("REPORT {} ", shared.path())));
+    assert!(requests[7].starts_with(&format!("GET {}/", work.path())));
+    assert!(requests[8].starts_with(&format!("REPORT {} ", work.path())));
+    assert!(requests[8].contains("calendar-query"));
+    assert!(requests[9].starts_with(&format!("PUT {}/", work.path())));
+    assert!(requests[11].contains("<d:sync-token>work-1</d:sync-token>"));
+    let scoped = client.for_calendar(work.as_str()).unwrap();
+    assert!(
+        scoped
+            .delete(
+                &format!("{}/wrong-calendar.ics", client.server),
+                Some("etag")
+            )
+            .is_err()
+    );
+    assert!(scoped.delete_calendar(work.as_str()).is_err());
+
+    // A write queued while access was still granted must not be silently
+    // dropped or sent after the calendar becomes read-only.
+    let queued = events::create_event(
+        &conn,
+        &EventInput {
+            title: "Queued before access changed".into(),
+            start: 1_795_251_600,
+            end: 1_795_255_200,
+            calendar: Some(calendars[1].id.clone()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let report = sync::sync_account(&conn, &client, "dav-1");
+    assert_eq!(report.pushed, 0);
+    assert!(
+        report.error.contains("read-only; pending edits were kept"),
+        "{report:?}"
+    );
+    let queued = store::object_for_event(&conn, queued["event"]["id"].as_str().unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(queued.state, store::CREATED);
+    let requests: Vec<_> = (0..4)
+        .map(|_| received.recv_timeout(Duration::from_secs(2)).unwrap())
+        .collect();
+    assert!(requests[3].starts_with(&format!("REPORT {} ", work.path())));
+}
+
+#[test]
 fn google_primary_calendar_imports_and_recovers_from_expired_sync_token() {
     use std::time::Duration;
 
@@ -333,7 +527,7 @@ END:VCALENDAR
         ("207 Multi-Status", r#"<d:multistatus xmlns:d="DAV:"><d:sync-token>second</d:sync-token></d:multistatus>"#.into()),
     ].into_iter().map(|(status, body)| (status, String::new(), body)).collect());
     let err = client.delete_calendar(client.server.as_str()).unwrap_err();
-    assert!(err.to_string().contains("outside the primary calendar"));
+    assert!(err.to_string().contains("outside the selected calendar"));
     let (conn, previous) = google_store(&client, true);
     assert_eq!(synced(&conn, &client).pulled, 1);
     let calendars = store::calendars(&conn, "dav-1").unwrap();

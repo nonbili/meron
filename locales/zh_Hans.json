@@ -111,7 +111,7 @@
   "accounts.setup.feedAccountHint": "立即创建账户；随时使用订阅源列表上方的 \"+\" 添加更多订阅源。",
   "accounts.setup.caldavFound": "找到了与你的邮箱域名对应的日历服务器。你可以立即连接，也可以稍后在设置 → 日历中连接。",
   "accounts.setup.connectCalendar": "连接日历",
-  "accounts.setup.googleCalendarAccess": "双向同步主日历中的活动。通过 CalDAV 连接时，Google 会要求完整的日历访问权限。你可以稍后在设置 → 日历中连接。",
+  "accounts.setup.googleCalendarAccess": "同步你的 Google 日历。你可以编辑拥有写入权限的日历中的活动。通过 CalDAV 连接时，Google 会要求完整的日历访问权限。你可以稍后在设置 → 日历中连接。",
   "accounts.setup.imapSmtpAccount": "IMAP/SMTP 帐户",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "密码",

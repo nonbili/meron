@@ -111,7 +111,7 @@
   "accounts.setup.feedAccountHint": "Izveidojiet kontu tagad; pievienojiet vairāk plūsmu jebkurā laikā, izmantojot \"+\" virs plūsmu saraksta.",
   "accounts.setup.caldavFound": "Jūsu e-pasta domēnam atrasts kalendāra serveris. Varat to pievienot tagad vai vēlāk sadaļā Iestatījumi → Kalendāri.",
   "accounts.setup.connectCalendar": "Pievienot kalendāru",
-  "accounts.setup.googleCalendarAccess": "Sinhronizējiet galvenā kalendāra pasākumus abos virzienos. Lai izveidotu CalDAV savienojumu, Google pieprasa pilnu piekļuvi kalendāram. Varat to pievienot vēlāk sadaļā Iestatījumi → Kalendāri.",
+  "accounts.setup.googleCalendarAccess": "Sinhronizējiet savus Google kalendārus. Varat rediģēt pasākumus kalendāros, kuros jums ir rakstīšanas atļauja. Lai izveidotu CalDAV savienojumu, Google pieprasa pilnu piekļuvi kalendāram. Varat izveidot savienojumu vēlāk sadaļā Iestatījumi → Kalendāri.",
   "accounts.setup.imapSmtpAccount": "IMAP/SMTP konts",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "Parole",

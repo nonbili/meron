@@ -105,6 +105,10 @@ authentication agent. Only the binary replacement runs as root; Meron restarts
 as the original user. Cancelling authorization leaves the download available
 for another attempt. No custom PolicyKit rules are needed.
 
+## Google Calendar OAuth
+
+Enable both the [CalDAV API](https://developers.google.com/workspace/calendar/caldav/v2/guide) and the [Google Calendar API](https://developers.google.com/workspace/calendar/api/v3/reference/calendarList/list) in the Google Cloud project that owns the OAuth client. Meron uses Calendar List for discovery and CalDAV for events, with the same Calendar OAuth scope. If the Calendar API is disabled, primary-only sync still works for accounts that have not yet synced secondary calendars.
+
 ## Testing
 
 Run the full suite (Go, Rust, i18n, and frontend):

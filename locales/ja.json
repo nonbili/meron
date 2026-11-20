@@ -111,7 +111,7 @@
   "accounts.setup.feedAccountHint": "今すぐアカウントを作成します。フィードリストの上にある「+」でいつでもフィードを追加できます。",
   "accounts.setup.caldavFound": "メールのドメインに対応するカレンダーサーバーが見つかりました。今すぐ連携するか、後から［設定］→［カレンダー］で連携できます。",
   "accounts.setup.connectCalendar": "カレンダーを連携",
-  "accounts.setup.googleCalendarAccess": "メインのカレンダーの予定を双方向に同期します。CalDAV で接続する際、Google はカレンダーへのフルアクセスを求めます。後から［設定］→［カレンダー］で連携できます。",
+  "accounts.setup.googleCalendarAccess": "Google カレンダーを同期します。書き込み権限のあるカレンダーでは予定を編集できます。CalDAV で接続する際、Google はカレンダーへのフルアクセスを求めます。後から［設定］→［カレンダー］で連携できます。",
   "accounts.setup.imapSmtpAccount": "IMAP / SMTPアカウント",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "パスワード",

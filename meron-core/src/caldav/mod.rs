@@ -261,10 +261,12 @@ pub struct Written {
     pub etag: String,
 }
 
+#[derive(Clone)]
 pub struct Client {
     agent: ureq::Agent,
     authorization: String,
     google: bool,
+    google_list_url: Option<Url>,
     /// The server the user named. Requests go only where it is trusted to
     /// send them (see [`Client::trusts`]), and the password only there.
     server: Url,
@@ -284,28 +286,129 @@ impl Client {
             agent,
             authorization: format!("Basic {token}"),
             google: false,
+            google_list_url: None,
             server: parse_server_url(server)?,
         })
     }
 
     pub fn google(email: &str, access_token: &str) -> Result<Self> {
-        let mut server = Url::parse("https://apidata.googleusercontent.com/caldav/v2/")?;
-        server
-            .path_segments_mut()
-            .map_err(|_| anyhow!("invalid Google CalDAV endpoint"))?
-            .pop_if_empty()
-            .push(email)
-            .push("events");
         Ok(Self {
             agent: proxy::agent_for(proxy::global().as_ref())?,
             authorization: format!("Bearer {access_token}"),
             google: true,
-            server,
+            google_list_url: Some(Url::parse(
+                "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+            )?),
+            server: google_collection(
+                Url::parse("https://apidata.googleusercontent.com/")?,
+                email,
+            )?,
         })
     }
 
-    pub fn primary_calendar(&self) -> Result<Calendar> {
-        let (base, ms) = self.calendar_properties(&self.server, "0")?;
+    /// Calendar List supplies account-wide discovery and access roles. CalDAV
+    /// still handles all event data, scoped to the individual collection.
+    /// None means Calendar API is disabled for this OAuth project.
+    fn google_calendars(&self) -> Result<Option<Vec<Calendar>>> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Page {
+            kind: String,
+            #[serde(default)]
+            items: Vec<ListEntry>,
+            next_page_token: Option<String>,
+        }
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ListEntry {
+            id: String,
+            access_role: String,
+            summary: Option<String>,
+            summary_override: Option<String>,
+            background_color: Option<String>,
+            #[serde(default)]
+            primary: bool,
+        }
+
+        let Some(endpoint) = &self.google_list_url else {
+            return Ok(None);
+        };
+        let mut api = self.clone();
+        api.server = endpoint.clone();
+        let mut token = None;
+        let mut seen = std::collections::HashSet::new();
+        let mut calendars = Vec::new();
+        for _ in 0..MAX_SYNC_PAGES {
+            let mut url = api.server.clone();
+            url.query_pairs_mut()
+                .append_pair("maxResults", "250")
+                .append_pair("showHidden", "true");
+            if let Some(token) = token.as_deref() {
+                url.query_pairs_mut().append_pair("pageToken", token);
+            }
+            let response = api.send("GET", &url, &[], None)?;
+            if response.status == 403 && token.is_none() {
+                let body: serde_json::Value =
+                    serde_json::from_str(&response.body).unwrap_or_default();
+                if body["error"]["errors"].as_array().is_some_and(|errors| {
+                    errors.iter().any(|e| e["reason"] == "accessNotConfigured")
+                }) || body["error"]["details"].as_array().is_some_and(|details| {
+                    details.iter().any(|e| e["reason"] == "SERVICE_DISABLED")
+                }) {
+                    return Ok(None);
+                }
+            }
+            if response.status != 200 {
+                bail!("Google Calendar List returned HTTP {}", response.status);
+            }
+            let page: Page =
+                serde_json::from_str(&response.body).context("read Google Calendar List")?;
+            if page.kind != "calendar#calendarList" {
+                bail!("unexpected Google Calendar List response");
+            }
+            for entry in page.items {
+                let read_only = match entry.access_role.as_str() {
+                    "owner" | "writer" | "writerWithoutPrivateAccess" => false,
+                    "reader" => true,
+                    _ => continue, // Free/busy access does not expose events.
+                };
+                let url = if entry.primary {
+                    self.server.clone()
+                } else {
+                    google_collection(self.server.clone(), &entry.id)?
+                };
+                let calendar = Calendar {
+                    name: entry.summary_override.or(entry.summary).unwrap_or(entry.id),
+                    url: url.to_string(),
+                    color: entry.background_color.unwrap_or_default(),
+                    components: vec!["VEVENT".into()],
+                    read_only,
+                    ..Default::default()
+                };
+                if entry.primary {
+                    calendars.insert(0, calendar);
+                } else {
+                    calendars.push(calendar);
+                }
+            }
+            let Some(next) = page.next_page_token.filter(|t| !t.is_empty()) else {
+                // Never reconcile an empty or incomplete list as deletions.
+                if !calendars.iter().any(|c| c.url == self.server.as_str()) {
+                    bail!("Google Calendar List did not include the primary calendar");
+                }
+                return Ok(Some(calendars));
+            };
+            if !seen.insert(next.clone()) {
+                bail!("Google Calendar List stopped making progress");
+            }
+            token = Some(next);
+        }
+        bail!("Google Calendar List has too many pages")
+    }
+
+    fn primary_calendar(&self) -> Result<Calendar> {
+        let client = self.for_calendar(self.server.as_str())?;
+        let (base, ms) = client.calendar_properties(&client.server, "0")?;
         let mut calendars = calendars_in(&base, &ms)?;
         let mut calendar = calendars
             .pop()
@@ -313,8 +416,30 @@ impl Client {
         if !calendars.is_empty() {
             bail!("Google returned multiple calendars for the primary calendar");
         }
+        self.for_calendar(&calendar.url)?;
+        if !same_google_collection(&Url::parse(&calendar.url)?, &self.server) {
+            bail!("unexpected Google primary calendar URL");
+        }
         calendar.components = vec!["VEVENT".into()];
         Ok(calendar)
+    }
+
+    /// With Google, event methods (including UID lookup and write URL checks)
+    /// must operate relative to the selected calendar, not the account's primary.
+    fn for_calendar(&self, calendar: &str) -> Result<Self> {
+        let mut client = self.clone();
+        if self.google {
+            let url = Url::parse(calendar)?;
+            if !self.trusts(&url)
+                || !clean_google_url(&url)
+                || !matches!(url.path().trim_end_matches('/').split('/').collect::<Vec<_>>().as_slice(), ["", "caldav", "v2", id, "events"] if !id.is_empty())
+            {
+                bail!("invalid Google Calendar collection URL");
+            }
+            client.server = url;
+            client.google_list_url = None;
+        }
+        Ok(client)
     }
 
     /// Whether `url` belongs to the server the user named: its own origin,
@@ -327,6 +452,9 @@ impl Client {
     fn trusts(&self, url: &Url) -> bool {
         if url.origin() == self.server.origin() {
             return true;
+        }
+        if self.google {
+            return false;
         }
         if url.scheme() != "https" {
             return false;
@@ -372,6 +500,20 @@ impl Client {
                     redacted(&url),
                     self.server.host_str().unwrap_or_default()
                 );
+            }
+            if self.google {
+                if !url.username().is_empty() || url.password().is_some() {
+                    bail!("unexpected credentials in Google Calendar URL");
+                }
+                if self.google_list_url.is_none() {
+                    if method == "GET" {
+                        self.check_google_event_url(&url)?;
+                    } else if matches!(method, "PROPFIND" | "REPORT")
+                        && (!clean_google_url(&url) || !same_google_collection(&url, &self.server))
+                    {
+                        bail!("Google Calendar redirected outside the selected calendar");
+                    }
+                }
             }
             let mut builder = ureq::http::Request::builder()
                 .method(method)
@@ -681,9 +823,14 @@ impl Client {
         };
         for item in &ms.responses {
             let member = response.url.join(&item.href)?;
-            if same_resource(&member, &response.url) {
+            if same_resource(&member, &response.url)
+                || self.google && same_google_collection(&member, &response.url)
+            {
                 page.truncated |= item.status == Some(507);
                 continue;
+            }
+            if self.google {
+                self.check_google_event_url(&member)?;
             }
             if item.status == Some(404) {
                 page.removed.push(member.to_string());
@@ -709,7 +856,11 @@ impl Client {
             );
             for url in batch {
                 // Hrefs go to the server as paths, the way it hands them out.
-                let path = Url::parse(url).map(|u| u.path().to_string())?;
+                let url = Url::parse(url)?;
+                if self.google {
+                    self.check_google_event_url(&url)?;
+                }
+                let path = url.path();
                 body.push_str(&format!("<d:href>{}</d:href>", escape(&path)));
             }
             body.push_str("</c:calendar-multiget>");
@@ -722,6 +873,9 @@ impl Client {
                     continue;
                 };
                 let answered = base.join(&response.href)?;
+                if self.google {
+                    self.check_google_event_url(&answered)?;
+                }
                 // Keyed by the URL asked for, however the server spells it.
                 let url = batch
                     .iter()
@@ -834,17 +988,14 @@ impl Client {
 
     fn check_google_event_url(&self, url: &Url) -> Result<()> {
         let parent = url.join(".")?;
-        if !same_member(&parent, &as_collection(self.server.clone()))
+        if !same_google_collection(&parent, &self.server)
             || !url
                 .path_segments()
                 .and_then(Iterator::last)
                 .is_some_and(|name| !name.is_empty())
-            || url.query().is_some()
-            || url.fragment().is_some()
-            || !url.username().is_empty()
-            || url.password().is_some()
+            || !clean_google_url(url)
         {
-            bail!("Google Calendar returned a URL outside the primary calendar's events");
+            bail!("Google Calendar returned a URL outside the selected calendar's events");
         }
         Ok(())
     }
@@ -1173,6 +1324,42 @@ fn same_member(a: &Url, b: &Url) -> bool {
             .into_owned()
     };
     a.origin() == b.origin() && path(a) == path(b)
+}
+
+fn google_collection(mut url: Url, id: &str) -> Result<Url> {
+    if id.is_empty() || matches!(id, "." | "..") {
+        bail!("invalid Google Calendar ID");
+    }
+    url.path_segments_mut()
+        .map_err(|_| anyhow!("invalid Google CalDAV endpoint"))?
+        .clear()
+        .extend(["caldav", "v2", id, "events"]);
+    Ok(url)
+}
+
+fn clean_google_url(url: &Url) -> bool {
+    url.query().is_none()
+        && url.fragment().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+}
+
+fn same_google_collection(a: &Url, b: &Url) -> bool {
+    let segments = |url: &Url| {
+        url.path()
+            .trim_end_matches('/')
+            .split('/')
+            .map(|s| percent_encoding::percent_decode_str(s).collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    };
+    a.origin() == b.origin() && segments(a) == segments(b)
+}
+
+fn same_google_collection_str(a: &str, b: &str) -> bool {
+    match (Url::parse(a), Url::parse(b)) {
+        (Ok(a), Ok(b)) => same_google_collection(&a, &b),
+        _ => false,
+    }
 }
 
 /// The member is the collection itself (servers list it first in Depth 1

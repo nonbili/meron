@@ -111,7 +111,7 @@
   "accounts.setup.feedAccountHint": "Tạo tài khoản ngay bây giờ; thêm các nguồn tin khác bất kỳ lúc nào bằng nút \"+\" phía trên danh sách nguồn tin.",
   "accounts.setup.caldavFound": "Đã tìm thấy máy chủ lịch cho miền email của bạn. Bạn có thể kết nối ngay hoặc sau trong Cài đặt → Lịch.",
   "accounts.setup.connectCalendar": "Kết nối lịch",
-  "accounts.setup.googleCalendarAccess": "Đồng bộ hai chiều các sự kiện trong lịch chính của bạn. Google yêu cầu toàn quyền truy cập Lịch để kết nối qua CalDAV. Bạn có thể kết nối sau trong Cài đặt → Lịch.",
+  "accounts.setup.googleCalendarAccess": "Đồng bộ các lịch Google của bạn. Bạn có thể chỉnh sửa sự kiện trên những lịch mà bạn có quyền ghi. Google yêu cầu toàn quyền truy cập Lịch để kết nối qua CalDAV. Bạn có thể kết nối sau trong Cài đặt → Lịch.",
   "accounts.setup.imapSmtpAccount": "Tài khoản IMAP/SMTP",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "Mật khẩu",

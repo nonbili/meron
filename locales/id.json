@@ -111,7 +111,7 @@
   "accounts.setup.feedAccountHint": "Akun RSS dapat berisi beberapa feed. Tambahkan feed pertama sekarang, atau tambahkan feed nanti dari menu akun.",
   "accounts.setup.caldavFound": "Kami menemukan server kalender untuk domain email Anda. Hubungkan sekarang atau nanti di Pengaturan → Kalender.",
   "accounts.setup.connectCalendar": "Hubungkan kalender",
-  "accounts.setup.googleCalendarAccess": "Sinkronkan acara di kalender utama Anda secara dua arah. Google meminta akses penuh ke Kalender untuk terhubung melalui CalDAV. Anda dapat menghubungkannya nanti di Pengaturan → Kalender.",
+  "accounts.setup.googleCalendarAccess": "Sinkronkan kalender Google Anda. Anda dapat mengedit acara di kalender yang dapat Anda ubah. Google meminta akses penuh ke Kalender untuk terhubung melalui CalDAV. Anda dapat menghubungkannya nanti di Pengaturan → Kalender.",
   "accounts.setup.imapSmtpAccount": "Akun IMAP / SMTP",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "Kata Sandi",

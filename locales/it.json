@@ -111,7 +111,7 @@
   "accounts.setup.feedAccountHint": "Crea l'account ora; aggiungi altri feed in qualsiasi momento con il \"+\" sopra l'elenco dei feed.",
   "accounts.setup.caldavFound": "Abbiamo trovato un server di calendario per il tuo dominio email. Puoi collegarlo ora o più tardi da Impostazioni → Calendari.",
   "accounts.setup.connectCalendar": "Collega calendario",
-  "accounts.setup.googleCalendarAccess": "Sincronizza in entrambe le direzioni gli eventi del tuo calendario principale. Google richiede l’accesso completo al calendario per la connessione tramite CalDAV. Puoi collegarlo in seguito da Impostazioni → Calendari.",
+  "accounts.setup.googleCalendarAccess": "Sincronizza i tuoi calendari Google. Puoi modificare gli eventi nei calendari per cui hai accesso in scrittura. Google richiede l’accesso completo al calendario per la connessione tramite CalDAV. Puoi collegarlo in seguito da Impostazioni → Calendari.",
   "accounts.setup.imapSmtpAccount": "Account IMAP/SMTP",
   "accounts.setup.oauthTab": "OAuth",
   "accounts.setup.passwordTab": "Password",
