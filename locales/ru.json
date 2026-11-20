@@ -1247,6 +1247,7 @@
   "settings.calendars.serverPlaceholder": "Сервер, например cloud.example.com",
   "settings.calendars.username": "Имя пользователя",
   "settings.calendars.password": "Пароль",
+  "settings.calendars.passwordFromMail": "Пароль (пусто — пароль почтового аккаунта)",
   "settings.calendars.passwordHint": "Некоторые сервисы, например iCloud и Fastmail, требуют пароль приложения.",
   "settings.calendars.connect": "Подключить",
   "settings.calendars.connectGoogle": "Подключить Google Календарь",

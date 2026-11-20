@@ -81,6 +81,8 @@ export async function addCalendarAccount(input: {
   server_url: string
   username: string
   password: string
+  /** With a blank password: use this mail account's, when it has the same login. */
+  mail_account_id?: string
   /** Empty names it after the server's host. */
   display_name?: string
 }) {

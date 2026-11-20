@@ -222,8 +222,20 @@ export function CalendarAccountForm({
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const accounts = useValue(accounts$)
   const serverUrl = server.trim()
-  const canSubmit = !!serverUrl && !!username.trim() && !!password && !busy
+  const login = username.trim().toLowerCase()
+  // A mail account on the same login usually opens the calendars too, so its
+  // password (which stays in the core) can stand in for a blank one.
+  const mailAccount = login
+    ? accounts.find(
+        (account) =>
+          account.auth_type === 'password' &&
+          !account.needs_reconnect &&
+          (account.username || account.email).trim().toLowerCase() === login,
+      )
+    : undefined
+  const canSubmit = !!serverUrl && !!login && (!!password || !!mailAccount) && !busy
 
   const submit = async () => {
     if (!canSubmit || (initial?.server && !serverUrl.startsWith('https://'))) return
@@ -234,6 +246,7 @@ export function CalendarAccountForm({
         server_url: serverUrl,
         username: username.trim(),
         password,
+        mail_account_id: password ? undefined : mailAccount?.id,
         display_name: name.trim(),
       })
       onDone()
@@ -276,9 +289,9 @@ export function CalendarAccountForm({
       <TextInput
         fieldSize="md"
         type="password"
-        autoFocus={!!initial?.server}
+        autoFocus={!!initial?.server && !mailAccount}
         autoComplete={initial ? 'off' : undefined}
-        placeholder={t('settings.calendars.password')}
+        placeholder={t(mailAccount ? 'settings.calendars.passwordFromMail' : 'settings.calendars.password')}
         aria-label={t('settings.calendars.password')}
         value={password}
         onChange={(event) => setPassword(event.target.value)}

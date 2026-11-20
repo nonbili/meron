@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Server, t.ex. cloud.example.com",
   "settings.calendars.username": "Användarnamn",
   "settings.calendars.password": "Lösenord",
+  "settings.calendars.passwordFromMail": "Lösenord (tomt använder e-postkontots)",
   "settings.calendars.passwordHint": "Vissa leverantörer, som iCloud och Fastmail, kräver ett appspecifikt lösenord.",
   "settings.calendars.connect": "Anslut",
   "settings.calendars.connectGoogle": "Anslut Google Kalender",

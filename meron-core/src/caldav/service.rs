@@ -31,15 +31,25 @@ pub fn dispatch(engine: &Engine, method: &str, params: &Value) -> Result<Value> 
         })),
         "caldav.accounts" => Ok(json!({ "accounts": accounts_payload(&*conn()?)? })),
         "caldav.calendars" => calendars_payload(&*conn()?),
-        "caldav.add" => add_account(
-            engine,
-            &NewAccount {
-                server_url: text("server_url"),
-                username: text("username"),
-                password: text("password"),
-                display_name: text("display_name"),
-            },
-        ),
+        "caldav.add" => {
+            // Left blank, with a mail account on the same login: that
+            // account's password, read here so it never reaches the UI.
+            let reused = match (text("password"), text("mail_account_id")) {
+                ("", mail) if !mail.is_empty() => {
+                    Some(mail_account_password(engine, mail, text("username"))?)
+                }
+                _ => None,
+            };
+            add_account(
+                engine,
+                &NewAccount {
+                    server_url: text("server_url"),
+                    username: text("username"),
+                    password: reused.as_deref().unwrap_or(text("password")),
+                    display_name: text("display_name"),
+                },
+            )
+        }
         "caldav.addGoogle" => add_google(
             engine,
             required("email")?,
@@ -125,6 +135,46 @@ pub struct NewAccount<'a> {
     pub username: &'a str,
     pub password: &'a str,
     pub display_name: &'a str,
+}
+
+/// The password a mail account signs in with, when it signs in with one
+/// and its login is `username`: the same server account often has
+/// calendars too, and the same password opens them.
+pub(super) fn mail_account_password(
+    engine: &Engine,
+    mail_account_id: &str,
+    username: &str,
+) -> Result<String> {
+    // The engine's own copy holds a password kept only in memory (no
+    // keychain); the store and keychain cover accounts it has not loaded.
+    let loaded = engine
+        .accounts
+        .try_lock()
+        .ok()
+        .and_then(|accounts| accounts.get(mail_account_id).cloned());
+    let creds = match loaded {
+        Some(creds) => Some(creds),
+        None => {
+            let conn = lock(engine)?;
+            crate::store::load_accounts(&conn)?
+                .into_iter()
+                .find(|(id, _)| id == mail_account_id)
+                .map(|(id, mut creds)| {
+                    engine.host.apply_secret(&conn, &id, &mut creds);
+                    creds
+                })
+        }
+    };
+    match creds {
+        Some(creds)
+            if !creds.is_oauth()
+                && !creds.password.is_empty()
+                && creds.user.trim().eq_ignore_ascii_case(username.trim()) =>
+        {
+            Ok(creds.password)
+        }
+        _ => bail!("no saved password for {}; enter it", username.trim()),
+    }
 }
 
 fn lock(engine: &Engine) -> Result<std::sync::MutexGuard<'_, rusqlite::Connection>> {

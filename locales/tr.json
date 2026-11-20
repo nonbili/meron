@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Sunucu, ör. cloud.example.com",
   "settings.calendars.username": "Kullanıcı adı",
   "settings.calendars.password": "Parola",
+  "settings.calendars.passwordFromMail": "Parola (boş bırakılırsa e-posta hesabınınki kullanılır)",
   "settings.calendars.passwordHint": "iCloud ve Fastmail gibi bazı sağlayıcılar uygulamaya özel parola ister.",
   "settings.calendars.connect": "Bağlan",
   "settings.calendars.connectGoogle": "Google Takvim’i bağla",

@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Server, z. B. cloud.example.com",
   "settings.calendars.username": "Benutzername",
   "settings.calendars.password": "Passwort",
+  "settings.calendars.passwordFromMail": "Passwort (leer lassen für das des E-Mail-Kontos)",
   "settings.calendars.passwordHint": "Manche Anbieter, etwa iCloud und Fastmail, verlangen ein App-spezifisches Passwort.",
   "settings.calendars.connect": "Verbinden",
   "settings.calendars.connectGoogle": "Google Kalender verbinden",

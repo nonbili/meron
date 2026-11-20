@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "サーバー(例: cloud.example.com)",
   "settings.calendars.username": "ユーザー名",
   "settings.calendars.password": "パスワード",
+  "settings.calendars.passwordFromMail": "パスワード（空欄ならメールアカウントのものを使用）",
   "settings.calendars.passwordHint": "iCloud や Fastmail など、一部のサービスではアプリ用パスワードが必要です。",
   "settings.calendars.connect": "接続",
   "settings.calendars.connectGoogle": "Google カレンダーを連携",

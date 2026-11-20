@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Server, mis. cloud.example.com",
   "settings.calendars.username": "Nama pengguna",
   "settings.calendars.password": "Kata sandi",
+  "settings.calendars.passwordFromMail": "Kata sandi (kosongkan untuk memakai sandi akun email)",
   "settings.calendars.passwordHint": "Beberapa penyedia, seperti iCloud dan Fastmail, memerlukan kata sandi khusus aplikasi.",
   "settings.calendars.connect": "Hubungkan",
   "settings.calendars.connectGoogle": "Hubungkan Google Kalender",

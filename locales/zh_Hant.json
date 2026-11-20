@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "伺服器,例如 cloud.example.com",
   "settings.calendars.username": "使用者名稱",
   "settings.calendars.password": "密碼",
+  "settings.calendars.passwordFromMail": "密碼（留空則使用郵件帳號的密碼）",
   "settings.calendars.passwordHint": "部分服務商(例如 iCloud 和 Fastmail)需要使用 App 專用密碼。",
   "settings.calendars.connect": "連線",
   "settings.calendars.connectGoogle": "連結 Google 日曆",

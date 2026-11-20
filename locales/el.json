@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Διακομιστής, π.χ. cloud.example.com",
   "settings.calendars.username": "Όνομα χρήστη",
   "settings.calendars.password": "Κωδικός πρόσβασης",
+  "settings.calendars.passwordFromMail": "Κωδικός (κενό για χρήση του κωδικού του λογαριασμού email)",
   "settings.calendars.passwordHint": "Ορισμένοι πάροχοι, όπως iCloud και Fastmail, απαιτούν κωδικό πρόσβασης εφαρμογής.",
   "settings.calendars.connect": "Σύνδεση",
   "settings.calendars.connectGoogle": "Σύνδεση Ημερολογίου Google",

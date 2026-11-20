@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "الخادم، مثل cloud.example.com",
   "settings.calendars.username": "اسم المستخدم",
   "settings.calendars.password": "كلمة المرور",
+  "settings.calendars.passwordFromMail": "كلمة المرور (اتركها فارغة لاستخدام كلمة مرور حساب البريد)",
   "settings.calendars.passwordHint": "تتطلب بعض الخدمات، مثل iCloud وFastmail، كلمة مرور خاصة بالتطبيق.",
   "settings.calendars.connect": "اتصال",
   "settings.calendars.connectGoogle": "ربط تقويم Google",

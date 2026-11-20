@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Serveris, piem., cloud.example.com",
   "settings.calendars.username": "Lietotājvārds",
   "settings.calendars.password": "Parole",
+  "settings.calendars.passwordFromMail": "Parole (tukša – tiek izmantota e-pasta konta parole)",
   "settings.calendars.passwordHint": "Daži pakalpojumi, piemēram, iCloud un Fastmail, pieprasa lietotnes paroli.",
   "settings.calendars.connect": "Savienot",
   "settings.calendars.connectGoogle": "Pievienot Google kalendāru",

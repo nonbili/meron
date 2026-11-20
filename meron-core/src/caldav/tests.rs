@@ -1296,3 +1296,73 @@ fn unnamed_google_account_and_its_primary_calendar_go_by_the_mailbox_name() {
     assert_eq!(accounts[0]["name"], "Work");
     assert_eq!(accounts[0]["calendars"][0]["name"], "Work");
 }
+
+#[test]
+fn a_blank_password_reuses_only_a_password_mail_account_on_the_same_login() {
+    struct Host;
+    impl crate::engine::EngineHost for Host {
+        fn open_db(&self) -> anyhow::Result<rusqlite::Connection> {
+            crate::store::open_at(":memory:")
+        }
+        fn apply_secret(&self, _: &rusqlite::Connection, _: &str, _: &mut crate::imap::Creds) {}
+        fn store_secret(
+            &self,
+            _: &rusqlite::Connection,
+            _: &str,
+            _: &crate::secrets::Secrets,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+    let creds = |user: &str, password: &str, auth_type: &str| crate::imap::Creds {
+        host: "imap.example.test".into(),
+        port: 993,
+        user: user.into(),
+        password: password.into(),
+        tls: true,
+        starttls: false,
+        smtp_host: "smtp.example.test".into(),
+        smtp_port: 465,
+        smtp_tls: true,
+        smtp_starttls: false,
+        auth_type: auth_type.into(),
+        access_token: None,
+        refresh_token: Some("refresh".into()),
+        token_expires_at: 0,
+        oauth_client_id: String::new(),
+        oauth_client_secret: String::new(),
+        oauth_token_url: String::new(),
+        oauth_scope: String::new(),
+        proxy: crate::proxy::ProxyChoice::Direct,
+        cert_pin: None,
+        smtp_cert_pin: None,
+        rejected_grant: None,
+    };
+    let engine = crate::engine::Engine::new(Box::new(Host)).unwrap();
+    {
+        let mut accounts = engine.accounts.try_lock().unwrap();
+        accounts.insert(
+            "mail-1".into(),
+            creds("sam@example.test", "hunter2", "password"),
+        );
+        accounts.insert(
+            "mail-2".into(),
+            creds("sam@gmail.example", "", "gmail_oauth"),
+        );
+    }
+    let reuse = |id: &str, user: &str| service::mail_account_password(&engine, id, user);
+    assert_eq!(reuse("mail-1", " Sam@Example.test ").unwrap(), "hunter2");
+    assert!(reuse("mail-1", "someone@example.test").is_err());
+    assert!(reuse("mail-2", "sam@gmail.example").is_err());
+    assert!(reuse("mail-3", "sam@example.test").is_err());
+
+    // A blank password with no mail account to take it from is refused
+    // before anything reaches a server.
+    let err = service::dispatch(
+        &engine,
+        "caldav.add",
+        &serde_json::json!({ "server_url": "https://dav.example.test/", "username": "sam@gmail.example", "mail_account_id": "mail-2" }),
+    )
+    .unwrap_err();
+    assert!(format!("{err:#}").contains("no saved password"));
+}

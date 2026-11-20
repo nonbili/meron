@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Server, nt cloud.example.com",
   "settings.calendars.username": "Kasutajanimi",
   "settings.calendars.password": "Parool",
+  "settings.calendars.passwordFromMail": "Parool (tühjaks jättes kasutatakse e-posti konto oma)",
   "settings.calendars.passwordHint": "Mõned teenusepakkujad, nt iCloud ja Fastmail, nõuavad rakendusepõhist parooli.",
   "settings.calendars.connect": "Ühenda",
   "settings.calendars.connectGoogle": "Ühenda Google Calendar",

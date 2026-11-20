@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Servidor, ex.: cloud.example.com",
   "settings.calendars.username": "Nome de usuário",
   "settings.calendars.password": "Senha",
+  "settings.calendars.passwordFromMail": "Senha (em branco usa a da conta de e-mail)",
   "settings.calendars.passwordHint": "Alguns provedores, como iCloud e Fastmail, exigem uma senha específica de app.",
   "settings.calendars.connect": "Conectar",
   "settings.calendars.connectGoogle": "Conectar o Google Agenda",

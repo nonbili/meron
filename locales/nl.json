@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Server, bijv. cloud.example.com",
   "settings.calendars.username": "Gebruikersnaam",
   "settings.calendars.password": "Wachtwoord",
+  "settings.calendars.passwordFromMail": "Wachtwoord (leeg gebruikt dat van het mailaccount)",
   "settings.calendars.passwordHint": "Sommige providers, zoals iCloud en Fastmail, vereisen een app-specifiek wachtwoord.",
   "settings.calendars.connect": "Verbinden",
   "settings.calendars.connectGoogle": "Google Agenda koppelen",

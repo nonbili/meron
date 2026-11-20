@@ -266,7 +266,7 @@ describe('account setup, reconnect and edit', () => {
     expect(calendarRequests).toEqual([])
   })
 
-  it('prefills the CalDAV server without reusing mail credentials and lets the user skip', async () => {
+  it('prefills the CalDAV server without copying the mail password into the form and lets the user skip', async () => {
     discoveredServer = 'https://dav.example.test/calendars/'
     const email = await addCustomMailbox()
     expect(screen.getByRole('dialog', { name: 'Connect calendar' })).toBeTruthy()
@@ -290,6 +290,28 @@ describe('account setup, reconnect and edit', () => {
       { server_url: discoveredServer, username: email, password: 'calendar-only', display_name: '' },
     ])
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('connects CalDAV with the mail account password, kept in the core, when the password is left blank', async () => {
+    discoveredServer = 'https://dav.example.test/calendars/'
+    const email = await addCustomMailbox()
+    expect((screen.getByLabelText('Password') as HTMLInputElement).placeholder).toBe(
+      'Password (blank uses the mail account’s)',
+    )
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /^Connect$/ })))
+    expect(calendarRequests).toEqual([
+      { server_url: discoveredServer, username: email, password: '', mail_account_id: email, display_name: '' },
+    ])
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('needs a password when the CalDAV login differs from the mail account', async () => {
+    discoveredServer = 'https://dav.example.test/calendars/'
+    await addCustomMailbox()
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'someone-else@example.test' } })
+    })
+    expect((screen.getByRole('button', { name: /^Connect$/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('offers Google Calendar after the first Gmail mailbox is saved and lets the user skip', async () => {

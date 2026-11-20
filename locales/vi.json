@@ -1446,6 +1446,7 @@
   "settings.calendars.serverPlaceholder": "Máy chủ, ví dụ cloud.example.com",
   "settings.calendars.username": "Tên người dùng",
   "settings.calendars.password": "Mật khẩu",
+  "settings.calendars.passwordFromMail": "Mật khẩu (để trống để dùng mật khẩu tài khoản thư)",
   "settings.calendars.passwordHint": "Một số nhà cung cấp, như iCloud và Fastmail, yêu cầu mật khẩu dành riêng cho ứng dụng.",
   "settings.calendars.connect": "Kết nối",
   "settings.calendars.connectGoogle": "Kết nối Lịch Google",
