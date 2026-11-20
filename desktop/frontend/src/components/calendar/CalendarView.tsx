@@ -1,7 +1,7 @@
 import { useValue } from '@legendapp/state/react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Minimize2, Plus, Repeat, Settings2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { firstDayOfWeek, monthGrid, occursOn, sameDay } from '../../lib/calendarGrid'
+import { firstDayOfWeek, monthGrid, occursOn, sameDay, sameMonth } from '../../lib/calendarGrid'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 import { settings$ } from '../../states/settings'
 import { useTranslation } from '../../lib/i18n'
@@ -28,6 +28,7 @@ import { EventEditorDialog } from './EventEditorDialog'
 import { CalendarFilter, CalendarList } from './CalendarFilter'
 import { openSettingsAt } from '../../states/ui'
 import { CalendarSyncButton } from './CalendarSyncButton'
+import { MiniCalendar } from './MiniCalendar'
 
 /** How many items a day cell lists before folding the rest into "+N more". */
 const VISIBLE_PER_DAY = 3
@@ -38,17 +39,16 @@ const VISIBLE_PER_DAY = 3
 export function CalendarView() {
   const { t } = useTranslation()
   const month = new Date(useValue(calendar$.month))
+  const selected = new Date(useValue(calendar$.day))
   const items = useVisibleItems()
   const editor = useValue(calendar$.editor)
-  // With nothing synced there is only this device's calendar to list.
-  const showPane = useValue(calendar$.calendars).length > 0
   const [expandedDay, setExpandedDay] = useState<number | null>(null)
 
   const weekStart = useMemo(() => firstDayOfWeek(), [])
   const days = useMemo(() => monthGrid(month, weekStart), [month.getFullYear(), month.getMonth(), weekStart])
   const today = new Date()
   // System locale, like every other date in the app (see lib/date.ts).
-  const title = new Intl.DateTimeFormat([], { month: 'long', year: 'numeric' }).format(month)
+  const title = new Intl.DateTimeFormat([], { month: 'long', year: 'numeric', calendar: 'gregory' }).format(month)
   const weekdays = days.slice(0, 7).map((day) => new Intl.DateTimeFormat([], { weekday: 'short' }).format(day))
 
   useCalendarFeed()
@@ -60,21 +60,27 @@ export function CalendarView() {
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/50 bg-header/70 px-4">
         <CalendarDays size={17} className="shrink-0 text-accent" />
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">{title}</h1>
-        <Button variant="secondary" size="sm" onClick={goToToday}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            setExpandedDay(null)
+            goToToday()
+          }}
+        >
           {t('calendar.today')}
         </Button>
-        <IconButton label={t('calendar.previousMonth')} icon={ChevronLeft} size="sm" onClick={() => shiftMonth(-1)} />
-        <IconButton label={t('calendar.nextMonth')} icon={ChevronRight} size="sm" onClick={() => shiftMonth(1)} />
+        <div className="flex items-center gap-2 min-[1100px]:hidden">
+          <IconButton label={t('calendar.previousMonth')} icon={ChevronLeft} size="sm" onClick={() => shiftMonth(-1)} />
+          <IconButton label={t('calendar.nextMonth')} icon={ChevronRight} size="sm" onClick={() => shiftMonth(1)} />
+        </div>
         <CalendarSyncButton />
         {/* The pane beside the month lists the calendars on a wide window. */}
-        <CalendarFilter className={clsx(showPane && 'min-[1100px]:hidden')} />
+        <CalendarFilter className="min-[1100px]:hidden" />
         <Button
           size="sm"
           leftIcon={Plus}
-          onClick={() => {
-            const day = sameMonth(today, month) ? today : new Date(month.getFullYear(), month.getMonth(), 1)
-            calendar$.editor.set({ mode: 'new', day: day.getTime() })
-          }}
+          onClick={() => calendar$.editor.set({ mode: 'new', day: selected.getTime() })}
         >
           {t('calendar.newEvent')}
         </Button>
@@ -91,8 +97,15 @@ export function CalendarView() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {showPane && (
-          <aside className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border/50 p-3 max-[1100px]:hidden">
+        <aside className="hidden w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border/50 p-3 min-[1100px]:flex">
+          <MiniCalendar
+            month={month}
+            days={days}
+            selected={selected}
+            items={items}
+            onNavigate={() => setExpandedDay(null)}
+          />
+          <div className="flex flex-col gap-1 border-t border-border/50 pt-3">
             <h2 className="px-2 text-[0.6875rem] font-semibold text-secondary">{t('calendar.calendars')}</h2>
             <CalendarList />
             <button
@@ -103,8 +116,8 @@ export function CalendarView() {
               <Settings2 size={13} className="shrink-0" />
               {t('calendar.manageCalendars')}
             </button>
-          </aside>
-        )}
+          </div>
+        </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="grid shrink-0 grid-cols-7 border-b border-border/50 text-[0.6875rem] font-semibold text-secondary">
             {weekdays.map((weekday, index) => (
@@ -121,6 +134,7 @@ export function CalendarView() {
               const shown = expanded ? dayItems : dayItems.slice(0, VISIBLE_PER_DAY)
               const hidden = dayItems.length - shown.length
               const isToday = sameDay(day, today)
+              const isSelected = sameDay(day, selected)
               return (
                 <div
                   key={day.getTime()}
@@ -133,12 +147,15 @@ export function CalendarView() {
                   <span
                     className={clsx(
                       'ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[0.6875rem] font-semibold',
-                      isToday
+                      isSelected
                         ? 'bg-accent text-accent-label'
-                        : sameMonth(day, month)
-                          ? 'text-primary'
-                          : 'text-secondary/60',
+                        : isToday
+                          ? 'bg-accent/15 text-accent'
+                          : sameMonth(day, month)
+                            ? 'text-primary'
+                            : 'text-secondary/60',
                     )}
+                    aria-current={isToday ? 'date' : undefined}
                   >
                     {day.getDate()}
                   </span>
@@ -210,10 +227,6 @@ export function useCalendarFeed() {
     tasksShown.current = tasksEnabled
     void loadCalendar()
   }, [tasksEnabled])
-}
-
-export function sameMonth(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
 }
 
 /** The colour a synced calendar's events are drawn in; none (the accent)

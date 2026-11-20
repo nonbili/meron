@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
-import { caldav$ } from '../../states/caldav'
+import { caldav$, type CalendarAccount } from '../../states/caldav'
 import { ui$ } from '../../states/ui'
 import type { Account, SystemCheck } from '../../types'
 import { CalendarAccountsPanel } from './CalendarAccountsPanel'
@@ -30,6 +30,7 @@ const discoveredServer = 'https://dav.example.test/calendars/'
 describe('finding calendars for existing mail accounts', () => {
   let calls: { method: string; payload: unknown }[]
   let server: string | null
+  let calendarAccounts: CalendarAccount[]
   let previousGo: PropertyDescriptor | undefined
 
   beforeEach(() => {
@@ -38,6 +39,7 @@ describe('finding calendars for existing mail accounts', () => {
     ui$.selectedAccount.set(mailbox.id)
     ui$.system.set({ gmail_oauth_configured: true } as SystemCheck)
     calls = []
+    calendarAccounts = []
     server = discoveredServer
     previousGo = Object.getOwnPropertyDescriptor(window, 'go')
     ;(window as any).go = {
@@ -46,7 +48,7 @@ describe('finding calendars for existing mail accounts', () => {
           Invoke: async (method: string, payload: unknown) => {
             calls.push({ method, payload })
             if (method === 'caldav.discoverServer') return { server_url: server }
-            return { accounts: [] }
+            return { accounts: calendarAccounts }
           },
         },
       },
@@ -56,6 +58,7 @@ describe('finding calendars for existing mail accounts', () => {
   afterEach(() => {
     cleanup()
     accounts$.set([])
+    caldav$.accounts.set([])
     ui$.selectedAccount.set('')
     ui$.system.set(null)
     if (previousGo) Object.defineProperty(window, 'go', previousGo)
@@ -106,5 +109,39 @@ describe('finding calendars for existing mail accounts', () => {
       { method: 'caldav.connectGoogle', payload: { account_id: undefined, login_hint: mailbox.email } },
     ])
     expect(calls.some(({ method }) => method === 'caldav.discoverServer')).toBe(false)
+  })
+
+  it('renames a writable CalDAV calendar through its visible Edit action', async () => {
+    calendarAccounts = [
+      {
+        id: 'dav',
+        server_url: discoveredServer,
+        username: mailbox.email,
+        google: false,
+        display_name: 'Work account',
+        last_sync_at: 0,
+        last_error: '',
+        sync_interval: 15,
+        calendars: [
+          { id: 'work', name: 'Work', color: '', read_only: false, enabled: true, events: true, tasks: false },
+        ],
+      },
+    ]
+    render(<CalendarAccountsPanel />)
+    const account = await screen.findByRole('button', { name: 'Work account' })
+    expect(account.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('button', { name: 'Edit calendar' })).toBeNull()
+    fireEvent.click(account)
+    expect(account.getAttribute('aria-expanded')).toBe('true')
+    const edit = screen.getByRole('button', { name: 'Edit calendar' })
+    expect(edit.textContent).toBe('Edit')
+    fireEvent.click(edit)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Calendar name' }), { target: { value: 'Studio' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
+    expect(calls).toContainEqual({ method: 'caldav.updateCalendar', payload: { calendar_id: 'work', name: 'Studio' } })
+    expect(edit.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(account)
+    expect(account.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('button', { name: 'Edit calendar' })).toBeNull()
   })
 })

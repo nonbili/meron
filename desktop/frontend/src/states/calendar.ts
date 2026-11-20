@@ -328,8 +328,8 @@ export function goToToday() {
   void loadCalendar()
 }
 
-/** Start the panel's agenda on `day`, paging the month to it when it is one of
- * the neighbouring months' days the grid shows. */
+/** Select a date in the full calendar and start the panel's agenda there,
+ * paging the month if the date is outside the current month. */
 export function selectDay(day: Date) {
   calendar$.day.set(startOfDay(day).getTime())
   const month = new Date(calendar$.month.peek())

@@ -7,6 +7,7 @@ import {
   SquareCheckBig,
   MoreHorizontal,
   EyeOff,
+  Settings2,
   SquarePen,
   Users,
 } from 'lucide-react'
@@ -28,7 +29,7 @@ import { settings$, setCalendarSideNavVisible, setUnifiedInboxSideNavVisible } f
 import { calendarPanelShowing, openCalendar, toggleCalendarPanel } from '../../states/calendar'
 import { useNarrowWindow } from '../../lib/useNarrowWindow'
 import { toggleTasksPanel } from '../../states/tasks'
-import { ui$ } from '../../states/ui'
+import { openSettingsAt, ui$ } from '../../states/ui'
 import { QuickSettingsMenu } from './QuickSettingsMenu'
 import { SortableBoard, SortableAccount, railIndicator, railTileShape } from './SortableRailItems'
 import { UnreadCountBadge } from './UnreadCountBadge'
@@ -412,6 +413,14 @@ export function SideNav() {
 
       {calendarMenu && (
         <RailContextMenu x={calendarMenu.x} y={calendarMenu.y} onClose={() => setCalendarMenu(null)}>
+          <RailMenuItem
+            icon={<Settings2 size={13} className="text-secondary" />}
+            label={t('calendar.manageCalendars')}
+            onClick={() => {
+              setCalendarMenu(null)
+              openSettingsAt('calendars', '')
+            }}
+          />
           <RailMenuItem
             icon={<EyeOff size={13} className="text-secondary" />}
             label={t('sidenav.actions.hideFromSideNav')}

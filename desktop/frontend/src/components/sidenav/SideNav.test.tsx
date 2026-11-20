@@ -1,10 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { mail$ } from '../../states/mail'
 import { settings$ } from '../../states/settings'
+import { ui$ } from '../../states/ui'
 import { SideNav } from './SideNav'
 
 afterEach(cleanup)
+
+it('opens calendar settings from the Calendar context menu without hiding the tile', () => {
+  const calendarEnabled = settings$.calendarEnabled.peek()
+  const showCalendar = settings$.showCalendarInSideNav.peek()
+  settings$.calendarEnabled.set(true)
+  settings$.showCalendarInSideNav.set(true)
+  try {
+    const view = render(<SideNav />)
+    fireEvent.contextMenu(view.getByRole('button', { name: 'Calendar' }))
+    fireEvent.click(view.getByRole('button', { name: 'Manage calendars' }))
+    expect(ui$.settingsOpen.peek()).toBe(true)
+    expect(ui$.accountSettingsId.peek()).toBe('calendars')
+    expect(settings$.showCalendarInSideNav.peek()).toBe(true)
+    expect(view.queryByRole('button', { name: 'Manage calendars' })).toBeNull()
+  } finally {
+    act(() => {
+      settings$.calendarEnabled.set(calendarEnabled)
+      settings$.showCalendarInSideNav.set(showCalendar)
+      ui$.settingsOpen.set(false)
+      ui$.accountSettingsId.set('')
+    })
+  }
+})
 
 // The rail's tiles and selection indicator are sized in rem, so they grow with
 // the Text size setting (the root font size). A px rail stays put around them:

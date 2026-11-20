@@ -1,5 +1,5 @@
 import { useValue } from '@legendapp/state/react'
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Maximize2, Plus, Repeat, X } from 'lucide-react'
+import { CalendarDays, Check, Maximize2, Plus, Repeat, X } from 'lucide-react'
 import { useMemo } from 'react'
 import { firstDayOfWeek, monthGrid, occursOn, sameDay } from '../../lib/calendarGrid'
 import { useTranslation } from '../../lib/i18n'
@@ -8,20 +8,17 @@ import {
   AGENDA_DAYS,
   calendar$,
   closeCalendarPanel,
-  goToToday,
   openCalendar,
   openCalendarItem,
-  selectDay,
-  shiftMonth,
   type CalendarItem,
 } from '../../states/calendar'
-import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 import { SIDE_PANEL_WIDTH } from '../sidepanel/SidePanelSlide'
-import { sameMonth, useCalendarColor, useCalendarFeed, useVisibleItems } from './CalendarView'
+import { useCalendarColor, useCalendarFeed, useVisibleItems } from './CalendarView'
 import { CalendarFilter } from './CalendarFilter'
 import { CalendarSyncButton } from './CalendarSyncButton'
 import { EventEditorDialog } from './EventEditorDialog'
+import { MiniCalendar } from './MiniCalendar'
 
 /**
  * The calendar as a right-hand panel, in the slot Tasks also uses: a small
@@ -39,9 +36,6 @@ export function CalendarPanel() {
   const weekStart = useMemo(() => firstDayOfWeek(), [])
   const days = useMemo(() => monthGrid(month, weekStart), [month.getFullYear(), month.getMonth(), weekStart])
   const today = new Date()
-  // System locale, like every other date in the app (see lib/date.ts).
-  const title = new Intl.DateTimeFormat([], { month: 'long', year: 'numeric' }).format(month)
-  const weekdays = days.slice(0, 7).map((day) => new Intl.DateTimeFormat([], { weekday: 'narrow' }).format(day))
   const agenda = Array.from(
     { length: AGENDA_DAYS },
     (_, index) => new Date(selected.getFullYear(), selected.getMonth(), selected.getDate() + index),
@@ -76,53 +70,7 @@ export function CalendarPanel() {
       </header>
 
       <section className="shrink-0 border-b border-border px-3 pb-2 pt-2">
-        <div className="flex items-center gap-1">
-          <span className="min-w-0 flex-1 truncate px-1 text-[0.8125rem] font-semibold text-primary">{title}</span>
-          <Button variant="secondary" size="sm" onClick={goToToday}>
-            {t('calendar.today')}
-          </Button>
-          <IconButton label={t('calendar.previousMonth')} icon={ChevronLeft} size="sm" onClick={() => shiftMonth(-1)} />
-          <IconButton label={t('calendar.nextMonth')} icon={ChevronRight} size="sm" onClick={() => shiftMonth(1)} />
-        </div>
-        <div className="mt-1 grid grid-cols-7 text-center text-[0.65625rem] font-semibold text-secondary">
-          {weekdays.map((weekday, index) => (
-            <div key={index} className="py-1">
-              {weekday}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">
-          {days.map((day) => {
-            const busy = items.some((item) => occursOn(item, day))
-            const isSelected = sameDay(day, selected)
-            const isToday = sameDay(day, today)
-            return (
-              <button
-                key={day.getTime()}
-                type="button"
-                onClick={() => selectDay(day)}
-                aria-pressed={isSelected}
-                className="flex h-8 flex-col items-center justify-center gap-px rounded-lg cursor-pointer hover:bg-hover"
-              >
-                <span
-                  className={clsx(
-                    'flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[0.6875rem] font-semibold tabular-nums',
-                    isToday
-                      ? 'bg-accent text-accent-label'
-                      : isSelected
-                        ? 'bg-accent/15 text-accent'
-                        : sameMonth(day, month)
-                          ? 'text-primary'
-                          : 'text-secondary/60',
-                  )}
-                >
-                  {day.getDate()}
-                </span>
-                <span className={clsx('h-1 w-1 rounded-full', busy ? 'bg-accent/70' : 'bg-transparent')} />
-              </button>
-            )
-          })}
-        </div>
+        <MiniCalendar month={month} days={days} selected={selected} items={items} showToday />
       </section>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">

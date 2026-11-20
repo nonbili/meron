@@ -52,8 +52,12 @@ export function occursOn(item: DayItem, day: Date): boolean {
   return item.start < dayEnd && item.end > dayStart
 }
 
+export function sameMonth(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+}
+
 export function sameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+  return sameMonth(a, b) && a.getDate() === b.getDate()
 }
 
 /** `<input type="date">`'s value for a local day. */

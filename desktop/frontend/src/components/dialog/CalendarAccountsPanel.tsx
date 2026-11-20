@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { useEffect, useId, useState } from 'react'
+import { ChevronDown, KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { formatThreadDate } from '../../lib/date'
 import { errorMessage } from '../../lib/errors'
@@ -157,16 +157,22 @@ export function CalendarAccountsPanel() {
           {t('settings.calendars.none')}
         </p>
       )}
-      {accounts.map((account) => (
-        <AccountCard
-          key={account.id}
-          account={account}
-          onReconnect={
-            googleConfigured ? () => void connectGoogle({ accountId: account.id, email: account.username }) : undefined
-          }
-          connectingGoogle={busy}
-        />
-      ))}
+      {accounts.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {accounts.map((account) => (
+            <AccountCard
+              key={account.id}
+              account={account}
+              onReconnect={
+                googleConfigured
+                  ? () => void connectGoogle({ accountId: account.id, email: account.username })
+                  : undefined
+              }
+              connectingGoogle={busy}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -283,6 +289,8 @@ function AccountCard({
   connectingGoogle: boolean
 }) {
   const { t } = useTranslation()
+  const id = useId()
+  const [expanded, setExpanded] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [password, setPassword] = useState<string | null>(null)
   const [passwordError, setPasswordError] = useState('')
@@ -312,23 +320,47 @@ function AccountCard({
   }
 
   return (
-    <SettingsGroup title={account.display_name || account.server_url}>
-      <SettingRow
-        title={t('settings.calendars.accountName')}
-        hint={t('settings.calendars.accountNameHint')}
-        control={<AccountName account={account} />}
-      />
-      <div className="flex items-center justify-between gap-4 px-3.5 py-2.5">
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate text-xs text-primary">{account.username}</span>
-          <span
-            className={`truncate text-[0.6875rem] ${account.last_error ? 'text-rose-500' : 'text-secondary'}`}
-            title={account.last_error || account.server_url}
-          >
-            {status}
+    <section className="overflow-hidden rounded-2xl border border-border/60 bg-raised/80 shadow-sm shadow-black/[0.03] dark:shadow-black/30">
+      <button
+        type="button"
+        aria-labelledby={`${id}-name`}
+        aria-describedby={`${id}-summary`}
+        aria-expanded={expanded}
+        aria-controls={`${id}-details`}
+        className="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3.5 py-2.5 text-start hover:bg-hover focus-visible:outline-offset-[-2px]"
+        onClick={() => {
+          if (expanded) {
+            setPassword(null)
+            setPasswordError('')
+          }
+          setExpanded(!expanded)
+        }}
+      >
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span id={`${id}-name`} className="truncate text-xs font-semibold text-primary">
+            {account.display_name || account.server_url}
           </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+          <span id={`${id}-summary`} className="flex min-w-0 items-center gap-2 text-[0.6875rem] text-secondary">
+            {account.username && <span className="min-w-0 max-w-1/2 truncate">{account.username}</span>}
+            {account.username && <span aria-hidden>·</span>}
+            <span className={`min-w-0 truncate ${account.last_error ? 'text-rose-500' : ''}`} title={status}>
+              {status}
+            </span>
+          </span>
+        </span>
+        <ChevronDown
+          size={15}
+          aria-hidden
+          className={`shrink-0 text-secondary transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      <div id={`${id}-details`} hidden={!expanded} className="divide-y divide-border/40 border-t border-border/40">
+        <SettingRow
+          title={t('settings.calendars.accountName')}
+          hint={t('settings.calendars.accountNameHint')}
+          control={<AccountName account={account} />}
+        />
+        <div className="flex flex-wrap items-center gap-1.5 px-3.5 py-2.5">
           <Button variant="secondary" size="sm" leftIcon={RefreshCw} disabled={syncing} onClick={() => void sync()}>
             {t('settings.calendars.syncNow')}
           </Button>
@@ -347,58 +379,58 @@ function AccountCard({
             {t('settings.calendars.remove')}
           </Button>
         </div>
-      </div>
-      {password !== null && (
-        <form
-          className="flex flex-col gap-2 px-3.5 py-2.5"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void savePassword()
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <TextInput
-              autoFocus
-              type="password"
-              className="flex-1"
-              placeholder={t('settings.calendars.password')}
-              aria-label={t('settings.calendars.password')}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            <Button variant="secondary" size="sm" onClick={() => setPassword(null)}>
-              {t('buttons.cancel')}
-            </Button>
-            <Button type="submit" size="sm" disabled={!password}>
-              {t('buttons.save')}
-            </Button>
-          </div>
-          {passwordError && <p className="text-xs text-rose-500 select-text">{passwordError}</p>}
-        </form>
-      )}
-      <SettingRow
-        title={t('settings.calendars.syncEvery')}
-        control={
-          <SelectInput
-            aria-label={t('settings.calendars.syncEvery')}
-            value={String(account.sync_interval)}
-            onChange={(event) => void setSyncInterval(account.id, Number(event.target.value))}
+        {password !== null && (
+          <form
+            className="flex flex-col gap-2 px-3.5 py-2.5"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void savePassword()
+            }}
           >
-            {SYNC_INTERVALS.map((minutes) => (
-              <option key={minutes} value={minutes}>
-                {minutes === 0
-                  ? t('settings.calendars.syncManually')
-                  : t('settings.calendars.minutes', { count: minutes })}
-              </option>
-            ))}
-          </SelectInput>
-        }
-      />
-      {eventCalendars.map((calendar) => (
-        <CalendarRow key={calendar.id} calendar={calendar} manageCollection={!account.google} />
-      ))}
-      {!account.google && <NewCalendar accountId={account.id} />}
-    </SettingsGroup>
+            <div className="flex items-center gap-2">
+              <TextInput
+                autoFocus
+                type="password"
+                className="flex-1"
+                placeholder={t('settings.calendars.password')}
+                aria-label={t('settings.calendars.password')}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <Button variant="secondary" size="sm" onClick={() => setPassword(null)}>
+                {t('buttons.cancel')}
+              </Button>
+              <Button type="submit" size="sm" disabled={!password}>
+                {t('buttons.save')}
+              </Button>
+            </div>
+            {passwordError && <p className="text-xs text-rose-500 select-text">{passwordError}</p>}
+          </form>
+        )}
+        <SettingRow
+          title={t('settings.calendars.syncEvery')}
+          control={
+            <SelectInput
+              aria-label={t('settings.calendars.syncEvery')}
+              value={String(account.sync_interval)}
+              onChange={(event) => void setSyncInterval(account.id, Number(event.target.value))}
+            >
+              {SYNC_INTERVALS.map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {minutes === 0
+                    ? t('settings.calendars.syncManually')
+                    : t('settings.calendars.minutes', { count: minutes })}
+                </option>
+              ))}
+            </SelectInput>
+          }
+        />
+        {eventCalendars.map((calendar) => (
+          <CalendarRow key={calendar.id} calendar={calendar} manageCollection={!account.google} />
+        ))}
+        {!account.google && <NewCalendar accountId={account.id} />}
+      </div>
+    </section>
   )
 }
 
@@ -435,16 +467,20 @@ function CalendarRow({ calendar, manageCollection }: { calendar: CalendarAccount
         title={calendar.read_only ? `${calendar.name} · ${t('calendar.readOnly')}` : calendar.name}
         control={
           <span className="flex items-center gap-2">
-            <button
-              type="button"
-              className="flex h-6 w-6 items-center justify-center rounded-lg cursor-pointer hover:bg-hover"
-              title={t('settings.calendars.edit')}
+            <span
+              aria-hidden
+              className="h-3 w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: calendarColor(calendar) }}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
               aria-label={t('settings.calendars.edit')}
               aria-expanded={editing}
               onClick={() => setEditing(!editing)}
             >
-              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: calendarColor(calendar) }} />
-            </button>
+              {t('buttons.edit')}
+            </Button>
             <Switch
               checked={calendar.enabled}
               label={calendar.name}
