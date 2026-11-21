@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Laadi rohkem",
   "threads.actions.markAllAsRead": "Märgi kõik loetuks",
   "threads.actions.markAsRead": "Märgi loetuks",
+  "threads.actions.markAsSpam": "Märgi rämpspostiks",
   "threads.actions.markAsUnread": "Märgi lugemata",
   "threads.actions.moveTo": "Teisalda...",
   "threads.actions.moveToTrash": "Teisalda prügikasti",

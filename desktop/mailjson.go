@@ -37,7 +37,17 @@ func foldersJSON(accountID string, raw any) any {
 		}
 		unread := uint32(jsonNumber(folderObject["unread"]))
 		notify, _ := folderObject["notify"].(bool)
-		folders = append(folders, Folder{ID: name, AccountID: accountID, Name: label, Role: role, Delimiter: delimiter, Unread: unread, Notify: notify})
+		specialUse, _ := folderObject["special_use"].(string)
+		folders = append(folders, Folder{
+			ID:         name,
+			AccountID:  accountID,
+			Name:       label,
+			Role:       role,
+			SpecialUse: specialUse,
+			Delimiter:  delimiter,
+			Unread:     unread,
+			Notify:     notify,
+		})
 	}
 	return map[string]any{"folders": folders}
 }

@@ -1605,6 +1605,10 @@ private fun MeronMobileScreenContent(
                                                     popAppBack()
                                                 }
                                             },
+                                            onMarkAsSpam =
+                                                pageThread
+                                                    ?.takeIf { active && spamFolderForThread(it) != null }
+                                                    ?.let { thread -> { markThreadAsSpam(thread, onMoved = popAppBack) } },
                                             // A feed's own page, not one of its entries opened on its own.
                                             onRenameFeed =
                                                 pageThread

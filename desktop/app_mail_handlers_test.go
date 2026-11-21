@@ -142,6 +142,38 @@ func TestThreadReadPassesBranchKeyThrough(t *testing.T) {
 	}
 }
 
+func TestFolderListPreservesServerSpecialUse(t *testing.T) {
+	app, _ := newMailHandlerTestApp(t, sidecarResponsePlan{Result: map[string]any{
+		"folders": []any{
+			map[string]any{"name": "Spam", "role": "junk", "special_use": nil},
+			map[string]any{"name": "[Gmail]/Spam", "role": "junk", "special_use": "junk"},
+		},
+	}})
+	out, err := app.folderList(map[string]any{"account_id": "acc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response struct {
+		Folders []map[string]any `json:"folders"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Folders) != 2 {
+		t.Fatalf("folders = %#v, want two folders", response.Folders)
+	}
+	if _, ok := response.Folders[0]["special_use"]; ok {
+		t.Fatalf("folder without special use = %#v, want field omitted", response.Folders[0])
+	}
+	if got := response.Folders[1]["special_use"]; got != "junk" {
+		t.Fatalf("special_use = %v, want junk", got)
+	}
+}
+
 func TestFolderRenamePassesTheNewNameAndRefusesBadTargets(t *testing.T) {
 	app, writer := newMailHandlerTestApp(t, sidecarResponsePlan{Result: map[string]any{
 		"ok":      true,

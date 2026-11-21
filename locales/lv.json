@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Ielādēt vairāk",
   "threads.actions.markAllAsRead": "Atzīmēt visu kā lasītu",
   "threads.actions.markAsRead": "Atzīmēt kā lasītu",
+  "threads.actions.markAsSpam": "Atzīmēt kā surogātpastu",
   "threads.actions.markAsUnread": "Atzīmēt kā nelasītu",
   "threads.actions.moveTo": "Pārvietot uz...",
   "threads.actions.moveToTrash": "Pārvietot uz miskasti",

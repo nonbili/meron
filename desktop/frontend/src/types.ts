@@ -92,6 +92,7 @@ export type Folder = {
   account_id: string
   name: string
   role: string
+  special_use?: string
   delimiter?: string
   unread: number
   /** The user opted this folder in to live sync and new-mail notifications. */

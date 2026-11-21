@@ -206,6 +206,7 @@ fun parseFolderListResponse(responseJson: String): List<FolderSummary> {
             delimiter = item.findJsonStringProperty("delimiter").orEmpty(),
             notify = item.findJsonBooleanProperty("notify") ?: false,
             notifyLive = item.findJsonBooleanProperty("notify_live") ?: false,
+            specialUse = item.findJsonStringProperty("special_use"),
         )
     }
 }

@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Tải thêm",
   "threads.actions.markAllAsRead": "Đánh dấu tất cả là đã đọc",
   "threads.actions.markAsRead": "Đánh dấu là đã đọc",
+  "threads.actions.markAsSpam": "Đánh dấu là thư rác",
   "threads.actions.markAsUnread": "Đánh dấu là chưa đọc",
   "threads.actions.moveTo": "Di chuyển tới...",
   "threads.actions.moveToTrash": "Di chuyển vào Thùng rác",

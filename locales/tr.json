@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Daha fazla yükle",
   "threads.actions.markAllAsRead": "Tümünü okundu olarak işaretle",
   "threads.actions.markAsRead": "Okundu olarak işaretle",
+  "threads.actions.markAsSpam": "Spam olarak işaretle",
   "threads.actions.markAsUnread": "Okunmamış olarak işaretle",
   "threads.actions.moveTo": "Taşı...",
   "threads.actions.moveToTrash": "Çöp Kutusuna Taşı",

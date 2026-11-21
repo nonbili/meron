@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "載入更多",
   "threads.actions.markAllAsRead": "全部標示為已讀",
   "threads.actions.markAsRead": "標示為已讀",
+  "threads.actions.markAsSpam": "標示為垃圾郵件",
   "threads.actions.markAsUnread": "標示為未讀",
   "threads.actions.moveTo": "移動至...",
   "threads.actions.moveToTrash": "移至垃圾桶",

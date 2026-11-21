@@ -60,6 +60,8 @@ type Folder struct {
 	Unread    uint32 `json:"unread"`
 	// The user opted this folder in to live sync and new-mail notifications.
 	Notify bool `json:"notify"`
+	// The role advertised by the server. Role can also be inferred from the folder name.
+	SpecialUse string `json:"special_use,omitempty"`
 }
 
 type Message struct {

@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "تحميل المزيد",
   "threads.actions.markAllAsRead": "تحديد الكل كمقروء",
   "threads.actions.markAsRead": "تحديد كمقروء",
+  "threads.actions.markAsSpam": "وضع علامة كبريد مزعج",
   "threads.actions.markAsUnread": "تحديد كغير مقروء",
   "threads.actions.moveTo": "نقل إلى...",
   "threads.actions.moveToTrash": "نقل إلى سلة المهملات",

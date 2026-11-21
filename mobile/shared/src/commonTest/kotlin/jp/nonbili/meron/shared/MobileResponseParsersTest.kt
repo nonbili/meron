@@ -430,10 +430,10 @@ class MobileResponseParsersTest {
     fun parsesFolderListEnvelopeAndRssFolderShape() {
         val folders =
             parseFolderListResponse(
-                """{"id":4,"result":{"folders":[{"id":"INBOX","account_id":"acc","name":"INBOX","unread":3,"delimiter":"."},{"id":"inbox","role":"inbox","unread":2},{"id":"Work","name":"Work","notify":true,"notify_live":true}]}}""",
+                """{"id":4,"result":{"folders":[{"id":"INBOX","account_id":"acc","name":"INBOX","unread":3,"delimiter":"."},{"id":"inbox","role":"inbox","unread":2},{"id":"Work","name":"Work","notify":true,"notify_live":true},{"id":"Quarantine","role":"junk","special_use":"junk"}]}}""",
             )
 
-        assertEquals(3, folders.size)
+        assertEquals(4, folders.size)
         assertEquals(false, folders[0].notify)
         assertEquals(true, folders[2].notify)
         assertEquals(true, folders[2].notifyLive)
@@ -445,6 +445,8 @@ class MobileResponseParsersTest {
         assertEquals("inbox", folders[1].name)
         assertEquals(2, folders[1].unread)
         assertEquals("", folders[1].delimiter)
+        assertEquals(null, folders[2].specialUse)
+        assertEquals("junk", folders[3].specialUse)
     }
 
     @Test

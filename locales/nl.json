@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Meer laden",
   "threads.actions.markAllAsRead": "Alles als gelezen markeren",
   "threads.actions.markAsRead": "Markeren als gelezen",
+  "threads.actions.markAsSpam": "Markeren als spam",
   "threads.actions.markAsUnread": "Markeren als ongelezen",
   "threads.actions.moveTo": "Verplaatsen naar…",
   "threads.actions.moveToTrash": "Verplaatsen naar Prullenbak",

@@ -11,19 +11,22 @@ import {
   MailOpen,
   MessageSquare,
   Pencil,
+  ShieldAlert,
   Star,
   Trash2,
 } from 'lucide-react'
 import { openThreadWindow } from '../../lib/threadWindow'
 import { useTranslation } from '../../lib/i18n'
+import { accountFolderForRole } from '../../lib/unifiedFolders'
 import { moveFeed, openFeedEdit } from '../../states/feeds'
 import { settings$ } from '../../states/settings'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
 import { AddMailToTasksMenu } from '../tasks/AddMailToTasksMenu'
 import { markThreadRead, markThreadUnread, starThread } from '../../states/mailFlags'
+import { mail$ } from '../../states/mail'
 import { deletesForever, isDraftFolder } from '../../states/mailFolders'
-import { archiveThread, deleteThread } from '../../states/mailMoves'
+import { archiveThread, deleteThread, moveThreadToFolder } from '../../states/mailMoves'
 import { exportThreadsAsEml } from '../../states/emlExport'
 import { accounts$, isLocalAccountId } from '../../states/accounts'
 import { isRssAccount } from '../../lib/threadActions'
@@ -175,6 +178,11 @@ export function ThreadContextMenu({
   const { t } = useTranslation()
   const { menu, close } = controller
   const accounts = useValue(accounts$)
+  const junkFolderId = useValue(() => {
+    if (menu?.kind !== 'mail' || isLocalAccountId(menu.accountId)) return
+    const folders = mail$.foldersByAccount[menu.accountId].get()
+    return folders?.find((folder) => folder.special_use === 'junk')?.id ?? accountFolderForRole(folders, 'junk')
+  })
   const rssAccounts = accounts.filter((account) => isRssAccount(account, account.id))
   // The feed menu's "Move to" flyout; a mail thread's is ThreadMoveCopyItems'.
   const [moveOpen, setMoveOpen] = useState(false)
@@ -420,6 +428,19 @@ export function ThreadContextMenu({
             const threadId = menu.threadId
             close()
             void archiveThread(threadId).then(() => after('archive', threadId))
+          }}
+        />
+      )}
+      {junkFolderId && junkFolderId !== menu.folderId && !inDrafts && (
+        <MenuItem
+          icon={<ShieldAlert size={13} className="text-secondary" />}
+          label={t('threads.actions.markAsSpam')}
+          onClick={() => {
+            const { accountId, threadId } = menu
+            close()
+            void moveThreadToFolder(threadId, junkFolderId).then((moved) => {
+              if (moved) return after('move', threadId, { targetAccountId: accountId, targetFolderId: junkFolderId })
+            })
           }}
         />
       )}

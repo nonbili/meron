@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "加载更多",
   "threads.actions.markAllAsRead": "全部标记为已读",
   "threads.actions.markAsRead": "标记为已读",
+  "threads.actions.markAsSpam": "标记为垃圾邮件",
   "threads.actions.markAsUnread": "标记为未读",
   "threads.actions.moveTo": "移动到...",
   "threads.actions.moveToTrash": "移至废纸篓",

@@ -90,6 +90,16 @@ import kotlinx.coroutines.withContext
 // dropped rather than held for the lifetime of the process.
 private const val MAX_REMEMBERED_MAIL_LIST_STATES = 12
 
+@Composable
+private fun MeronMobileState.SelectedThreadSpamMenuItem(thread: ThreadSummary) {
+    if (spamFolderForThread(thread) != null) {
+        MarkAsSpamMenuItem {
+            mailSelectionMenuOpen = false
+            markThreadAsSpam(thread) { selectedMailThreadIds = emptySet() }
+        }
+    }
+}
+
 // Contacts can be restored as the root. Its history return target is Contacts,
 // not the destination to leave the directory for when no earlier route exists.
 internal fun rootBackDestination(
@@ -404,6 +414,7 @@ internal fun KanbanRouteContent(
                                                 ?.takeUnless { threadIdIsRss(it.id) }
                                         if (singleSelectedMailThread != null) {
                                             HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                                            SelectedThreadSpamMenuItem(singleSelectedMailThread)
                                             if (!threadIdIsRss(singleSelectedMailThread.id)) {
                                                 DropdownMenuItem(
                                                     text = { Text(tr("tags.title")) },
@@ -959,6 +970,7 @@ internal fun MailRouteContent(
                                                 ?.takeUnless { threadIdIsRss(it.id) }
                                         if (singleSelectedMailThread != null) {
                                             HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                                            SelectedThreadSpamMenuItem(singleSelectedMailThread)
                                             if (!threadIdIsRss(singleSelectedMailThread.id)) {
                                                 DropdownMenuItem(
                                                     text = { Text(tr("tags.title")) },

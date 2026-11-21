@@ -683,6 +683,7 @@ pub(crate) fn list_mobile_folders(data_dir: &str, params: &Value) -> Result<Valu
                     "name": folder.name,
                     "display_name": display_name,
                     "role": role,
+                    "special_use": folder.special_use,
                     "delimiter": folder.delimiter.unwrap_or_default(),
                     "unread": folder.unread,
                     "notify": folder.notify,

@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Muat lebih banyak",
   "threads.actions.markAllAsRead": "Tandai semua telah dibaca",
   "threads.actions.markAsRead": "Tandai telah dibaca",
+  "threads.actions.markAsSpam": "Tandai sebagai spam",
   "threads.actions.markAsUnread": "Tandai belum dibaca",
   "threads.actions.moveTo": "Pindahkan ke...",
   "threads.actions.moveToTrash": "Pindahkan ke Sampah",

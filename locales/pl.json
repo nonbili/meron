@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Wczytaj więcej",
   "threads.actions.markAllAsRead": "Oznacz wszystkie jako przeczytane",
   "threads.actions.markAsRead": "Oznacz jako przeczytane",
+  "threads.actions.markAsSpam": "Oznacz jako spam",
   "threads.actions.markAsUnread": "Oznacz jako nieprzeczytane",
   "threads.actions.moveTo": "Przenieś do...",
   "threads.actions.moveToTrash": "Przenieś do kosza",

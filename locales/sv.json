@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Ladda fler",
   "threads.actions.markAllAsRead": "Markera alla som lästa",
   "threads.actions.markAsRead": "Markera som läst",
+  "threads.actions.markAsSpam": "Markera som skräppost",
   "threads.actions.markAsUnread": "Markera som oläst",
   "threads.actions.moveTo": "Flytta till...",
   "threads.actions.moveToTrash": "Flytta till papperskorgen",

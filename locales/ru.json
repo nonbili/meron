@@ -1509,6 +1509,7 @@
   "threads.actions.loadMore": "Загрузить ещё",
   "threads.actions.markAllAsRead": "Отметить всё прочитанным",
   "threads.actions.markAsRead": "Отметить прочитанным",
+  "threads.actions.markAsSpam": "Отметить как спам",
   "threads.actions.markAsUnread": "Отметить непрочитанным",
   "threads.actions.moveTo": "Переместить в…",
   "threads.actions.moveToTrash": "Переместить в корзину",

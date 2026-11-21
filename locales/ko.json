@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "더 불러오기",
   "threads.actions.markAllAsRead": "모두 읽은 상태로 표시",
   "threads.actions.markAsRead": "읽은 상태로 표시",
+  "threads.actions.markAsSpam": "스팸으로 표시",
   "threads.actions.markAsUnread": "읽지 않은 상태로 표시",
   "threads.actions.moveTo": "이동...",
   "threads.actions.moveToTrash": "휴지통으로 이동",

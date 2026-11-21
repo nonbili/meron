@@ -142,7 +142,7 @@ internal fun MeronMobileState.runCoreThreadAction(
     }
 }
 
-private fun MeronMobileState.applyCoreFolderUnreadChanges(response: String) {
+internal fun MeronMobileState.applyCoreFolderUnreadChanges(response: String) {
     applyCoreFolderUnreadChangesAt(response, null)
 }
 

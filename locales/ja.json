@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "さらに読み込む",
   "threads.actions.markAllAsRead": "すべて既読にする",
   "threads.actions.markAsRead": "既読にする",
+  "threads.actions.markAsSpam": "迷惑メールにする",
   "threads.actions.markAsUnread": "未読にする",
   "threads.actions.moveTo": "移動先...",
   "threads.actions.moveToTrash": "ゴミ箱に移動",

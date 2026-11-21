@@ -1316,6 +1316,11 @@ fn mobile_protocol_lists_folders_from_store() {
                 delimiter: Some("/".to_string()),
                 ..Default::default()
             },
+            Folder {
+                name: "Quarantine".to_string(),
+                special_use: Some("junk".to_string()),
+                ..Default::default()
+            },
         ],
     )
     .unwrap();
@@ -1344,6 +1349,8 @@ fn mobile_protocol_lists_folders_from_store() {
     assert_eq!(value["result"]["folders"][1]["role"], "inbox");
     assert_eq!(value["result"]["folders"][1]["unread"], 1);
     assert_eq!(value["result"]["folders"][0]["notify"], false);
+    assert_eq!(value["result"]["folders"][2]["id"], "Quarantine");
+    assert_eq!(value["result"]["folders"][2]["special_use"], "junk");
 
     // Opting a folder in answers with the refreshed list.
     let value = invoke_mobile_protocol_json(

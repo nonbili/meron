@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Завантажити ще",
   "threads.actions.markAllAsRead": "Позначити всі як прочитані",
   "threads.actions.markAsRead": "Позначити як прочитане",
+  "threads.actions.markAsSpam": "Позначити як спам",
   "threads.actions.markAsUnread": "Позначити як непрочитане",
   "threads.actions.moveTo": "Перемістити до…",
   "threads.actions.moveToTrash": "Перемістити до кошика",

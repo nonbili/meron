@@ -21,6 +21,7 @@ import kotlin.concurrent.Volatile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 
 /**
@@ -85,6 +86,56 @@ class KanbanColumnLoadOrderTest {
                 )
                 assertEquals(RecentThreadTransfer("move", "a", "b", "INBOX"), state.recentThreadTransfers.single())
             }
+        }
+
+    @Test
+    fun spamFolderUsesTheThreadsAccountAndPrefersServerSpecialUse() =
+        runBlocking {
+            val state = state(GatedCore(), this)
+            state.selectedCoreAccountId = UNIFIED_ACCOUNT_ID
+            val thread = ThreadSummary(id = "a#INBOX#t1", accountId = "a", folder = "INBOX", subject = "Subject", sender = "Sender")
+            val inferred = FolderSummary("a", "Spam", role = "junk")
+            val advertised = FolderSummary("a", "[Gmail]/Spam", role = "junk", specialUse = "junk")
+            val otherAccount = FolderSummary("b", "Junk", role = "junk", specialUse = "junk")
+
+            state.foldersByAccount = mapOf("b" to listOf(otherAccount))
+            assertNull(state.spamFolderForThread(thread))
+            state.foldersByAccount += "a" to listOf(inferred)
+            assertEquals("Spam", state.spamFolderForThread(thread))
+            state.foldersByAccount += "a" to listOf(inferred, advertised)
+            assertEquals("[Gmail]/Spam", state.spamFolderForThread(thread))
+            assertNull(state.spamFolderForThread(thread.copy(folder = advertised.name, folderRole = "junk")))
+            assertNull(state.spamFolderForThread(thread.copy(folder = "Drafts", folderRole = "drafts")))
+        }
+
+    @Test
+    fun markingSpamMovesTheThreadAndAppliesServerUnreadCountsBeforeTheCallback() =
+        runBlocking {
+            val core =
+                GatedCore().apply {
+                    moveReply =
+                        """{"ok":true,"moved":1,"thread_id":"a#Junk#t1","folder_counts":[{"account_id":"a","folder_id":"INBOX","unread":3},{"account_id":"a","folder_id":"Junk","unread":5}]}"""
+                }
+            val state = state(core, this)
+            val thread = ThreadSummary(id = "a#INBOX#t1", accountId = "a", folder = "INBOX", subject = "Subject", sender = "Sender")
+            state.coreThreads = listOf(thread)
+            state.coreFolders =
+                listOf(FolderSummary("a", "INBOX", unread = 4, role = "inbox"), FolderSummary("a", "Junk", unread = 4, role = "junk"))
+            state.foldersByAccount = mapOf("a" to state.coreFolders)
+            val unreadAtCompletion = CompletableDeferred<List<Int>>()
+
+            state.markThreadAsSpam(thread) {
+                unreadAtCompletion.complete(state.coreFolders.map { it.unread })
+            }
+
+            assertEquals(listOf(3, 5), withTimeout(5_000) { unreadAtCompletion.await() })
+            assertEquals(listOf(3, 5), state.foldersByAccount.getValue("a").map { it.unread })
+            assertEquals(emptyList(), state.coreThreads)
+            val (command, payload) = core.actionRequests.single()
+            assertEquals(MobileCommand.Move, command)
+            assertEquals(thread.id, payload.jsonStringValue("thread_id"))
+            assertEquals("a", payload.jsonStringValue("target_account_id"))
+            assertEquals("Junk", payload.jsonStringValue("target_folder_id"))
         }
 
     @Test
@@ -593,6 +644,7 @@ class KanbanColumnLoadOrderTest {
 
         /** Answers Archive with this instead of the usual move into "Archive". */
         var archiveReply: String? = null
+        var moveReply: String? = null
         var folderListCalls = 0
         val actionGate = CompletableDeferred<Unit>()
         val actionGates = mutableMapOf<String, CompletableDeferred<Unit>>()
@@ -657,6 +709,10 @@ class KanbanColumnLoadOrderTest {
 
                         command == MobileCommand.Archive && archiveReply != null -> {
                             archiveReply!!
+                        }
+
+                        command == MobileCommand.Move && moveReply != null -> {
+                            moveReply!!
                         }
 
                         actionFails -> {

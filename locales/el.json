@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Φόρτωση περισσότερων",
   "threads.actions.markAllAsRead": "Σήμανση όλων ως αναγνωσμένα",
   "threads.actions.markAsRead": "Σήμανση ως αναγνωσμένο",
+  "threads.actions.markAsSpam": "Σήμανση ως ανεπιθύμητο",
   "threads.actions.markAsUnread": "Σήμανση ως μη αναγνωσμένο",
   "threads.actions.moveTo": "Μετακίνηση σε...",
   "threads.actions.moveToTrash": "Μετακίνηση στα Απορρίμματα",

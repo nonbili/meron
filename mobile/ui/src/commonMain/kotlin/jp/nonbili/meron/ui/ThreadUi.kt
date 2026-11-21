@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Star
@@ -146,6 +147,15 @@ import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
+@Composable
+internal fun MarkAsSpamMenuItem(onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(tr("threads.actions.markAsSpam")) },
+        leadingIcon = { Icon(Icons.Filled.Report, contentDescription = null) },
+        onClick = onClick,
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun ThreadScreen(
@@ -158,6 +168,7 @@ internal fun ThreadScreen(
     onPreferHtmlChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onArchive: () -> Unit,
+    onMarkAsSpam: (() -> Unit)? = null,
     /** Names the feed in the list; null where the thread is not a feed. */
     onRenameFeed: ((String) -> Unit)? = null,
     onDelete: () -> Unit,
@@ -834,6 +845,12 @@ internal fun ThreadScreen(
                                             onArchive()
                                         },
                                     )
+                                    if (onMarkAsSpam != null) {
+                                        MarkAsSpamMenuItem {
+                                            overflowOpen = false
+                                            onMarkAsSpam()
+                                        }
+                                    }
                                     if (isRss && onRenameFeed != null && thread != null) {
                                         DropdownMenuItem(
                                             text = { Text(tr("mobile.actions.renameFeed")) },

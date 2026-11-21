@@ -1708,6 +1708,7 @@
   "threads.actions.loadMore": "Carica altri",
   "threads.actions.markAllAsRead": "Segna tutti come letti",
   "threads.actions.markAsRead": "Segna come letto",
+  "threads.actions.markAsSpam": "Segna come spam",
   "threads.actions.markAsUnread": "Segna come non letto",
   "threads.actions.moveTo": "Sposta in...",
   "threads.actions.moveToTrash": "Sposta nel Cestino",

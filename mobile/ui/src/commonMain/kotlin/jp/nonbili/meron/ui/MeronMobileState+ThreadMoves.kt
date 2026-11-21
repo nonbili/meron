@@ -17,6 +17,24 @@ import kotlinx.coroutines.withContext
 
 private fun List<FolderSummary>.hasOnlyBootstrapInbox(): Boolean = size == 1 && first().name.equals(INBOX_FOLDER, ignoreCase = true)
 
+internal fun MeronMobileState.spamFolderForThread(thread: ThreadSummary): String? {
+    if (threadIdIsRss(thread.id) || thread.folderRole == "drafts") return null
+    val folders = foldersByAccount[thread.accountId].orEmpty()
+    val junk = folders.firstOrNull { it.specialUse == "junk" }?.name ?: unifiedAccountFolder(folders, "junk")
+    return junk?.takeUnless { kanbanFolderIdsEqual(it, thread.folder) }
+}
+
+internal fun MeronMobileState.markThreadAsSpam(
+    thread: ThreadSummary,
+    onMoved: () -> Unit = {},
+) {
+    val folder = spamFolderForThread(thread) ?: return
+    moveThreadToFolder(thread, folder) {
+        refreshKanbanColumnsForAccount(thread.accountId)
+        onMoved()
+    }
+}
+
 // These moves remove rows on success. A read while the move was pending may
 // already have hidden the source row, so a failure needs a fresh cache read.
 private fun MeronMobileState.reloadFailedMoveSource(thread: ThreadSummary) {
@@ -131,6 +149,7 @@ internal fun MeronMobileState.moveThreadToFolder(
         }.onSuccess { response ->
             removal.complete()
             releaseMovedThread(response)
+            applyCoreFolderUnreadChanges(response)
             if (selectedCoreThread?.id == thread.id) {
                 selectedCoreThread = null
                 messages = emptyList()

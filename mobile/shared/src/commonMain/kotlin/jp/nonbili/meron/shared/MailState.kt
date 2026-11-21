@@ -108,6 +108,8 @@ data class FolderSummary(
     /** Opted in and holding one of the account's IMAP IDLE slots. Core polls
      *  the opted-in folders past those, so only these need a live watch. */
     val notifyLive: Boolean = false,
+    /** The server's IMAP special-use attribute, when advertised. */
+    val specialUse: String? = null,
 )
 
 data class ThreadSummary(
