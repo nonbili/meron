@@ -154,8 +154,8 @@ pub struct Contact {
 /// display name. When `account` is empty we search across all accounts (unified
 /// compose).
 ///
-/// Reads the `contacts` directory the `messages` triggers keep (see
-/// `db::contacts_ddl`), matching in Rust so a name's non-ASCII case folds,
+/// Reads the `contacts` directory the `messages` triggers keep (see migration
+/// `0024_contacts_by_folder`), matching in Rust so a name's non-ASCII case folds,
 /// which SQLite's `lower()` doesn't.
 pub fn suggest_contacts(
     conn: &Connection,

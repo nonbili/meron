@@ -1,0 +1,140 @@
+
+[account_secrets] account_id, blob
+
+[accounts] id, engine, provider, email, display_name, avatar_url, sender_name, config, prefs, sort_order, created_at, updated_at
+"acc" | "mail" | "custom" | "ada@example.test" | "Ada" | "" | "" | "{}" | "{}" | 0 | 10 | 10
+"feeds" | "rss" | "rss" | "" | "Feeds" | "" | "" | "{}" | "{}" | 0 | 10 | 10
+
+[active_message_syncs] id, epoch, owner
+
+[carddav_accounts] id, server, username, google
+
+[carddav_books] id, account, url, name, enabled, sync_token
+
+[carddav_cards] book, url, etag, name, emails, invalid, note
+
+[contact_participants] message_id, account, folder, addr_key, name, addr, date
+1 | "acc" | "INBOX" | "ada@example.test" | "Ada" | "ada@example.test" | 1000
+1 | "acc" | "INBOX" | "grace@example.org" | "Grace Hopper" | "grace@example.org" | 1000
+1 | "acc" | "INBOX" | "linus@example.org" | "Linus" | "linus@example.org" | 1000
+1 | "acc" | "INBOX" | "team@example.org" | "" | "Team@Example.org" | 1000
+2 | "acc" | "INBOX" | "grace@example.org" | "Grace Hopper" | "grace@example.org" | 2000
+2 | "acc" | "INBOX" | "linus@example.org" | "Linus" | "linus@example.org" | 2000
+3 | "acc" | "Sent" | "ada@example.test" | "Ada" | "ada@example.test" | 3000
+3 | "acc" | "Sent" | "grace@example.org" | "Grace Hopper" | "grace@example.org" | 3000
+3 | "acc" | "Sent" | "linus@example.org" | "Linus" | "linus@example.org" | 3000
+4 | "acc" | "INBOX" | "ada@example.test" | "Ada" | "ada@example.test" | 4000
+4 | "acc" | "INBOX" | "grace@example.org" | "Grace Hopper" | "grace@example.org" | 4000
+5 | "acc" | "Trash" | "noreply@example.org" | "" | "noreply@example.org" | 0
+
+[contacts] account, folder, addr_key, name, addr, count, last_date
+"acc" | "INBOX" | "ada@example.test" | "Ada" | "ada@example.test" | 2 | 4000
+"acc" | "INBOX" | "grace@example.org" | "Grace Hopper" | "grace@example.org" | 3 | 4000
+"acc" | "INBOX" | "linus@example.org" | "Linus" | "linus@example.org" | 2 | 2000
+"acc" | "INBOX" | "team@example.org" | "" | "Team@Example.org" | 1 | 1000
+"acc" | "Sent" | "ada@example.test" | "Ada" | "ada@example.test" | 1 | 3000
+"acc" | "Sent" | "grace@example.org" | "Grace Hopper" | "grace@example.org" | 1 | 3000
+"acc" | "Sent" | "linus@example.org" | "Linus" | "linus@example.org" | 1 | 3000
+"acc" | "Trash" | "noreply@example.org" | "" | "noreply@example.org" | 1 | 0
+
+[dav_accounts] id, server_url, username, display_name, home, last_sync_at, last_error, json, created_at, updated_at
+
+[dav_calendars] id, account, url, name, color, components, ctag, sync_token, read_only, enabled, sort_order, json, created_at, updated_at
+
+[dav_objects] calendar, url, etag, local_id, state, moved_to
+
+[events] id, title, notes, location, start_at, end_at, all_day, recurring, rrule, tzid, account, thread_id, message_id, invite_uid, recurrence_id, response, ics, json, created_at, updated_at, alerts, calendar
+
+[folder_state] account, folder, uidvalidity, uid_next, highest_modseq
+"acc" | "INBOX" | 7 | 5 | NULL
+
+[folders] account, name, delimiter, special_use, notify
+"acc" | "INBOX" | "/" | NULL | 0
+"acc" | "Sent" | "/" | "sent" | 0
+"acc" | "Trash" | "/" | "trash" | 0
+
+[google_grants] email, id, scopes
+
+[invite_responses] account, uid, recurrence_id, response, sequence, responded_at, this_and_future
+
+[mail_search_hits] token, account, query, scope, position, folder, uid, created_at
+
+[mail_search_pending] token, account, folder, uid, date
+
+[mail_search_snapshots] token, account, query, scope, cache_resume, created_at
+
+[message_tags] account, tag_key, tag, state, updated_at
+
+[messages] id, account, folder, msg_id, uid, subject, from_name, from_addr, date, seen, starred, thread_key, body, json, recipients, files, server_tags
+1 | "acc" | "INBOX" | "1" | 1 | "Quarterly report" | "Grace Hopper" | "grace@example.org" | 1000 | 1 | 0 | "<r1@example.org>" | "The quarterly numbers are in." | "{\"message_id\":\"<R1@example.org>\",\"to\":[{\"name\":\"Ada\",\"addr\":\"ada@example.test\"},{\"name\":\"Linus\",\"addr\":\"linus@example.org\"}],\"cc\":[{\"name\":\"\",\"addr\":\"Team@Example.org\"}]}" | NULL | NULL | NULL
+2 | "acc" | "INBOX" | "2" | 2 | "Re: Quarterly report" | "Linus" | "linus@example.org" | 2000 | 0 | 1 | "<r1@example.org>" | "Looks good to me." | "{\"message_id\":\"<r2@example.org>\",\"in_reply_to\":\"<r1@example.org>\",\"to\":[{\"name\":\"Grace Hopper\",\"addr\":\"grace@example.org\"}],\"cc\":[]}" | NULL | NULL | NULL
+3 | "acc" | "Sent" | "1" | 1 | "日本語のメール" | "Ada" | "ada@example.test" | 3000 | 1 | 0 | NULL | "日本語の本文です。" | "{\"message_id\":\"<s1@example.test>\",\"to\":[{\"name\":\"Grace Hopper\",\"addr\":\"grace@example.org\"}],\"cc\":[{\"name\":\"Linus\",\"addr\":\"linus@example.org\"}]}" | NULL | NULL | NULL
+4 | "acc" | "INBOX" | "4" | 4 | "Gmail copy" | "Grace Hopper" | "grace@example.org" | 4000 | 0 | 0 | NULL | NULL | "{\"gmail_msg_id\":\"18c0ffee\",\"to\":[{\"name\":\"Ada\",\"addr\":\"ada@example.test\"}]}" | NULL | NULL | NULL
+5 | "acc" | "Trash" | "9" | 9 | "Old news" | NULL | "noreply@example.org" | 0 | 1 | 0 | NULL | NULL | "{}" | NULL | NULL | NULL
+6 | "feeds" | "sub" | "item-1" | 0 | "A feed item" | "A feed" | "" | 5000 | 0 | 0 | NULL | "Feed body" | "{\"link\":\"https://feeds.example.test/1\"}" | NULL | NULL | NULL
+
+[meta] key, value
+
+[observed_mail_identities] account, identity, first_seen_at
+"acc" | "gmail:18c0ffee" | <now>
+"acc" | "message-id:<r1@example.org>" | <now>
+"acc" | "message-id:<r2@example.org>" | <now>
+"acc" | "message-id:<s1@example.test>" | <now>
+"acc" | "uid:trash:9" | <now>
+
+[openpgp_accounts] account_id, enabled
+
+[openpgp_key_used] addr, fingerprint, used_at
+
+[openpgp_offer_dismissed] account_id, addr
+
+[openpgp_own_keys] fingerprint, account_id, secret_key, is_default, added_at
+
+[openpgp_peer_keys] addr, fingerprint, public_key, source, verified, first_seen, last_seen
+
+[openpgp_sign_plain] account_id
+
+[reminder_deliveries] key, delivered_at
+
+[removed_message_uids] account, folder, uid, epoch
+
+[rule_actions] account, folder, uid, uidvalidity, mark_read, star, trash, target, copies, rule_ids, run, attempts
+
+[rule_activation] rule_id, event_sequence
+
+[rule_evaluations] message, rule_id, event_sequence, query
+
+[rule_event_sequence] id, value
+1 | 1
+
+[rule_events] message, arrived_at, read_at, arrived_sequence, read_sequence
+1 | NULL | NULL | 1 | 1
+2 | NULL | NULL | 1 | 1
+3 | NULL | NULL | 1 | 1
+4 | NULL | NULL | 1 | 1
+5 | NULL | NULL | 1 | 1
+
+[rule_firings] message, rule_id
+
+[rule_log] id, at, rule_id, account, subject, count, failed, detail
+
+[settings] key, value
+
+[subscriptions] id, account, url, title, site_url, feed_title, enabled, last_sync_at, last_error, etag, last_modified, created_at, updated_at, json
+"sub" | "feeds" | "https://feeds.example.test/a.xml" | "A feed" | "" | "" | 1 | 0 | "" | "" | "" | 0 | 0 | "{}"
+
+[task_lists] id, title, sort_order, created_at, updated_at
+
+[tasks] id, list_id, title, notes, due_at, completed_at, sort_order, account, thread_id, message_id, json, created_at, updated_at
+
+[uncached_unseen] account, folder, uid
+
+[messages_fts MATCH quarterly] [1, 2]
+
+[messages_fts MATCH grace] [1, 4]
+
+[messages_fts MATCH "日本語"] [3]
+
+[messages_recipients_fts MATCH linus] []
+
+[messages_recipients_fts MATCH "example.org"] []

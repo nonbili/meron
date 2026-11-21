@@ -1755,5 +1755,14 @@
   "window.restore": "Przywróć",
   "crypto.account.previousKey": "Wcześniejszy klucz",
   "crypto.account.previousKeyHint": "Zachowany, aby poczta nim zaszyfrowana pozostała czytelna. Jego usunięcie uniemożliwi odczytanie tych wiadomości.",
-  "crypto.peers.showAll": "Pokaż wszystkie klucze ({count})"
+  "crypto.peers.showAll": "Pokaż wszystkie klucze ({count})",
+  "store.newer.title": "Twoje dane poczty pochodzą z nowszej wersji Meron",
+  "store.newer.message": "Twoje dane poczty były ostatnio używane przez nowszą wersję Meron (schemat {found}; ta wersja obsługuje {supported}). Otwarcie ich w tej wersji może powodować problemy. Najpierw utworzyć kopię zapasową?",
+  "store.newer.backupAndOpen": "Utwórz kopię i otwórz",
+  "store.newer.openAnyway": "Otwórz mimo to",
+  "store.newer.quit": "Zakończ",
+  "store.newer.backedUp": "Kopię zapasową zapisano w {path}",
+  "store.newer.backedUpHere": "Kopię zapasową zapisano",
+  "store.newer.failed": "Nie można otworzyć danych poczty: {error}",
+  "store.newer.leftAsItWas": "Twoje dane poczty pozostały bez zmian. Możesz teraz zamknąć Meron."
 }

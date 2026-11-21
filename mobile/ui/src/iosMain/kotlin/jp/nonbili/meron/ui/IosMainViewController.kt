@@ -90,21 +90,25 @@ fun MainViewController(
             coreProtocolVersion = coreProtocolVersion,
         )
     return ComposeUIViewController {
-        MeronApp(
-            core = core,
-            coreLoaded = coreLoaded,
-            prefs = appPrefs,
-            kanbanPrefs = kanbanPrefs,
-            services = services,
-            locale = locale,
-            mobileHost = mobileHost,
-            coreInitJson = coreInitJson,
-            incomingMailtoDraft = incomingMailtoEvents?.draft ?: incomingMailtoDraft,
-            onMailtoDraftConsumed = { incomingMailtoEvents?.consume() },
-            incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
-            incomingNotificationThreadTarget = incomingThreadEvents?.target ?: incomingNotificationThreadTarget,
-            onNotificationThreadTargetConsumed = { incomingThreadEvents?.consume() },
-        )
+        // An iOS app may not close itself: quitting leaves the store as it was
+        // and says so.
+        NewerStoreGate(core = core, coreLoaded = coreLoaded, prefs = appPrefs, locale = locale, onQuit = null) {
+            MeronApp(
+                core = core,
+                coreLoaded = coreLoaded,
+                prefs = appPrefs,
+                kanbanPrefs = kanbanPrefs,
+                services = services,
+                locale = locale,
+                mobileHost = mobileHost,
+                coreInitJson = coreInitJson,
+                incomingMailtoDraft = incomingMailtoEvents?.draft ?: incomingMailtoDraft,
+                onMailtoDraftConsumed = { incomingMailtoEvents?.consume() },
+                incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
+                incomingNotificationThreadTarget = incomingThreadEvents?.target ?: incomingNotificationThreadTarget,
+                onNotificationThreadTargetConsumed = { incomingThreadEvents?.consume() },
+            )
+        }
     }
 }
 

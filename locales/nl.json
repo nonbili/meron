@@ -1755,5 +1755,14 @@
   "window.restore": "Herstellen",
   "crypto.account.previousKey": "Eerdere sleutel",
   "crypto.account.previousKeyHint": "Bewaard zodat e-mail die hiermee is versleuteld leesbaar blijft. Als u deze verwijdert, wordt die e-mail onleesbaar.",
-  "crypto.peers.showAll": "Alle {count} sleutels tonen"
+  "crypto.peers.showAll": "Alle {count} sleutels tonen",
+  "store.newer.title": "Je e-mailgegevens komen van een nieuwere Meron",
+  "store.newer.message": "Je e-mailgegevens zijn het laatst gebruikt door een nieuwere versie van Meron (schema {found}; deze versie ondersteunt {supported}). Ze openen met deze versie kan problemen veroorzaken. Eerst een back-up maken?",
+  "store.newer.backupAndOpen": "Back-up maken en openen",
+  "store.newer.openAnyway": "Toch openen",
+  "store.newer.quit": "Afsluiten",
+  "store.newer.backedUp": "Back-up opgeslagen in {path}",
+  "store.newer.backedUpHere": "Back-up opgeslagen",
+  "store.newer.failed": "Kan je e-mailgegevens niet openen: {error}",
+  "store.newer.leftAsItWas": "Je e-mailgegevens zijn ongewijzigd gelaten. Je kunt Meron nu sluiten."
 }

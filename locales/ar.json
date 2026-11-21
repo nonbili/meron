@@ -1755,5 +1755,14 @@
   "window.restore": "استعادة",
   "crypto.account.previousKey": "المفتاح السابق",
   "crypto.account.previousKeyHint": "يُحتفظ به حتى يظل البريد المشفر به قابلاً للقراءة. يؤدي حذفه إلى جعل ذلك البريد غير قابل للقراءة.",
-  "crypto.peers.showAll": "إظهار كافة المفاتيح ({count})"
+  "crypto.peers.showAll": "إظهار كافة المفاتيح ({count})",
+  "store.newer.title": "بيانات بريدك من إصدار أحدث من Meron",
+  "store.newer.message": "آخر من استخدم بيانات بريدك إصدار أحدث من Meron (المخطط {found}؛ هذا الإصدار يدعم {supported}). قد يسبب فتحها بهذا الإصدار مشكلات. هل تريد إنشاء نسخة احتياطية أولًا؟",
+  "store.newer.backupAndOpen": "نسخ احتياطي ثم فتح",
+  "store.newer.openAnyway": "فتح على أي حال",
+  "store.newer.quit": "إنهاء",
+  "store.newer.backedUp": "حُفظت النسخة الاحتياطية في {path}",
+  "store.newer.backedUpHere": "حُفظت النسخة الاحتياطية",
+  "store.newer.failed": "تعذّر فتح بيانات بريدك: {error}",
+  "store.newer.leftAsItWas": "تُركت بيانات بريدك كما هي. يمكنك إغلاق Meron الآن."
 }

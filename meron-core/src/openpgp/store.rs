@@ -1,4 +1,4 @@
-//! OpenPGP keys in the SQLCipher store (tables from `migrate_v22`).
+//! OpenPGP keys in the SQLCipher store (tables from migrations 0029 and 0034).
 //!
 //! Secret keys are stored unprotected inside the encrypted database, like
 //! Delta Chat's `keypairs` (decision 2026-11-01): the database key already
@@ -15,45 +15,6 @@ use super::autocrypt::Announced;
 use super::keyring::{self, Keyring, PeerKey, Source};
 use super::keys::{self, KeyInfo, Unusable, fingerprint_hex};
 
-/// Schema for `migrate_v22`.
-pub const DDL: &str = "
-CREATE TABLE IF NOT EXISTS openpgp_accounts (
-  account_id TEXT PRIMARY KEY,
-  enabled    INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS openpgp_own_keys (
-  fingerprint TEXT PRIMARY KEY,
-  account_id  TEXT NOT NULL,
-  secret_key  BLOB NOT NULL,
-  is_default  INTEGER NOT NULL DEFAULT 1,
-  added_at    INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS openpgp_own_keys_account ON openpgp_own_keys(account_id);
-CREATE TABLE IF NOT EXISTS openpgp_peer_keys (
-  addr        TEXT NOT NULL,
-  fingerprint TEXT NOT NULL,
-  public_key  BLOB NOT NULL,
-  source      TEXT NOT NULL,
-  verified    INTEGER NOT NULL DEFAULT 0,
-  first_seen  INTEGER NOT NULL,
-  last_seen   INTEGER NOT NULL,
-  PRIMARY KEY (addr, fingerprint)
-);
-CREATE TABLE IF NOT EXISTS openpgp_offer_dismissed (
-  account_id TEXT NOT NULL,
-  addr       TEXT NOT NULL,
-  PRIMARY KEY (account_id, addr)
-);
-CREATE TABLE IF NOT EXISTS openpgp_key_used (
-  addr        TEXT PRIMARY KEY,
-  fingerprint TEXT NOT NULL,
-  used_at     INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS openpgp_sign_plain (
-  account_id TEXT PRIMARY KEY
-);
-";
-
 fn now_secs() -> i64 {
     chrono::Utc::now().timestamp()
 }
@@ -68,9 +29,6 @@ pub fn init_main(conn: &Connection) -> Result<()> {
     if let Some(path) = conn.path().filter(|p| !p.is_empty()) {
         let _ = MAIN_DB.set(path.to_string());
     }
-    // Every table is `IF NOT EXISTS`: this adds the ones newer than the store's
-    // OpenPGP migration (`openpgp_key_used`) without a migration of their own.
-    conn.execute_batch(DDL)?;
     reparse_key_attachments_once(conn)?;
     reparse_signer_mismatches_once(conn)?;
     refetch_encrypted_cached_without_openpgp_once(conn)?;

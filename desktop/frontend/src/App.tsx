@@ -29,6 +29,7 @@ import { AppToast } from './components/toast/AppToast'
 import { EmlExportProgress } from './components/toast/EmlExportProgress'
 import { McpApprovalDialog } from './components/dialog/McpApprovalDialog'
 import { AppConfirm } from './components/dialog/AppConfirm'
+import { NewerSchemaDialog } from './components/dialog/NewerSchemaDialog'
 import { EnableEncryptionDialog } from './components/crypto/EnableEncryptionDialog'
 import { VerifyKeyDialog } from './components/crypto/VerifyKeyDialog'
 import { KeyLookupDialog } from './components/crypto/KeyLookupDialog'
@@ -97,6 +98,7 @@ export default function App() {
           <SetupScreen />
         </div>
         <QuitHotkey />
+        <NewerSchemaDialog />
       </div>
     )
   }
@@ -197,6 +199,7 @@ export default function App() {
         <AppConfirm />
         <McpApprovalDialog />
         <CertificateTrustDialog />
+        <NewerSchemaDialog />
       </main>
     </div>
   )

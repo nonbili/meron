@@ -1755,5 +1755,14 @@
   "window.restore": "Ripristina",
   "crypto.account.previousKey": "Chiave precedente",
   "crypto.account.previousKeyHint": "Conservata in modo che i messaggi cifrati con essa rimangano leggibili. Se la elimini, quei messaggi diventeranno illeggibili.",
-  "crypto.peers.showAll": "Mostra tutte le {count} chiavi"
+  "crypto.peers.showAll": "Mostra tutte le {count} chiavi",
+  "store.newer.title": "I tuoi dati di posta provengono da un Meron più recente",
+  "store.newer.message": "I tuoi dati di posta sono stati usati l’ultima volta da una versione più recente di Meron (schema {found}; questa versione supporta {supported}). Aprirli con questa versione può causare problemi. Vuoi prima farne un backup?",
+  "store.newer.backupAndOpen": "Backup e apri",
+  "store.newer.openAnyway": "Apri comunque",
+  "store.newer.quit": "Esci",
+  "store.newer.backedUp": "Backup salvato in {path}",
+  "store.newer.backedUpHere": "Backup salvato",
+  "store.newer.failed": "Impossibile aprire i dati di posta: {error}",
+  "store.newer.leftAsItWas": "I tuoi dati di posta sono stati lasciati come erano. Ora puoi chiudere Meron."
 }

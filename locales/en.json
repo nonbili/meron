@@ -1755,5 +1755,14 @@
   "window.restore": "Restore",
   "crypto.account.previousKey": "Earlier key",
   "crypto.account.previousKeyHint": "Kept so mail encrypted to it stays readable. Deleting it makes that mail unreadable.",
-  "crypto.peers.showAll": "Show all {count} keys"
+  "crypto.peers.showAll": "Show all {count} keys",
+  "store.newer.title": "Your mail data is from a newer Meron",
+  "store.newer.message": "Your mail data was last used by a newer version of Meron (schema {found}; this version supports {supported}). Opening it with this version may cause problems. Back it up first?",
+  "store.newer.backupAndOpen": "Back up and open",
+  "store.newer.openAnyway": "Open anyway",
+  "store.newer.quit": "Quit",
+  "store.newer.backedUp": "Backup saved to {path}",
+  "store.newer.backedUpHere": "Backup saved",
+  "store.newer.failed": "Could not open your mail data: {error}",
+  "store.newer.leftAsItWas": "Your mail data was left as it was. You can close Meron now."
 }

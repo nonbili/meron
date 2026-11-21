@@ -1755,5 +1755,14 @@
   "window.restore": "Atjaunot",
   "crypto.account.previousKey": "Iepriekšējā atslēga",
   "crypto.account.previousKeyHint": "Saglabāta, lai ar to šifrētās vēstules paliktu lasāmas. Tās dzēšana padarīs šīs vēstules nelasāmas.",
-  "crypto.peers.showAll": "Rādīt visas {count} atslēgas"
+  "crypto.peers.showAll": "Rādīt visas {count} atslēgas",
+  "store.newer.title": "Jūsu pasta dati ir no jaunākas Meron versijas",
+  "store.newer.message": "Jūsu pasta datus pēdējā izmantoja jaunāka Meron versija (shēma {found}; šī versija atbalsta {supported}). To atvēršana ar šo versiju var radīt problēmas. Vai vispirms izveidot dublējumu?",
+  "store.newer.backupAndOpen": "Dublēt un atvērt",
+  "store.newer.openAnyway": "Tomēr atvērt",
+  "store.newer.quit": "Iziet",
+  "store.newer.backedUp": "Dublējums saglabāts: {path}",
+  "store.newer.backedUpHere": "Dublējums saglabāts",
+  "store.newer.failed": "Neizdevās atvērt pasta datus: {error}",
+  "store.newer.leftAsItWas": "Jūsu pasta dati netika mainīti. Tagad varat aizvērt Meron."
 }

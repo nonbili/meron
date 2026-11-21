@@ -1755,5 +1755,14 @@
   "window.restore": "Geri yükle",
   "crypto.account.previousKey": "Önceki anahtar",
   "crypto.account.previousKeyHint": "Kendisiyle şifrelenmiş e-postaların okunabilir kalması için saklanır. Silinmesi bu e-postaları okunamaz hale getirir.",
-  "crypto.peers.showAll": "Tüm {count} anahtarı göster"
+  "crypto.peers.showAll": "Tüm {count} anahtarı göster",
+  "store.newer.title": "E-posta verileriniz daha yeni bir Meron sürümüne ait",
+  "store.newer.message": "E-posta verileriniz en son daha yeni bir Meron sürümü tarafından kullanıldı (şema {found}; bu sürüm {supported} destekliyor). Bu sürümle açmak sorunlara yol açabilir. Önce yedeklensin mi?",
+  "store.newer.backupAndOpen": "Yedekle ve aç",
+  "store.newer.openAnyway": "Yine de aç",
+  "store.newer.quit": "Çık",
+  "store.newer.backedUp": "Yedek şuraya kaydedildi: {path}",
+  "store.newer.backedUpHere": "Yedek kaydedildi",
+  "store.newer.failed": "E-posta verileriniz açılamadı: {error}",
+  "store.newer.leftAsItWas": "E-posta verilerinize dokunulmadı. Meron'u şimdi kapatabilirsiniz."
 }

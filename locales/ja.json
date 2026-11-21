@@ -1755,5 +1755,14 @@
   "window.restore": "元に戻す",
   "crypto.account.previousKey": "以前の鍵",
   "crypto.account.previousKeyHint": "この鍵宛てに暗号化されたメールを引き続き読めるように保持されています。削除するとそれらのメールは読めなくなります。",
-  "crypto.peers.showAll": "全 {count} 個の鍵を表示"
+  "crypto.peers.showAll": "全 {count} 個の鍵を表示",
+  "store.newer.title": "メールデータは新しいバージョンの Meron のものです",
+  "store.newer.message": "メールデータは新しいバージョンの Meron で最後に使用されました（スキーマ {found}、このバージョンの対応は {supported}）。このバージョンで開くと問題が起きる可能性があります。先にバックアップしますか？",
+  "store.newer.backupAndOpen": "バックアップして開く",
+  "store.newer.openAnyway": "このまま開く",
+  "store.newer.quit": "終了",
+  "store.newer.backedUp": "バックアップを {path} に保存しました",
+  "store.newer.backedUpHere": "バックアップを保存しました",
+  "store.newer.failed": "メールデータを開けませんでした: {error}",
+  "store.newer.leftAsItWas": "メールデータは変更されていません。Meron を閉じてかまいません。"
 }

@@ -1755,5 +1755,14 @@
   "window.restore": "복원",
   "crypto.account.previousKey": "이전 키",
   "crypto.account.previousKeyHint": "이 키로 암호화된 메일을 계속 읽을 수 있도록 보관됩니다. 삭제하면 해당 메일을 읽을 수 없게 됩니다.",
-  "crypto.peers.showAll": "키 {count}개 모두 표시"
+  "crypto.peers.showAll": "키 {count}개 모두 표시",
+  "store.newer.title": "메일 데이터가 최신 버전의 Meron에서 온 것입니다",
+  "store.newer.message": "메일 데이터를 마지막으로 사용한 것은 최신 버전의 Meron입니다(스키마 {found}, 이 버전은 {supported}까지 지원). 이 버전으로 열면 문제가 생길 수 있습니다. 먼저 백업할까요?",
+  "store.newer.backupAndOpen": "백업 후 열기",
+  "store.newer.openAnyway": "그래도 열기",
+  "store.newer.quit": "종료",
+  "store.newer.backedUp": "백업을 {path}에 저장했습니다",
+  "store.newer.backedUpHere": "백업을 저장했습니다",
+  "store.newer.failed": "메일 데이터를 열 수 없습니다: {error}",
+  "store.newer.leftAsItWas": "메일 데이터는 그대로 두었습니다. 이제 Meron을 닫아도 됩니다."
 }

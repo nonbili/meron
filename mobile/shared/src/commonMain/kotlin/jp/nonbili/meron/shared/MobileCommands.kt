@@ -4,6 +4,8 @@ const val CONVERSATION_PAGE_SIZE = 10
 
 object MobileCommand {
     const val CoreStatus = "core.status"
+    const val StoreCheckNewer = "store.checkNewer"
+    const val StoreOpenNewer = "store.openNewer"
     const val AccountList = "account.list"
     const val AccountAddPassword = "account.addPassword"
     const val AccountAutodiscover = "account.autodiscover"

@@ -1755,5 +1755,14 @@
   "window.restore": "Taasta",
   "crypto.account.previousKey": "Varasem võti",
   "crypto.account.previousKeyHint": "Säilitatakse, et sellega krüpteeritud kirjad jääksid loetavaks. Selle kustutamisel muutuvad need kirjad loetamatuks.",
-  "crypto.peers.showAll": "Näita kõiki {count} võtit"
+  "crypto.peers.showAll": "Näita kõiki {count} võtit",
+  "store.newer.title": "Sinu e-posti andmed on uuemast Meronist",
+  "store.newer.message": "Sinu e-posti andmeid kasutas viimati Meroni uuem versioon (skeem {found}; see versioon toetab {supported}). Nende avamine selle versiooniga võib põhjustada probleeme. Kas teha enne varukoopia?",
+  "store.newer.backupAndOpen": "Varunda ja ava",
+  "store.newer.openAnyway": "Ava ikkagi",
+  "store.newer.quit": "Välju",
+  "store.newer.backedUp": "Varukoopia salvestati asukohta {path}",
+  "store.newer.backedUpHere": "Varukoopia salvestati",
+  "store.newer.failed": "E-posti andmeid ei õnnestunud avada: {error}",
+  "store.newer.leftAsItWas": "Sinu e-posti andmed jäeti muutmata. Võid Meroni nüüd sulgeda."
 }

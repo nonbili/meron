@@ -1755,5 +1755,14 @@
   "window.restore": "Restaurer",
   "crypto.account.previousKey": "Ancienne clé",
   "crypto.account.previousKeyHint": "Conservée pour que les e-mails chiffrés avec celle-ci restent lisibles. La supprimer rendra ces e-mails illisibles.",
-  "crypto.peers.showAll": "Afficher les {count} clés"
+  "crypto.peers.showAll": "Afficher les {count} clés",
+  "store.newer.title": "Vos données de messagerie viennent d’un Meron plus récent",
+  "store.newer.message": "Vos données de messagerie ont été utilisées en dernier par une version plus récente de Meron (schéma {found} ; cette version prend en charge {supported}). Les ouvrir avec cette version peut causer des problèmes. Faire d’abord une sauvegarde ?",
+  "store.newer.backupAndOpen": "Sauvegarder et ouvrir",
+  "store.newer.openAnyway": "Ouvrir quand même",
+  "store.newer.quit": "Quitter",
+  "store.newer.backedUp": "Sauvegarde enregistrée dans {path}",
+  "store.newer.backedUpHere": "Sauvegarde enregistrée",
+  "store.newer.failed": "Impossible d’ouvrir vos données de messagerie : {error}",
+  "store.newer.leftAsItWas": "Vos données de messagerie n’ont pas été modifiées. Vous pouvez fermer Meron."
 }

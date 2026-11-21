@@ -171,6 +171,11 @@ static WATCH_OWNERSHIP: Mutex<()> = Mutex::new(());
 /// watch start that lost the race with backgrounding is skipped rather than
 /// left running with nothing to tear it down.
 static FOREGROUND_SESSION: AtomicBool = AtomicBool::new(false);
+/// What the host last asked for: `engine.foreground` sets it even when the
+/// engine can't start (a store waiting on the user's choice about a newer
+/// schema), `engine.background` clears it. Accepting that store resumes
+/// foreground sync only while the host still wants it.
+static FOREGROUND_WANTED: AtomicBool = AtomicBool::new(false);
 
 /// Record or drop one side's interest in a watch. Returns whether it changed.
 fn set_watch_interest(
@@ -206,6 +211,12 @@ fn watch_interest(interests: &Mutex<Vec<(String, String)>>, account: &str, folde
 /// open view live. The Engine holds its own DB connection and warm session pool
 /// for the lifetime of the foreground state.
 fn engine_foreground() -> Result<Value, String> {
+    FOREGROUND_WANTED.store(true, Ordering::SeqCst);
+    start_foreground()
+}
+
+/// [`engine_foreground`]'s work, without recording that the host asked for it.
+fn start_foreground() -> Result<Value, String> {
     let data_dir = MOBILE_CONFIG
         .lock()
         .unwrap()
@@ -243,6 +254,7 @@ fn engine_foreground() -> Result<Value, String> {
 /// drop warm pooled sockets (the OS freezes/reclaims them anyway). The Engine
 /// itself (DB + creds) is kept so the next foreground transition resumes fast.
 fn engine_background() -> Result<Value, String> {
+    FOREGROUND_WANTED.store(false, Ordering::SeqCst);
     {
         let _ownership = WATCH_OWNERSHIP.lock().unwrap();
         FOREGROUND_SESSION.store(false, Ordering::SeqCst);
@@ -843,6 +855,13 @@ fn configure_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Va
         return serde_json::json!({ "error": { "message": "data_dir is required" } });
     }
     let db_key = db_key.map(str::trim).unwrap_or_default();
+    // Checked before it is published: a malformed key would otherwise surface
+    // only as each command's failure to open the store.
+    if !db_key.is_empty() && !crate::secrets::is_hex_key(db_key) {
+        return serde_json::json!({
+            "error": { "message": "db_key must be 64 hex characters" }
+        });
+    }
     crate::parse::configure_mobile_secure_media(std::path::Path::new(data_dir));
     *MOBILE_CONFIG.lock().unwrap() = Some(MobileConfig {
         data_dir: data_dir.to_string(),
@@ -960,6 +979,16 @@ fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
         let migrating = STORE_UPGRADING.load(Ordering::SeqCst);
         return json!({ "id": req.map(|req| req.id), "result": { "migrating": migrating } });
     }
+    // Asked, and answered, before anything opens the store: one a newer Meron
+    // last used waits for the user's choice.
+    if let (Some(data_dir), Some(req)) = (data_dir.as_deref(), req.as_ref())
+        && matches!(req.method.as_str(), "store.checkNewer" | "store.openNewer")
+    {
+        return match newer_store_request(data_dir, req) {
+            Ok(result) => json!({ "id": req.id, "result": result }),
+            Err(err) => json!({ "id": req.id, "error": { "message": format!("{err:#}") } }),
+        };
+    }
     if method != Some("ping")
         && let Some(data_dir) = data_dir.as_deref()
     {
@@ -983,6 +1012,77 @@ fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
         };
     }
     invoke_mobile_protocol_json(request, data_dir.as_deref())
+}
+
+/// `store.checkNewer`: `{"newerSchema": {"found", "supported"}}` when a newer
+/// Meron last used the store and the user hasn't chosen to open it anyway,
+/// else `{"newerSchema": null}`. `store.openNewer` (`{"backup": bool, "found": n}`): copy
+/// the store beside itself first when asked, then record the choice, so every
+/// open takes the store as it is; answers with the copies made.
+fn newer_store_request(data_dir: &str, req: &Request) -> anyhow::Result<serde_json::Value> {
+    // One choice at a time (each window of an iPad asks): the check that the
+    // store still waits on it, the copy and the acceptance happen together,
+    // so no copy is taken of a store another window has opened meanwhile.
+    static CHOOSING: Mutex<()> = Mutex::new(());
+    let _choosing = CHOOSING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let db_path = Path::new(data_dir).join("meron.db");
+    let key = crate::protocol::mobile_db_key();
+    if req.method == "store.checkNewer" {
+        let newer = crate::store::check_newer_schema_at(&db_path, key.as_deref());
+        return Ok(json!({
+            "newerSchema": newer.map(|newer| json!({
+                "found": newer.found,
+                "supported": newer.supported,
+            })),
+        }));
+    }
+    let backup = req
+        .params
+        .get("backup")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    // Copied only while the store still waits on the choice, when nothing can
+    // have it open. Once it doesn't (another window chose first), it may be in
+    // use, and a file copy of a live database is no backup.
+    let waiting = crate::store::check_newer_schema_at(&db_path, key.as_deref()).is_some();
+    let backups = if backup && waiting {
+        crate::store::backup_database_files(&db_path)?
+            .into_iter()
+            .map(|path| path.display().to_string())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    // The schema the user was asked about; a store an even newer Meron has
+    // touched since is asked about again.
+    let shown = req
+        .params
+        .get("found")
+        .and_then(serde_json::Value::as_i64)
+        .or_else(|| {
+            crate::store::check_newer_schema_at(&db_path, key.as_deref()).map(|newer| newer.found)
+        });
+    if let Some(shown) = shown {
+        crate::store::accept_newer_schema_at(&db_path, key.as_deref(), shown)?;
+    }
+    // The host's launch-time foreground request failed on the refused store.
+    if FOREGROUND_WANTED.load(Ordering::SeqCst)
+        && crate::store::check_newer_schema_at(&db_path, key.as_deref()).is_none()
+        && let Err(err) = start_foreground()
+    {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "store",
+            "foreground after accepting: {err}"
+        );
+    }
+    // The host went to the background while that started: park it again.
+    if !FOREGROUND_WANTED.load(Ordering::SeqCst) && FOREGROUND_SESSION.load(Ordering::SeqCst) {
+        let _ = engine_background();
+    }
+    Ok(json!({ "backups": backups }))
 }
 
 fn event_envelope(name: &str, detail: serde_json::Value) -> serde_json::Value {
@@ -1454,6 +1554,62 @@ mod tests {
 
         invoke_mobile_request_json(r#"{"id":3,"method":"account.list","params":{}}"#);
         assert!(dir.join("meron.db").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_malformed_key_is_refused_before_it_is_published() {
+        let _guard = MOBILE_CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let configured = configure_mobile_core("/tmp/meron-mobile-test", Some("not-a-key"));
+        assert!(
+            configured["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("64 hex")
+        );
+        assert!(!configured.to_string().contains("not-a-key"));
+    }
+
+    #[test]
+    fn a_newer_store_waits_for_the_users_choice() {
+        let _guard = MOBILE_CONFIG_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let dir = std::env::temp_dir().join(format!("meron-newer-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let data_dir = dir.to_str().unwrap();
+        configure_mobile_core(data_dir, None);
+        let check =
+            || invoke_mobile_request_json(r#"{"id":1,"method":"store.checkNewer","params":{}}"#);
+        // No store yet, then a current one: nothing to ask.
+        assert!(check()["result"]["newerSchema"].is_null());
+        assert!(!dir.join("meron.db").exists(), "the check created nothing");
+        invoke_mobile_request_json(r#"{"id":2,"method":"account.list","params":{}}"#);
+        assert!(check()["result"]["newerSchema"].is_null());
+
+        let newer = crate::store::check_newer_schema_at(dir.join("meron.db"), None);
+        assert_eq!(newer, None);
+        {
+            let conn = rusqlite::Connection::open(dir.join("meron.db")).unwrap();
+            conn.pragma_update(None, "user_version", 9_999).unwrap();
+        }
+        assert_eq!(check()["result"]["newerSchema"]["found"], 9_999);
+
+        let opened = invoke_mobile_request_json(
+            r#"{"id":3,"method":"store.openNewer","params":{"backup":true}}"#,
+        );
+        let backups = opened["result"]["backups"].as_array().unwrap();
+        assert_eq!(backups.len(), 1);
+        assert!(Path::new(backups[0].as_str().unwrap()).exists());
+        assert!(check()["result"]["newerSchema"].is_null());
+        // Another window choosing after this one: the store may be in use by
+        // now, so nothing is copied.
+        let again = invoke_mobile_request_json(
+            r#"{"id":4,"method":"store.openNewer","params":{"backup":true,"found":9999}}"#,
+        );
+        assert_eq!(again["result"]["backups"].as_array().unwrap().len(), 0);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

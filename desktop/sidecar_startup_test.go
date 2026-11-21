@@ -64,3 +64,26 @@ func TestAwaitCoreSkipsSidecarNeverStarted(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAwaitCoreHoldsCallsWhileANewerStoreAwaitsTheUser(t *testing.T) {
+	s := startingSidecar()
+	s.newerSchema = map[string]any{"found": 40.0, "supported": 34.0}
+	done := make(chan error, 1)
+	go func() { done <- s.awaitCore("account.list", 10*time.Millisecond) }()
+	select {
+	case err := <-done:
+		t.Fatalf("awaitCore returned while the user was choosing: %v", err)
+	case <-time.After(60 * time.Millisecond):
+	}
+	// The choice itself goes straight through.
+	if err := s.awaitCore("store.openNewer", 10*time.Millisecond); err != nil {
+		t.Fatalf("store.openNewer was held: %v", err)
+	}
+	s.finishStarting(nil)
+	if err := <-done; err != nil {
+		t.Fatalf("awaitCore after the store opened: %v", err)
+	}
+	if s.NewerSchema() != nil {
+		t.Fatal("still waiting on the user after finishStarting")
+	}
+}

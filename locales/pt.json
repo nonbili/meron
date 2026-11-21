@@ -1755,5 +1755,14 @@
   "window.restore": "Restaurar",
   "crypto.account.previousKey": "Chave anterior",
   "crypto.account.previousKeyHint": "Mantida para que o correio encriptado com a mesma permaneça legível. Eliminá-la torna esse correio ilegível.",
-  "crypto.peers.showAll": "Mostrar todas as {count} chaves"
+  "crypto.peers.showAll": "Mostrar todas as {count} chaves",
+  "store.newer.title": "Os seus dados de correio são de um Meron mais recente",
+  "store.newer.message": "Os seus dados de correio foram usados pela última vez por uma versão mais recente do Meron (esquema {found}; esta versão suporta {supported}). Abri-los com esta versão pode causar problemas. Fazer primeiro uma cópia de segurança?",
+  "store.newer.backupAndOpen": "Copiar e abrir",
+  "store.newer.openAnyway": "Abrir mesmo assim",
+  "store.newer.quit": "Sair",
+  "store.newer.backedUp": "Cópia de segurança guardada em {path}",
+  "store.newer.backedUpHere": "Cópia de segurança guardada",
+  "store.newer.failed": "Não foi possível abrir os seus dados de correio: {error}",
+  "store.newer.leftAsItWas": "Os seus dados de correio ficaram como estavam. Já pode fechar o Meron."
 }

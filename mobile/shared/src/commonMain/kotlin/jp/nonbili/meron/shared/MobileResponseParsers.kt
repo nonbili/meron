@@ -877,6 +877,19 @@ fun parseRuleStatusResponse(responseJson: String): RuleStatus {
     )
 }
 
+/** A store a newer Meron last used: its schema, and the newest this build knows. */
+data class NewerSchema(
+    val found: Long,
+    val supported: Long,
+)
+
+/** `store.checkNewer`: the newer store waiting for the user's choice, or null. */
+fun parseNewerSchemaResponse(responseJson: String): NewerSchema? {
+    val found = responseJson.findJsonLongProperty("found") ?: return null
+    val supported = responseJson.findJsonLongProperty("supported") ?: return null
+    return NewerSchema(found, supported)
+}
+
 /** JNI returns a protocol envelope; tests and other callers may pass the result directly. */
 private fun String.ruleResponseBody(): String =
     jsonObjectEntries()

@@ -1755,5 +1755,14 @@
   "window.restore": "Pulihkan",
   "crypto.account.previousKey": "Kunci sebelumnya",
   "crypto.account.previousKeyHint": "Disimpan agar email yang dienkripsi dengannya tetap dapat dibaca. Menghapusnya membuat email tersebut tidak dapat dibaca.",
-  "crypto.peers.showAll": "Tampilkan semua {count} kunci"
+  "crypto.peers.showAll": "Tampilkan semua {count} kunci",
+  "store.newer.title": "Data email Anda berasal dari Meron yang lebih baru",
+  "store.newer.message": "Data email Anda terakhir digunakan oleh versi Meron yang lebih baru (skema {found}; versi ini mendukung {supported}). Membukanya dengan versi ini dapat menimbulkan masalah. Cadangkan terlebih dahulu?",
+  "store.newer.backupAndOpen": "Cadangkan dan buka",
+  "store.newer.openAnyway": "Tetap buka",
+  "store.newer.quit": "Keluar",
+  "store.newer.backedUp": "Cadangan disimpan di {path}",
+  "store.newer.backedUpHere": "Cadangan disimpan",
+  "store.newer.failed": "Tidak dapat membuka data email Anda: {error}",
+  "store.newer.leftAsItWas": "Data email Anda dibiarkan apa adanya. Anda dapat menutup Meron sekarang."
 }

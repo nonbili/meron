@@ -117,7 +117,28 @@ async fn main() {
     meron_core::log::install_panic_hook();
     let out: Writer = Arc::new(Mutex::new(tokio::io::stdout()));
     secrets::on_keychain_wait(announce_keychain_wait);
-    let engine = match Engine::new(Box::new(DesktopHost)) {
+    let mut lines = BufReader::new(tokio::io::stdin()).lines();
+    let engine = loop {
+        // The store and the local-folder archive, which opens only later, on
+        // demand: ask about both before anything opens either.
+        let mut newer = store::newer_schemas().unwrap_or_default();
+        if newer.is_empty() {
+            match Engine::new(Box::new(DesktopHost)) {
+                // Only the open noticed (it read what the check could not).
+                Err(e) if e.downcast_ref::<store::NewerSchema>().is_some() => {
+                    newer.push((
+                        store::store_path(),
+                        *e.downcast_ref::<store::NewerSchema>().unwrap(),
+                    ));
+                }
+                result => break result,
+            }
+        }
+        if !await_newer_schema_choice(&out, &mut lines, newer).await {
+            return;
+        }
+    };
+    let engine = match engine {
         Ok(engine) => {
             let writer = out.clone();
             let _ = engine.rule_progress.set(Arc::new(move |account, folder| {
@@ -136,7 +157,7 @@ async fn main() {
             // reason is what makes the failure diagnosable.
             let message = format!("store init: {e:#}");
             emit(&out, "core.fatal", json!({ "message": message })).await;
-            run_degraded(&out, &message).await;
+            run_degraded(&out, &mut lines, &message).await;
             return;
         }
     };
@@ -164,7 +185,6 @@ async fn main() {
 
     emit(&out, "ready", ready_event()).await;
 
-    let mut lines = BufReader::new(tokio::io::stdin()).lines();
     loop {
         let line = match lines.next_line().await {
             Ok(Some(line)) => line,
@@ -210,9 +230,8 @@ async fn main() {
 /// Serve stdin without an engine: answer `ping` (so the bridge can still tell a
 /// live process from a dead one) and fail everything else with `reason`. Runs
 /// until the bridge closes stdin.
-async fn run_degraded(out: &Writer, reason: &str) {
+async fn run_degraded(out: &Writer, lines: &mut StdinLines, reason: &str) {
     eprintln!("meron-core: running degraded, storage unavailable: {reason}");
-    let mut lines = BufReader::new(tokio::io::stdin()).lines();
     while let Ok(Some(line)) = lines.next_line().await {
         let line = line.trim();
         if line.is_empty() {
@@ -227,6 +246,80 @@ async fn run_degraded(out: &Writer, reason: &str) {
             respond_error(out, req.id, reason).await;
         }
     }
+}
+
+type StdinLines = tokio::io::Lines<BufReader<tokio::io::Stdin>>;
+
+/// The store or archive was last used by a newer Meron. Tell the bridge,
+/// which asks the user, and wait for `store.openNewer` (`{"backup": bool}`):
+/// copy those databases first when asked, record the choice for the schema
+/// each was shown at, so every open takes it as it is, and answer with the
+/// copies made. Returns `true` to try opening again; `false` once the bridge
+/// is gone (the user chose Quit, which the bridge carries out itself).
+/// Anything else waits for the choice.
+async fn await_newer_schema_choice(
+    out: &Writer,
+    lines: &mut StdinLines,
+    newer: Vec<(std::path::PathBuf, store::NewerSchema)>,
+) -> bool {
+    let Some(shown) = newer
+        .iter()
+        .map(|(_, schema)| *schema)
+        .max_by_key(|schema| schema.found)
+    else {
+        return true;
+    };
+    eprintln!("meron-core: {shown}; waiting for the user's choice");
+    emit(
+        out,
+        "core.newerSchema",
+        json!({ "found": shown.found, "supported": shown.supported }),
+    )
+    .await;
+    while let Ok(Some(line)) = lines.next_line().await {
+        let Ok(req) = serde_json::from_str::<Request>(line.trim()) else {
+            continue;
+        };
+        match req.method.as_str() {
+            "ping" => respond(out, req.id, ping_response()).await,
+            "store.openNewer" => {
+                let backup = req
+                    .params
+                    .get("backup")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let newer = newer.clone();
+                let result = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<String>> {
+                    let mut copies = Vec::new();
+                    if backup {
+                        for (path, _) in &newer {
+                            copies.extend(store::backup_database_files(path)?);
+                        }
+                    }
+                    store::accept_newer_schemas(&newer)?;
+                    Ok(copies
+                        .iter()
+                        .map(|path| path.display().to_string())
+                        .collect())
+                })
+                .await
+                .map_err(anyhow::Error::from)
+                .and_then(|result| result);
+                match result {
+                    Ok(backups) => {
+                        respond(out, req.id, json!({ "backups": backups })).await;
+                        return true;
+                    }
+                    Err(e) => {
+                        eprintln!("meron-core: store.openNewer failed: {e:#}");
+                        respond_error(out, req.id, &format!("{e:#}")).await;
+                    }
+                }
+            }
+            _ => respond_error(out, req.id, &shown.to_string()).await,
+        }
+    }
+    false
 }
 
 async fn handle(engine: Arc<Engine>, req: Request, out: &Writer) {

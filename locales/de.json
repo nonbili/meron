@@ -1755,5 +1755,14 @@
   "window.restore": "Wiederherstellen",
   "crypto.account.previousKey": "Früherer Schlüssel",
   "crypto.account.previousKeyHint": "Wird aufbewahrt, damit damit verschlüsselte E-Mails lesbar bleiben. Das Löschen macht diese E-Mails unlesbar.",
-  "crypto.peers.showAll": "Alle {count} Schlüssel anzeigen"
+  "crypto.peers.showAll": "Alle {count} Schlüssel anzeigen",
+  "store.newer.title": "Deine Mail-Daten stammen von einem neueren Meron",
+  "store.newer.message": "Deine Mail-Daten wurden zuletzt von einer neueren Meron-Version verwendet (Schema {found}; diese Version unterstützt {supported}). Sie mit dieser Version zu öffnen, kann Probleme verursachen. Zuerst sichern?",
+  "store.newer.backupAndOpen": "Sichern und öffnen",
+  "store.newer.openAnyway": "Trotzdem öffnen",
+  "store.newer.quit": "Beenden",
+  "store.newer.backedUp": "Sicherung gespeichert unter {path}",
+  "store.newer.backedUpHere": "Sicherung gespeichert",
+  "store.newer.failed": "Deine Mail-Daten konnten nicht geöffnet werden: {error}",
+  "store.newer.leftAsItWas": "Deine Mail-Daten wurden nicht verändert. Du kannst Meron jetzt schließen."
 }

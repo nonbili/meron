@@ -749,6 +749,16 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun parsesANewerStoreOrNone() {
+        assertEquals(
+            NewerSchema(found = 40, supported = 34),
+            parseNewerSchemaResponse("""{"id":1,"result":{"newerSchema":{"found":40,"supported":34}}}"""),
+        )
+        assertNull(parseNewerSchemaResponse("""{"id":1,"result":{"newerSchema":null}}"""))
+        assertNull(parseNewerSchemaResponse("""{"newerSchema":null}"""))
+    }
+
+    @Test
     fun requireCoreOkThrowsOnErrorAndPassesThroughSuccess() {
         val success = """{"ok":true,"deleted":1}"""
         assertEquals(success, requireCoreOk(success))

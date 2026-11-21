@@ -39,7 +39,7 @@ fn bundled_sqlcipher_uses_patched_sqlite() {
 #[test]
 fn migration_records_cached_identities_and_retires_pending_queue() {
     let conn = Connection::open_in_memory().unwrap();
-    db::migrate_to_v8(&conn).unwrap();
+    db::migrate_to(&conn, 8).unwrap();
     insert_message(&conn, 1, "cached", "", "", None);
     db::run_migrations(&conn).unwrap();
     let pending = || -> i64 {
@@ -91,7 +91,7 @@ fn migration_records_cached_identities_and_retires_pending_queue() {
 #[test]
 fn migration_v9_skips_fts_writes_for_unchanged_headers() {
     let conn = Connection::open_in_memory().unwrap();
-    db::migrate_to_v8(&conn).unwrap();
+    db::migrate_to(&conn, 8).unwrap();
     insert_message(
         &conn,
         1,
@@ -875,7 +875,7 @@ fn migration_indexes_recipients_already_cached_before_v6() {
     // to backfill and index them, or search stays blind to everything synced
     // before it.
     let conn = Connection::open_in_memory().unwrap();
-    db::migrate_to_v5(&conn).unwrap();
+    db::migrate_to(&conn, 5).unwrap();
     conn.execute(
         "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, json)
          VALUES('acct', 'Sent', '1', 1, 'Lunch', 'Me', 'me@example.com', 100,
@@ -3404,7 +3404,7 @@ fn delete_account_removes_account_scoped_state_only() {
 #[test]
 fn prefs_resolve_engine_default_and_persist_without_clobbering() {
     let conn = Connection::open_in_memory().unwrap();
-    conn.execute_batch(db::ACCOUNTS_DDL).unwrap();
+    db::run_migrations(&conn).unwrap();
     conn.execute(
         "INSERT INTO accounts(id, engine) VALUES('rss-1', 'rss')",
         [],
@@ -5036,7 +5036,7 @@ fn starred_mutation_skips_matching_flags_and_stars_only_source_messages_and_copi
 #[test]
 fn tasks_tables_arrive_on_an_existing_install() {
     let conn = Connection::open_in_memory().unwrap();
-    db::migrate_to_v8(&conn).unwrap();
+    db::migrate_to(&conn, 8).unwrap();
     insert_message(&conn, 1, "existing", "", "", None);
     let table_count = |name: &str| -> i64 {
         conn.query_row(
@@ -5186,7 +5186,7 @@ fn card_attachments_span_the_thread_not_the_page() {
 #[test]
 fn files_backfill_runs_in_batches_after_the_migration() {
     let conn = Connection::open_in_memory().unwrap();
-    db::migrate_to_v8(&conn).unwrap();
+    db::migrate_to(&conn, 8).unwrap();
     let insert = |uid: u32, json: Value| {
         conn.execute(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, date, body, json)
@@ -5729,7 +5729,7 @@ fn contacts_follow_every_message_write() {
 #[test]
 fn migration_backfills_contacts_from_cached_mail() {
     let conn = Connection::open_in_memory().unwrap();
-    db::migrate_to_v8(&conn).unwrap();
+    db::migrate_to(&conn, 8).unwrap();
     conn.execute(
         "INSERT INTO messages(account, folder, msg_id, uid, from_name, from_addr, date, json)
          VALUES('acct', 'INBOX', '1', 1, 'Aki', 'aki@example.com', 100,

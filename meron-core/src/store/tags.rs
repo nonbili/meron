@@ -36,7 +36,10 @@ pub(super) const LIVE_STATES: &str = "(0, 1)";
 const STALE_ECHO_SECS: i64 = 120;
 
 /// A message's tag key: its normalized Message-ID, or its location when it has
-/// none. Must match the expression of `messages_tag_key_idx` exactly.
+/// none. Must match the expression of `messages_tag_key_idx` exactly, or
+/// SQLite won't use the index. That index (migration 0022) and the rule
+/// triggers of migration 0028 hold a frozen copy of this expression: change
+/// it only together with a new migration that recreates them.
 pub(super) const TAG_KEY_SQL: &str = "COALESCE(NULLIF(lower(trim(COALESCE(json_extract(json, '$.message_id'), ''), ' <>')), ''), 'uid:' || folder || ':' || uid)";
 
 fn parse_server_tags(text: Option<&str>) -> BTreeSet<String> {

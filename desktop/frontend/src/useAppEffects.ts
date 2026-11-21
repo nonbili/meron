@@ -8,6 +8,7 @@ import { useValue } from '@legendapp/state/react'
 import { boot } from './boot'
 import { invoke } from './lib/bridge'
 import { watchCoreMigration } from './states/connectivity'
+import { watchNewerSchema } from './states/newerSchema'
 import { installWindowChrome, syncWindowFrame } from './lib/windowChrome'
 import { ui$, showToast } from './states/ui'
 import { mail$, loadThreads, loadThread, findLocalThread, reloadThreadCards } from './states/mail'
@@ -239,6 +240,7 @@ export function useAppEffects() {
 
   // Before boot: its first requests are the ones a store upgrade holds up.
   useEffect(() => watchCoreMigration(), [])
+  useEffect(() => watchNewerSchema(), [])
 
   useEffect(() => {
     void boot().catch((error) => {

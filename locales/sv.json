@@ -1755,5 +1755,14 @@
   "window.restore": "Återställ",
   "crypto.account.previousKey": "Tidigare nyckel",
   "crypto.account.previousKeyHint": "Behålls så att e-post krypterad med den förblir läsbar. Att ta bort den gör den e-posten oläsbar.",
-  "crypto.peers.showAll": "Visa alla {count} nycklar"
+  "crypto.peers.showAll": "Visa alla {count} nycklar",
+  "store.newer.title": "Dina e-postdata kommer från en nyare Meron",
+  "store.newer.message": "Dina e-postdata användes senast av en nyare version av Meron (schema {found}; den här versionen stöder {supported}). Att öppna dem med den här versionen kan orsaka problem. Säkerhetskopiera först?",
+  "store.newer.backupAndOpen": "Säkerhetskopiera och öppna",
+  "store.newer.openAnyway": "Öppna ändå",
+  "store.newer.quit": "Avsluta",
+  "store.newer.backedUp": "Säkerhetskopian sparades i {path}",
+  "store.newer.backedUpHere": "Säkerhetskopian sparades",
+  "store.newer.failed": "Det gick inte att öppna dina e-postdata: {error}",
+  "store.newer.leftAsItWas": "Dina e-postdata lämnades orörda. Du kan stänga Meron nu."
 }

@@ -292,7 +292,19 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 	case "mailto.consumePending":
 		return a.consumePendingMailto(), nil
 	case "core.status":
-		return map[string]any{"migrating": a.sidecar != nil && a.sidecar.Migrating()}, nil
+		status := map[string]any{"migrating": a.sidecar != nil && a.sidecar.Migrating()}
+		if a.sidecar != nil {
+			if newer := a.sidecar.NewerSchema(); newer != nil {
+				status["newerSchema"] = newer
+			}
+		}
+		return status, nil
+	case "store.openNewer":
+		if a.sidecar == nil || !a.sidecar.Started() {
+			return nil, a.engineUnavailable()
+		}
+		backup, _ := payload["backup"].(bool)
+		return a.sidecar.Call("store.openNewer", map[string]any{"backup": backup})
 	case "app.prefsGet":
 		return a.appPrefsGet(payload)
 	case "app.prefsSet":
@@ -331,6 +343,11 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.windowSetCloseToTray(payload)
 	case "app.quit":
 		a.requestQuit()
+		return map[string]any{"ok": true}, nil
+	// Quit for real, even with close-to-tray on: the newer-store prompt's
+	// Quit, which must not leave the app waiting in the tray.
+	case "app.exit":
+		a.quit()
 		return map[string]any{"ok": true}, nil
 	case "window.setAppearance":
 		return a.setWindowAppearance(payload)

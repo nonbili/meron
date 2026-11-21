@@ -1755,5 +1755,14 @@
   "window.restore": "Khôi phục",
   "crypto.account.previousKey": "Khóa trước đây",
   "crypto.account.previousKeyHint": "Được giữ lại để thư mã hóa bằng khóa này vẫn đọc được. Nếu xóa, các thư đó sẽ không đọc được nữa.",
-  "crypto.peers.showAll": "Hiện tất cả {count} khóa"
+  "crypto.peers.showAll": "Hiện tất cả {count} khóa",
+  "store.newer.title": "Dữ liệu thư của bạn đến từ phiên bản Meron mới hơn",
+  "store.newer.message": "Dữ liệu thư của bạn được dùng lần cuối bởi một phiên bản Meron mới hơn (lược đồ {found}; phiên bản này hỗ trợ {supported}). Mở bằng phiên bản này có thể gây ra sự cố. Sao lưu trước?",
+  "store.newer.backupAndOpen": "Sao lưu rồi mở",
+  "store.newer.openAnyway": "Vẫn mở",
+  "store.newer.quit": "Thoát",
+  "store.newer.backedUp": "Đã lưu bản sao lưu vào {path}",
+  "store.newer.backedUpHere": "Đã lưu bản sao lưu",
+  "store.newer.failed": "Không thể mở dữ liệu thư của bạn: {error}",
+  "store.newer.leftAsItWas": "Dữ liệu thư của bạn được giữ nguyên. Bạn có thể đóng Meron ngay bây giờ."
 }

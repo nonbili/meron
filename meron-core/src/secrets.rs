@@ -675,7 +675,7 @@ fn generate_db_key() -> String {
     hex
 }
 
-fn is_hex_key(s: &str) -> bool {
+pub(crate) fn is_hex_key(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 

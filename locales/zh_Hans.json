@@ -1755,5 +1755,14 @@
   "window.restore": "还原",
   "crypto.account.previousKey": "旧密钥",
   "crypto.account.previousKeyHint": "保留此密钥以便继续阅读用它加密的邮件。一旦删除，那些邮件将无法阅读。",
-  "crypto.peers.showAll": "显示全部 {count} 个密钥"
+  "crypto.peers.showAll": "显示全部 {count} 个密钥",
+  "store.newer.title": "你的邮件数据来自较新版本的 Meron",
+  "store.newer.message": "你的邮件数据上次由较新版本的 Meron 使用（架构 {found}；此版本支持 {supported}）。用此版本打开可能会出现问题。要先备份吗？",
+  "store.newer.backupAndOpen": "备份并打开",
+  "store.newer.openAnyway": "仍然打开",
+  "store.newer.quit": "退出",
+  "store.newer.backedUp": "备份已保存到 {path}",
+  "store.newer.backedUpHere": "备份已保存",
+  "store.newer.failed": "无法打开你的邮件数据：{error}",
+  "store.newer.leftAsItWas": "你的邮件数据保持原样。现在可以关闭 Meron 了。"
 }

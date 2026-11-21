@@ -1755,5 +1755,14 @@
   "window.restore": "Відновити",
   "crypto.account.previousKey": "Попередній ключ",
   "crypto.account.previousKeyHint": "Старий ключ OpenPGP для розшифрування архівних листів",
-  "crypto.peers.showAll": "Показати всі ключі ({count})"
+  "crypto.peers.showAll": "Показати всі ключі ({count})",
+  "store.newer.title": "Ваші поштові дані — з новішої версії Meron",
+  "store.newer.message": "Ваші поштові дані востаннє використовувала новіша версія Meron (схема {found}; ця версія підтримує {supported}). Відкриття їх у цій версії може спричинити проблеми. Спершу створити резервну копію?",
+  "store.newer.backupAndOpen": "Створити копію й відкрити",
+  "store.newer.openAnyway": "Усе одно відкрити",
+  "store.newer.quit": "Вийти",
+  "store.newer.backedUp": "Резервну копію збережено: {path}",
+  "store.newer.backedUpHere": "Резервну копію збережено",
+  "store.newer.failed": "Не вдалося відкрити поштові дані: {error}",
+  "store.newer.leftAsItWas": "Ваші поштові дані залишено без змін. Тепер можна закрити Meron."
 }

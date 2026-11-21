@@ -324,24 +324,32 @@ class ComposeMainActivity : ComponentActivity() {
         val mobileHost = AndroidMobileHost(this)
         setContent {
             val appCore = remember { JniMeronCore { AndroidNotificationService.requestReconcile(applicationContext) } }
-            jp.nonbili.meron.ui.MeronApp(
+            jp.nonbili.meron.ui.NewerStoreGate(
                 core = appCore,
                 coreLoaded = MeronCoreNative.isLoaded(),
                 prefs = appPrefs,
-                kanbanPrefs = kanbanPrefs,
-                services = platformServices,
                 locale = localeController,
-                mobileHost = mobileHost,
-                coreInitJson = coreInitJson,
-                incomingMailtoDraft = incomingMailtoDraft,
-                onMailtoDraftConsumed = ::consumeMailtoIntent,
-                incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
-                onOAuthCallbackConsumed = ::consumeOAuthIntent,
-                incomingNotificationThreadTarget = incomingNotificationThreadTarget,
-                // Storing and pushing to the OS both happen in MeronApp; the
-                // Activity only has to reload its resources for the new language.
-                onLanguageApplied = { recreate() },
-            )
+                onQuit = { finishAndRemoveTask() },
+            ) {
+                jp.nonbili.meron.ui.MeronApp(
+                    core = appCore,
+                    coreLoaded = MeronCoreNative.isLoaded(),
+                    prefs = appPrefs,
+                    kanbanPrefs = kanbanPrefs,
+                    services = platformServices,
+                    locale = localeController,
+                    mobileHost = mobileHost,
+                    coreInitJson = coreInitJson,
+                    incomingMailtoDraft = incomingMailtoDraft,
+                    onMailtoDraftConsumed = ::consumeMailtoIntent,
+                    incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
+                    onOAuthCallbackConsumed = ::consumeOAuthIntent,
+                    incomingNotificationThreadTarget = incomingNotificationThreadTarget,
+                    // Storing and pushing to the OS both happen in MeronApp; the
+                    // Activity only has to reload its resources for the new language.
+                    onLanguageApplied = { recreate() },
+                )
+            }
         }
     }
 

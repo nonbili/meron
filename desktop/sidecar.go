@@ -40,6 +40,10 @@ type Sidecar struct {
 	// awaitingKeychain is true while the core waits on the keychain for its
 	// store key, which may mean an unlock prompt is up.
 	awaitingKeychain bool
+	// newerSchema is the store a newer Meron last used, while the core waits
+	// for the user to choose whether to open it (`core.newerSchema`); nil
+	// otherwise.
+	newerSchema map[string]any
 }
 
 type sidecarResponse struct {
@@ -122,6 +126,14 @@ func (s *Sidecar) awaitingKeychainUnlock() bool {
 	return s.awaitingKeychain
 }
 
+// NewerSchema reports the store a newer Meron last used while the core waits
+// for the user's choice about it, or nil.
+func (s *Sidecar) NewerSchema() map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.newerSchema
+}
+
 // finishStarting lets waiting calls through: the core is ready, has reported it
 // cannot start (and now answers every call with the reason), or has exited.
 func (s *Sidecar) finishStarting(ctx context.Context) {
@@ -137,6 +149,7 @@ func (s *Sidecar) finishStarting(ctx context.Context) {
 	wasMigrating := s.migrating
 	s.migrating = false
 	s.awaitingKeychain = false
+	s.newerSchema = nil
 	s.mu.Unlock()
 	if wasMigrating && ctx != nil {
 		wailsRuntime.EventsEmit(ctx, "core.migrationDone")
@@ -147,10 +160,15 @@ func (s *Sidecar) finishStarting(ctx context.Context) {
 // timeout measures the request and not the startup in front of it. A store
 // upgrade is waited out however long it takes, because the UI says what is
 // happening; so is a store key read waiting on the keychain, which may be
-// showing an unlock prompt and which the core bounds itself. Any other stall
-// still fails after the call's own timeout, with the same error a late
-// response would give.
+// showing an unlock prompt and which the core bounds itself, and the user's
+// choice about a store a newer Meron last used, which is what that choice
+// itself (`store.openNewer`) goes through to. Any other stall still fails
+// after the call's own timeout, with the same error a late response would
+// give.
 func (s *Sidecar) awaitCore(method string, timeout time.Duration) error {
+	if method == "store.openNewer" {
+		return nil
+	}
 	s.mu.Lock()
 	coreUp := s.coreUp
 	s.mu.Unlock()
@@ -165,7 +183,7 @@ func (s *Sidecar) awaitCore(method string, timeout time.Duration) error {
 		case <-coreUp:
 			return nil
 		case <-ticker.C:
-			if s.Migrating() || s.awaitingKeychainUnlock() {
+			if s.Migrating() || s.awaitingKeychainUnlock() || s.NewerSchema() != nil {
 				continue
 			}
 			select {
@@ -273,6 +291,15 @@ func (s *Sidecar) readLoop(ctx context.Context, stdout io.Reader) {
 			case "core.keychainWait":
 				s.mu.Lock()
 				s.awaitingKeychain = true
+				s.mu.Unlock()
+			case "core.newerSchema":
+				detail, _ := object["detail"].(map[string]any)
+				if detail == nil {
+					detail = map[string]any{}
+				}
+				s.mu.Lock()
+				s.awaitingKeychain = false
+				s.newerSchema = detail
 				s.mu.Unlock()
 			case "ready", "core.fatal":
 				s.finishStarting(ctx)
@@ -486,8 +513,9 @@ func sidecarCallTimeout(method string) time.Duration {
 	// Archive folder, then moves.
 	case "eml.read", "messages.saveRawBatch", "messages.copy", "messages.move", "messages.archive":
 		return 2 * time.Minute
-	// A snapshot or a restore copies every archived message.
-	case "account.localBackup", "account.localRestore":
+	// A snapshot or a restore copies every archived message; so does the
+	// copy taken before opening a store a newer Meron last used.
+	case "account.localBackup", "account.localRestore", "store.openNewer":
 		return 10 * time.Minute
 	// Reads the app cannot start without, served from the local store and
 	// retried on timeout (invokeRetryingTimeout), so a busy core is noticed fast.
