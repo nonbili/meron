@@ -26,6 +26,9 @@ pub(crate) async fn dispatch(
         tokio::task::spawn_blocking(move || service::dispatch(&engine_for_call, &method, &params))
             .await??;
 
+    if result.get("needs_sign_in").is_some() {
+        return Ok(result);
+    }
     match req.method.as_str() {
         // A new account, or a calendar turned on, has events to fetch.
         "caldav.add" | "caldav.addGoogle" | "caldav.setPassword" => {

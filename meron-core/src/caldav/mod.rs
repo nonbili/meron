@@ -641,9 +641,10 @@ impl Client {
             }
             if status == 401 {
                 if self.google {
-                    bail!(
-                        "Google Calendar rejected the authorization. Reconnect Google Calendar to resume syncing."
-                    );
+                    return Err(crate::google_grant::Rejected(
+                        "Google Calendar rejected the authorization. Reconnect Google Calendar to resume syncing.",
+                    )
+                    .into());
                 }
                 return Err(AuthFailed.into());
             }

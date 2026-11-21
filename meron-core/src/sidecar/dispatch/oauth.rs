@@ -40,14 +40,26 @@ fn client(p: &Value) -> Result<oauth::Client, String> {
     }
 }
 
-/// `{provider, redirect_uri, state, code_challenge}` → `{url}`.
+/// `{provider, redirect_uri, state, code_challenge, login_hint, scopes}` →
+/// `{url}`. `scopes` names the Google services sharing the account's grant.
 fn authorize_url(p: &Value) -> Result<Value, String> {
+    let also: Vec<&str> = p
+        .get("scopes")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|scope| {
+            [oauth::GOOGLE_CALENDAR_SCOPE, oauth::GOOGLE_CONTACTS_SCOPE].contains(scope)
+        })
+        .collect();
     let url = oauth::authorize_url(
         &client(p)?,
         &str_param(p, "redirect_uri"),
         &str_param(p, "state"),
         &str_param(p, "code_challenge"),
         &str_param(p, "login_hint"),
+        &also,
     )?;
     Ok(json!({ "url": url }))
 }
@@ -73,6 +85,7 @@ fn exchange_code(p: &Value) -> Result<Value, String> {
         "access_token": tokens.access_token,
         "refresh_token": refresh_token,
         "expires_in": tokens.expires_in.unwrap_or(3600),
+        "scope": tokens.scope.unwrap_or_default(),
     }))
 }
 

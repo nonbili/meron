@@ -26,12 +26,27 @@ func (a *App) connectGoogleDAV(payload map[string]any, provider, method string) 
 	}
 	accountID, _ := payload["account_id"].(string)
 	loginHint, _ := payload["login_hint"].(string)
+	// A Google grant this account already holds may cover the service:
+	// then no browser sign-in is needed. Otherwise the core names every
+	// scope the sign-in must cover, the other connected services' included.
+	var scopes []any
+	if email := strings.TrimSpace(loginHint); email != "" {
+		res, err := a.calendarInvoke(method, map[string]any{"account_id": accountID, "email": email})
+		if err != nil {
+			return nil, err
+		}
+		answer, _ := res.(map[string]any)
+		if answer["needs_sign_in"] != true {
+			return res, nil
+		}
+		scopes, _ = answer["scopes"].([]any)
+	}
 	type result struct {
 		profile *ExchangedProfile
 		err     error
 	}
 	done := make(chan result, 1)
-	_, err := a.startOAuth(provider, randomBase64URL(32), loginHint, func(profile *ExchangedProfile, err error) {
+	_, err := a.startOAuth(provider, randomBase64URL(32), loginHint, scopes, func(profile *ExchangedProfile, err error) {
 		done <- result{profile: profile, err: err}
 	})
 	if err != nil {
@@ -51,5 +66,6 @@ func (a *App) connectGoogleDAV(payload map[string]any, provider, method string) 
 		"access_token":  profile.AccessToken,
 		"refresh_token": profile.RefreshToken,
 		"expires_in":    profile.ExpiresIn,
+		"scope":         profile.Scope,
 	})
 }

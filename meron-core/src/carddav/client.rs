@@ -184,9 +184,10 @@ impl Client {
             }
             if status == 401 {
                 if self.google {
-                    bail!(
-                        "Google Contacts rejected authorization. Reconnect Google Contacts to resume syncing."
-                    );
+                    return Err(crate::google_grant::Rejected(
+                        "Google Contacts rejected authorization. Reconnect Google Contacts to resume syncing.",
+                    )
+                    .into());
                 }
                 return Err(Unauthorized.into());
             }
@@ -263,7 +264,11 @@ impl Client {
             r#"<d:propfind xmlns:d="DAV:" xmlns:c="{CARDDAV}"><d:prop>{props}</d:prop></d:propfind>"#
         );
         let (base, status, text) = self.request("PROPFIND", url.clone(), depth, &body)?;
-        ensure!(status == 207, "CardDAV PROPFIND returned HTTP {status}");
+        ensure!(
+            status == 207,
+            "CardDAV PROPFIND returned HTTP {status}{}",
+            google_reason(&text)
+        );
         Ok((base, parse_multistatus(&text)?))
     }
 
@@ -290,95 +295,6 @@ impl Client {
             }
         }
         Err(last_error.unwrap_or_else(|| anyhow::anyhow!("no CardDAV address books found")))
-    }
-
-    pub fn sync_token(&self, book: &Book) -> Result<String> {
-        let (base, ms) = self.propfind(&Url::parse(&book.url)?, "0", "<d:sync-token/>")?;
-        for row in ms.responses {
-            if same_path(&base, &base.join(&row.href)?) {
-                return Ok(row
-                    .prop_text(DAV, "sync-token")
-                    .context("Google Contacts did not return a sync token")?
-                    .into());
-            }
-        }
-        bail!("Google Contacts did not return the requested address book")
-    }
-
-    /// None means Google has forgotten the token. Keep the existing cache
-    /// until a complete replacement snapshot has been fetched.
-    pub fn incremental(
-        &self,
-        book: &Book,
-        token: &str,
-        known: &BTreeMap<String, String>,
-    ) -> Result<Option<(BTreeMap<String, String>, Vec<Card>, String)>> {
-        let book = Url::parse(&book.url)?;
-        let mut versions = known.clone();
-        let mut token = token.to_string();
-        for _ in 0..100 {
-            let body = format!(
-                r#"<d:sync-collection xmlns:d="DAV:"><d:sync-token>{}</d:sync-token><d:sync-level>1</d:sync-level><d:prop><d:getetag/></d:prop></d:sync-collection>"#,
-                escape(&token)
-            );
-            let (base, status, text) = self.request("REPORT", book.clone(), "0", &body)?;
-            if matches!(status, 403 | 409)
-                && crate::caldav::xml::parse(&text)
-                    .ok()
-                    .is_some_and(|root| root.child(DAV, "valid-sync-token").is_some())
-            {
-                return Ok(None);
-            }
-            ensure!(
-                status == 207 && same_path(&book, &base),
-                "Google Contacts sync-collection returned HTTP {status}"
-            );
-            let ms = parse_multistatus(&text)?;
-            let next = ms
-                .sync_token
-                .context("Google Contacts did not return the next sync token")?;
-            let mut truncated = false;
-            for row in ms.responses {
-                let url = base.join(&row.href)?;
-                self.check(&url)?;
-                if same_path(&base, &url) && row.status == Some(507) {
-                    truncated = true;
-                    continue;
-                }
-                ensure!(
-                    member_of(&base, &url),
-                    "Google Contacts member outside its address book"
-                );
-                let key = canonical_member(&url);
-                if matches!(row.status, Some(404 | 410)) {
-                    versions.remove(&key);
-                } else {
-                    ensure!(
-                        row.status.is_none_or(|s| (200..300).contains(&s)),
-                        "incomplete Google Contacts change list"
-                    );
-                    let etag = row
-                        .prop_text(DAV, "getetag")
-                        .context("Google Contacts change is missing its ETag")?;
-                    versions.insert(key, etag.to_string());
-                }
-            }
-            if !truncated {
-                let changed: Vec<_> = versions
-                    .iter()
-                    .filter(|(url, etag)| known.get(*url) != Some(*etag))
-                    .map(|(url, _)| url.clone())
-                    .collect();
-                let cards = self.fetch(&base, &changed, &mut versions)?;
-                return Ok(Some((versions, cards, next)));
-            }
-            ensure!(
-                next != token,
-                "Google Contacts sync stopped making progress"
-            );
-            token = next;
-        }
-        bail!("too many Google Contacts sync pages")
     }
 
     fn discover_from(&self, url: &Url) -> Result<Vec<Book>> {
@@ -716,52 +632,6 @@ mod tests {
     }
 
     #[test]
-    fn google_sync_consumes_pages_and_fetches_changed_cards() {
-        let (client, book, requests) = fixture(vec![
-            (
-                "207 Multi-Status",
-                r#"<d:multistatus xmlns:d="DAV:"><d:response><d:href>/book/cora@example.test/</d:href><d:status>HTTP/1.1 507 Insufficient Storage</d:status></d:response><d:response><d:href>/book/cora%40example.test/old.vcf</d:href><d:status>HTTP/1.1 404 Not Found</d:status></d:response><d:sync-token>page-2</d:sync-token></d:multistatus>"#,
-            ),
-            (
-                "207 Multi-Status",
-                r#"<d:multistatus xmlns:d="DAV:"><d:response><d:href>/book/cora%40example.test/new.vcf</d:href><d:propstat><d:prop><d:getetag>v2</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response><d:sync-token>done</d:sync-token></d:multistatus>"#,
-            ),
-            (
-                "207 Multi-Status",
-                r#"<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:carddav"><d:response><d:href>/book/cora%40example.test/new.vcf</d:href><d:propstat><d:prop><d:getetag>v2</d:getetag><c:address-data>BEGIN:VCARD
-VERSION:3.0
-FN:Cora Fixture
-EMAIL:cora@example.test
-END:VCARD</c:address-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>"#,
-            ),
-        ]);
-        let url = Url::parse(&book.url).unwrap();
-        let known =
-            BTreeMap::from([(canonical_member(&url.join("old.vcf").unwrap()), "v1".into())]);
-        let (versions, cards, next) = client.incremental(&book, "start", &known).unwrap().unwrap();
-        assert_eq!(next, "done");
-        assert_eq!(
-            versions,
-            BTreeMap::from([(canonical_member(&url.join("new.vcf").unwrap()), "v2".into())])
-        );
-        assert_eq!(cards[0].name, "Cora Fixture");
-        let first = requests.recv().unwrap();
-        assert!(
-            first
-                .to_ascii_lowercase()
-                .contains("authorization: bearer test-token")
-        );
-        assert!(first.contains("<d:sync-token>start</d:sync-token>"));
-        assert!(
-            requests
-                .recv()
-                .unwrap()
-                .contains("<d:sync-token>page-2</d:sync-token>")
-        );
-        assert!(requests.recv().unwrap().contains("addressbook-multiget"));
-    }
-
-    #[test]
     fn google_creates_with_post_and_deletes_conditionally() {
         let (client, book, requests) =
             fixture(vec![("201 Created", ""), ("412 Precondition Failed", "")]);
@@ -833,48 +703,42 @@ END:VCARD</c:address-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:props
     }
 
     #[test]
-    fn google_incremental_does_not_keep_a_card_deleted_during_multiget() {
-        let delta = r#"<d:multistatus xmlns:d="DAV:"><d:response><d:href>/book/cora%40example.test/gone.vcf</d:href><d:propstat><d:prop><d:getetag>v2</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response><d:sync-token>next</d:sync-token></d:multistatus>"#;
-        let fetch = r#"<d:multistatus xmlns:d="DAV:"><d:response><d:href>/book/cora%40example.test/gone.vcf</d:href><d:status>HTTP/1.1 404 Not Found</d:status></d:response></d:multistatus>"#;
-        let (client, book, _requests) = fixture(vec![
-            ("207 Multi-Status", delta),
-            ("207 Multi-Status", fetch),
-        ]);
-        let book_url = Url::parse(&book.url).unwrap();
-        let gone = canonical_member(&book_url.join("gone.vcf").unwrap());
-        let kept = canonical_member(&book_url.join("kept.vcf").unwrap());
-        let known = BTreeMap::from([(gone, "v1".into()), (kept.clone(), "v1".into())]);
-        let (versions, cards, token) = client.incremental(&book, "start", &known).unwrap().unwrap();
-        assert_eq!(versions, BTreeMap::from([(kept, "v1".into())]));
-        assert!(cards.is_empty());
-        assert_eq!(token, "next");
-    }
-
-    #[test]
-    fn only_an_invalid_sync_token_requests_a_full_snapshot() {
+    fn credentials_never_leave_the_server_origin() {
         let (client, _, _) = fixture(vec![]);
         assert!(
             client
                 .check(&Url::parse("https://foreign.example.test/").unwrap())
                 .is_err()
         );
-        let (client, book, _requests) = fixture(vec![
-            (
-                "403 Forbidden",
-                r#"<d:error xmlns:d="DAV:"><d:valid-sync-token/></d:error>"#,
-            ),
-            (
-                "403 Forbidden",
-                r#"<d:error xmlns:d="DAV:"><d:need-privileges/></d:error>"#,
-            ),
-        ]);
-        let known = BTreeMap::new();
-        assert!(
-            client
-                .incremental(&book, "expired", &known)
-                .unwrap()
-                .is_none()
+    }
+}
+
+/// Google's own explanation of a refused request (a JSON `error.message`,
+/// e.g. that the CardDAV API is not enabled for the app's Cloud project), as
+/// `: …` to follow the status. Empty for any other body.
+fn google_reason(body: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|body| {
+            body["error"]["message"]
+                .as_str()
+                .map(str::trim)
+                .map(str::to_string)
+        })
+        .filter(|message| !message.is_empty())
+        .map(|message| format!(": {message}"))
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod google_reason_tests {
+    #[test]
+    fn google_errors_carry_their_message() {
+        let body = r#"{"error":{"code":403,"message":"Google Contacts CardDAV API has not been used in project 1 before or it is disabled.","status":"PERMISSION_DENIED"}}"#;
+        assert_eq!(
+            super::google_reason(body),
+            ": Google Contacts CardDAV API has not been used in project 1 before or it is disabled."
         );
-        assert!(client.incremental(&book, "expired", &known).is_err());
+        assert_eq!(super::google_reason("<html>Forbidden</html>"), "");
     }
 }

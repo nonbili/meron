@@ -255,6 +255,8 @@ type ExchangedProfile struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int64  `json:"expires_in"`
+	// Scope is what the token covers, space-separated (Google only).
+	Scope string `json:"scope"`
 }
 
 type ImapThreadIDs struct {

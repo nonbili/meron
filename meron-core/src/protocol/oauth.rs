@@ -182,6 +182,7 @@ pub(crate) fn mobile_oauth_authorize_url(params: &Value) -> Result<Value, String
         &req_str(params, "state")?,
         &req_str(params, "code_challenge")?,
         &opt_str(params, "login_hint"),
+        &[],
     )?;
     Ok(json!({ "url": url }))
 }

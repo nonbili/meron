@@ -35,6 +35,9 @@ pub struct Tokens {
     pub refresh_token: Option<String>,
     pub expires_in: Option<i64>,
     pub id_token: Option<String>,
+    /// The scopes the token covers, space-separated, as Google reports them.
+    #[serde(default)]
+    pub scope: Option<String>,
 }
 
 /// The client a code exchange or refresh speaks for, and its endpoints. An
@@ -88,16 +91,29 @@ pub struct Photo {
 
 /// The provider's authorization URL for a PKCE (S256) sign-in. Microsoft is
 /// asked for the photo scope too, so one consent covers both resources.
+/// A Google Calendar or Contacts sign-in also asks for `also`: the scopes of
+/// the other services sharing the account's grant, which it replaces
+/// (installed apps get no incremental authorization).
 pub fn authorize_url(
     client: &Client,
     redirect_uri: &str,
     state: &str,
     code_challenge: &str,
     login_hint: &str,
+    also: &[&str],
 ) -> Result<String, String> {
     let outlook_scopes = format!("{OUTLOOK_SCOPES} {OUTLOOK_PHOTO_SCOPE}");
-    let calendar_scopes = format!("openid email {GOOGLE_CALENDAR_SCOPE}");
-    let contacts_scopes = format!("openid email {GOOGLE_CONTACTS_SCOPE}");
+    let dav_scopes = |own: &str| {
+        let mut scopes = vec!["openid", "email", own];
+        for scope in also {
+            if !scopes.contains(scope) {
+                scopes.push(scope);
+            }
+        }
+        scopes.join(" ")
+    };
+    let calendar_scopes = dav_scopes(GOOGLE_CALENDAR_SCOPE);
+    let contacts_scopes = dav_scopes(GOOGLE_CONTACTS_SCOPE);
     let (base, scope) = match client.provider.as_str() {
         "gmail" => (GOOGLE_AUTHORIZE_URL, GOOGLE_SCOPES),
         GOOGLE_CALENDAR_PROVIDER => (GOOGLE_AUTHORIZE_URL, calendar_scopes.as_str()),
@@ -401,8 +417,15 @@ mod tests {
                 .into_owned()
                 .collect::<std::collections::HashMap<_, _>>()
         };
-        let outlook =
-            authorize_url(&client("outlook"), "http://127.0.0.1:1", "st", "ch", "").unwrap();
+        let outlook = authorize_url(
+            &client("outlook"),
+            "http://127.0.0.1:1",
+            "st",
+            "ch",
+            "",
+            &[],
+        )
+        .unwrap();
         assert!(outlook.starts_with(OUTLOOK_AUTHORIZE_URL));
         let outlook = query(outlook);
         assert!(outlook["scope"].contains("IMAP.AccessAsUser.All"));
@@ -412,7 +435,15 @@ mod tests {
         assert!(!outlook.contains_key("prompt") && !outlook.contains_key("login_hint"));
 
         let gmail = query(
-            authorize_url(&client("gmail"), "app:/oauth", "st", "ch", "me@gmail.com").unwrap(),
+            authorize_url(
+                &client("gmail"),
+                "app:/oauth",
+                "st",
+                "ch",
+                "me@gmail.com",
+                &[GOOGLE_CONTACTS_SCOPE],
+            )
+            .unwrap(),
         );
         assert_eq!(gmail["scope"], GOOGLE_SCOPES);
         assert_eq!(gmail["access_type"], "offline");
@@ -425,6 +456,7 @@ mod tests {
                 "st",
                 "ch",
                 "calendar@example.test",
+                &[],
             )
             .unwrap(),
         );
@@ -443,17 +475,19 @@ mod tests {
                 "st",
                 "ch",
                 "",
+                &[GOOGLE_CALENDAR_SCOPE, GOOGLE_CONTACTS_SCOPE],
             )
             .unwrap(),
         );
+        // The other service sharing the grant is asked for again, once.
         assert_eq!(
             contacts["scope"],
-            format!("openid email {GOOGLE_CONTACTS_SCOPE}")
+            format!("openid email {GOOGLE_CONTACTS_SCOPE} {GOOGLE_CALENDAR_SCOPE}")
         );
         assert_eq!(contacts["access_type"], "offline");
         assert_eq!(contacts["prompt"], "consent");
 
-        assert!(authorize_url(&client("yahoo"), "", "", "", "").is_err());
+        assert!(authorize_url(&client("yahoo"), "", "", "", "", &[]).is_err());
     }
 
     #[test]

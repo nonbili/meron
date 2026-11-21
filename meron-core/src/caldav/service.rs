@@ -12,7 +12,8 @@ use super::Client;
 use super::store::{self, DavAccount, DavCalendar};
 use super::sync::{self, Report};
 use crate::engine::{Engine, default_oauth_client};
-use crate::oauth::{self, GOOGLE_CALENDAR_PROVIDER};
+use crate::google_grant::Connected;
+use crate::oauth::{self, GOOGLE_CALENDAR_PROVIDER, GOOGLE_CALENDAR_SCOPE};
 use crate::secrets::Secrets;
 
 /// Run one `caldav.*` request: the vocabulary desktop and mobile share.
@@ -50,17 +51,42 @@ pub fn dispatch(engine: &Engine, method: &str, params: &Value) -> Result<Value> 
                 },
             )
         }
-        "caldav.addGoogle" => add_google(
-            engine,
-            required("email")?,
-            required("access_token")?,
-            required("refresh_token")?,
-            params
-                .get("expires_in")
-                .and_then(Value::as_i64)
-                .unwrap_or(3600),
-            text("account_id"),
-        ),
+        "caldav.addGoogle" => {
+            let email = required("email")?.trim().to_ascii_lowercase();
+            if !email.contains('@') {
+                bail!("Google sign-in did not return an email address");
+            }
+            let pending = crate::google_grant::pending(engine, &email, GOOGLE_CALENDAR_SCOPE);
+            // Saved nowhere: the grant goes unless something else uses it.
+            let (added, scopes) =
+                match crate::google_grant::connect(engine, &email, GOOGLE_CALENDAR_SCOPE, params) {
+                    Ok(Connected::Token(access)) => {
+                        match add_google(engine, &email, &access, text("account_id")) {
+                            // Google refused the grant's token: sign in afresh.
+                            Err(err) => match crate::google_grant::sign_in_after(
+                                engine,
+                                &email,
+                                GOOGLE_CALENDAR_SCOPE,
+                                params,
+                                &err,
+                            )? {
+                                Some(scopes) => (Err(err), Some(scopes)),
+                                None => (Err(err), None),
+                            },
+                            added => (added, None),
+                        }
+                    }
+                    Ok(Connected::SignIn(scopes)) => (Err(anyhow!("needs sign-in")), Some(scopes)),
+                    Err(err) => (Err(err), None),
+                };
+            // Failed, or the account was removed meanwhile: the grant goes
+            // unless something else uses it.
+            crate::google_grant::abandon(pending)?;
+            match scopes {
+                Some(scopes) => Ok(json!({ "needs_sign_in": true, "scopes": scopes })),
+                None => added,
+            }
+        }
         "caldav.setPassword" => set_password(engine, required("account_id")?, text("password")),
         "caldav.remove" => remove_account(
             engine,
@@ -246,21 +272,16 @@ pub fn add_account(engine: &Engine, new: &NewAccount<'_>) -> Result<Value> {
     Ok(json!({ "account_id": id, "accounts": accounts_payload(&*lock(engine)?)? }))
 }
 
-/// Connect the signed-in user's calendars. An existing account keeps
-/// its calendar IDs, local settings, and sync state when reauthorized.
+/// Connect the signed-in user's calendars, authorized by the account's
+/// Google grant. An existing account keeps its calendar IDs, local settings,
+/// and sync state when reauthorized.
 fn add_google(
     engine: &Engine,
     email: &str,
     access_token: &str,
-    refresh_token: &str,
-    expires_in: i64,
     reconnect_id: &str,
 ) -> Result<Value> {
-    let email = email.trim().to_ascii_lowercase();
-    if !email.contains('@') {
-        bail!("Google sign-in did not return an email address");
-    }
-    let client = Client::google(&email, access_token)?;
+    let client = Client::google(email, access_token)?;
     // Verify CalDAV is enabled as well as Calendar List: events use CalDAV.
     let primary = client.primary_calendar()?;
     let listed = client.google_calendars()?;
@@ -271,15 +292,6 @@ fn add_google(
             calendar.url.clone_from(&primary.url);
         }
     }
-    let credentials = Credentials {
-        secrets: Secrets {
-            access_token: Some(access_token.to_string()),
-            refresh_token: Some(refresh_token.to_string()),
-            ..Default::default()
-        },
-        expires_at: crate::store::now_unix().saturating_add(expires_in),
-    };
-
     let conn = lock(engine)?;
     let existing = store::accounts(&conn)?
         .into_iter()
@@ -292,7 +304,11 @@ fn add_google(
         bail!("Sign in with the Google account you are reconnecting");
     }
     let id = if let Some(account) = existing {
-        save_google_credentials(engine, &conn, &account.id, &credentials)?;
+        // Connected before grants were shared: drop its own token.
+        engine.host.delete_secret(&conn, &account.id)?;
+        if let Ok(mut credentials) = engine.dav_credentials.lock() {
+            credentials.remove(&account.id);
+        }
         store::set_google_calendar_list_disabled(&conn, &account.id, calendar_list_disabled)?;
         account.id
     } else {
@@ -303,7 +319,7 @@ fn add_google(
             &DavAccount {
                 id: id.clone(),
                 server_url: client.server.to_string(),
-                username: email,
+                username: email.to_string(),
                 // Unnamed: it goes by its mailbox's name (see `account_identity`).
                 display_name: String::new(),
                 google: true,
@@ -312,14 +328,9 @@ fn add_google(
         )?;
         store::set_google_calendar_list_disabled(&transaction, &id, calendar_list_disabled)?;
         store::reconcile_calendars(&transaction, &id, &calendars)?;
-        save_google_credentials(engine, &transaction, &id, &credentials)?;
-        if let Err(err) = transaction.commit() {
-            let _ = engine.host.delete_secret(&conn, &id);
-            return Err(err.into());
-        }
+        transaction.commit()?;
         id
     };
-    remember_credentials(engine, &id, credentials);
     Ok(json!({ "account_id": id, "accounts": accounts_payload(&conn)? }))
 }
 
@@ -395,10 +406,14 @@ pub fn remove_account(engine: &Engine, account_id: &str, discard_unsent: bool) -
     if unsent > 0 && !discard_unsent {
         return Ok(json!({ "unsent": unsent, "accounts": accounts_payload(&conn)? }));
     }
+    let account = store::account(&conn, account_id)?;
     store::delete_account(&conn, account_id)?;
     engine.host.delete_secret(&conn, account_id)?;
     if let Ok(mut credentials) = engine.dav_credentials.lock() {
         credentials.remove(account_id);
+    }
+    if let Some(account) = account.filter(|account| account.google) {
+        crate::google_grant::release(engine, &conn, &account.username)?;
     }
     Ok(json!({ "accounts": accounts_payload(&conn)? }))
 }
@@ -440,6 +455,12 @@ const MUTATION_WAIT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// A client authenticated with the account's current credentials.
 fn account_client(engine: &Engine, account: &DavAccount) -> Result<Client> {
+    if account.google
+        && let Some(access) =
+            crate::google_grant::access_token(engine, &account.username, GOOGLE_CALENDAR_SCOPE)?
+    {
+        return Client::google(&account.username, &access);
+    }
     let credentials = credentials(engine, &account.id)?;
     if !account.google {
         if credentials.secrets.password.is_empty() {
@@ -456,6 +477,7 @@ fn account_client(engine: &Engine, account: &DavAccount) -> Result<Client> {
     {
         return Client::google(&account.username, access);
     }
+    // Connected before grants were shared: its own token, if it still has one.
     let refresh = credentials
         .secrets
         .refresh_token

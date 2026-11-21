@@ -725,7 +725,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 32;
+pub(super) const SCHEMA_VERSION: i64 = 33;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -888,6 +888,18 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
             "UPDATE carddav_books SET sync_token = '';
             UPDATE carddav_cards SET etag = '';
             PRAGMA user_version = 32;",
+        )?;
+    }
+    if version < 33 {
+        // One Google authorization per address, shared by Calendar and
+        // Contacts (`google_grant`). Its refresh token is a secret under `id`,
+        // random so profiles sharing a keychain keep apart; `scopes` are the
+        // ones Google last reported for it.
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS google_grants (
+                email TEXT PRIMARY KEY, id TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL DEFAULT ''
+            );
+            PRAGMA user_version = 33;",
         )?;
     }
     tx.commit()?;

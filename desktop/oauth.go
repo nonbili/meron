@@ -162,7 +162,7 @@ func (a *App) beginOAuth(provider string) (any, error) {
 	a.oauthProvider = provider
 	a.oauthProfile = nil
 	a.oauthMu.Unlock()
-	return a.startOAuth(provider, state, "", func(profile *ExchangedProfile, err error) {
+	return a.startOAuth(provider, state, "", nil, func(profile *ExchangedProfile, err error) {
 		if err != nil {
 			a.logf("oauth callback failed (provider=%s): %v", provider, err)
 			return
@@ -188,7 +188,9 @@ func (a *App) oauthPollProfile(provider string) any {
 
 // startOAuth opens the browser and binds PKCE state to this attempt's
 // listener. Calendar consent and mailbox sign-in can run independently.
-func (a *App) startOAuth(provider, state, loginHint string, complete func(*ExchangedProfile, error)) (any, error) {
+// scopes are the Google services sharing the account's grant (see
+// connectGoogleDAV); nil for a mailbox sign-in.
+func (a *App) startOAuth(provider, state, loginHint string, scopes []any, complete func(*ExchangedProfile, error)) (any, error) {
 	verifier := randomBase64URL(32)
 	challengeBytes := sha256.Sum256([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(challengeBytes[:])
@@ -207,6 +209,7 @@ func (a *App) startOAuth(provider, state, loginHint string, complete func(*Excha
 		"state":          state,
 		"code_challenge": challenge,
 		"login_hint":     loginHint,
+		"scopes":         scopes,
 	})
 	if err != nil {
 		listener.Close()

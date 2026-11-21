@@ -180,6 +180,10 @@ pub struct Engine {
     pub dav_syncing: std::sync::Mutex<HashSet<String>>,
     pub(crate) carddav_operation: std::sync::Mutex<()>,
     pub(crate) carddav_secrets: std::sync::Mutex<HashMap<String, secrets::Secrets>>,
+    /// Google grants shared by Calendar and Contacts, cached for this run.
+    pub(crate) google_grants: std::sync::Mutex<crate::google_grant::Grants>,
+    /// Google connects in flight, by grant: their grant is not released.
+    pub(crate) google_connecting: std::sync::Mutex<HashMap<String, Vec<&'static str>>>,
 }
 
 /// Platform hooks the [`Engine`] needs but that differ between the desktop
@@ -473,6 +477,8 @@ impl Engine {
             dav_syncing: std::sync::Mutex::new(HashSet::new()),
             carddav_operation: std::sync::Mutex::new(()),
             carddav_secrets: std::sync::Mutex::new(HashMap::new()),
+            google_grants: std::sync::Mutex::new(HashMap::new()),
+            google_connecting: std::sync::Mutex::new(HashMap::new()),
         }
     }
 

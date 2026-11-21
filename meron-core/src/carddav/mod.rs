@@ -5,7 +5,7 @@ mod editing;
 use anyhow::{Context, Result, anyhow, ensure};
 use calcard::vcard::{VCard, VCardProperty, VCardValue};
 use client::Client;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{
@@ -15,7 +15,7 @@ use std::{
 
 use crate::{
     engine::{Engine, default_oauth_client},
-    oauth::{self, GOOGLE_CONTACTS_PROVIDER},
+    oauth::{self, GOOGLE_CONTACTS_PROVIDER, GOOGLE_CONTACTS_SCOPE},
     secrets::Secrets,
 };
 
@@ -118,8 +118,6 @@ struct SavedBook {
     book: BookLabel,
     enabled: bool,
     skipped: i64,
-    #[serde(skip)]
-    sync_token: String,
 }
 
 #[derive(Serialize)]
@@ -143,7 +141,7 @@ fn accounts(db: &Connection) -> Result<Vec<Account>> {
         "SELECT id, server, username, google FROM carddav_accounts ORDER BY username, server",
     )?;
     let mut books = db.prepare(
-        "SELECT id, url, name, enabled, sync_token, (SELECT count(*) FROM carddav_cards WHERE book=carddav_books.id AND invalid) FROM carddav_books WHERE account=?1 ORDER BY name, id",
+        "SELECT id, url, name, enabled, (SELECT count(*) FROM carddav_cards WHERE book=carddav_books.id AND invalid) FROM carddav_books WHERE account=?1 ORDER BY name, id",
     )?;
     let rows = stmt.query_map([], |r| {
         Ok(Account {
@@ -165,8 +163,7 @@ fn accounts(db: &Connection) -> Result<Vec<Account>> {
                         name: r.get(2)?,
                     },
                     enabled: r.get(3)?,
-                    sync_token: r.get(4)?,
-                    skipped: r.get(5)?,
+                    skipped: r.get(4)?,
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -271,20 +268,46 @@ pub fn dispatch(engine: &Engine, method: &str, p: &Value) -> Result<Value> {
                     "Sign in with the Google Contacts account you are reconnecting"
                 );
             }
-            let client = Client::google(required("access_token")?)?;
-            let refresh = required("refresh_token")?;
-            let found = client.discover()?;
-            let id = save_account(
-                engine,
-                &client,
-                &email,
-                Secrets {
-                    refresh_token: Some(refresh.into()),
-                    ..Default::default()
-                },
-                &found,
-                true,
-            )?;
+            let pending = crate::google_grant::pending(engine, &email, GOOGLE_CONTACTS_SCOPE);
+            let access =
+                match crate::google_grant::connect(engine, &email, GOOGLE_CONTACTS_SCOPE, p) {
+                    Ok(crate::google_grant::Connected::Token(access)) => Ok(access),
+                    Ok(crate::google_grant::Connected::SignIn(scopes)) => {
+                        crate::google_grant::abandon(pending)?;
+                        return Ok(json!({"needs_sign_in": true, "scopes": scopes}));
+                    }
+                    Err(err) => Err(err),
+                };
+            let saved = access.and_then(|access| {
+                let client = Client::google(&access)?;
+                let found = client.discover()?;
+                // Authorized by the account's Google grant: no secret of its own.
+                let id = save_account(engine, &client, &email, Secrets::default(), &found, true)?;
+                Ok((client, id))
+            });
+            let (client, id) = match saved {
+                Ok(saved) => {
+                    // Its account may have been removed meanwhile.
+                    crate::google_grant::abandon(pending)?;
+                    saved
+                }
+                Err(err) => {
+                    // Google refused the grant's token: sign in afresh.
+                    let sign_in = crate::google_grant::sign_in_after(
+                        engine,
+                        &email,
+                        GOOGLE_CONTACTS_SCOPE,
+                        p,
+                        &err,
+                    )?;
+                    // Saved nowhere: the grant goes unless something else uses it.
+                    crate::google_grant::abandon(pending)?;
+                    return match sign_in {
+                        Some(scopes) => Ok(json!({"needs_sign_in": true, "scopes": scopes})),
+                        None => Err(err),
+                    };
+                }
+            };
             let account = accounts(&*lock(engine)?)?
                 .into_iter()
                 .find(|a| a.id == id)
@@ -297,12 +320,20 @@ pub fn dispatch(engine: &Engine, method: &str, p: &Value) -> Result<Value> {
         "carddav.remove" => {
             let id = required("account_id")?;
             let db = lock(engine)?;
-            ensure!(
-                db.execute("DELETE FROM carddav_accounts WHERE id=?1", [id])? == 1,
-                "address book account not found"
-            );
+            let (username, google): (String, bool) = db
+                .query_row(
+                    "SELECT username, google FROM carddav_accounts WHERE id=?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?
+                .context("address book account not found")?;
+            db.execute("DELETE FROM carddav_accounts WHERE id=?1", [id])?;
             engine.host.delete_secret(&db, id)?;
             engine.carddav_secrets.lock().unwrap().remove(id);
+            if google {
+                crate::google_grant::release(engine, &db, &username)?;
+            }
             json!({})
         }
         "carddav.setBookEnabled" => {
@@ -336,6 +367,12 @@ pub fn dispatch(engine: &Engine, method: &str, p: &Value) -> Result<Value> {
 }
 
 fn account_client(engine: &Engine, account: &Account) -> Result<Client> {
+    if account.google
+        && let Some(access) =
+            crate::google_grant::access_token(engine, &account.username, GOOGLE_CONTACTS_SCOPE)?
+    {
+        return Client::google(&access);
+    }
     let requested = account.id.as_str();
     let secret = {
         let db = lock(engine)?;
@@ -348,6 +385,7 @@ fn account_client(engine: &Engine, account: &Account) -> Result<Client> {
         cached.unwrap_or_else(|| engine.host.load_secret(&db, requested))
     };
     if account.google {
+        // Connected before grants were shared: its own token, if it still has one.
         let refresh = secret
             .refresh_token
             .as_deref()
@@ -419,25 +457,30 @@ fn save_account(
             params![crate::tasks::new_id("addressbook"), id, book.url, book.name],
         )?;
     }
-    engine.host.store_secret(&tx, &id, &secrets)?;
+    if secrets.is_empty() {
+        engine.host.delete_secret(&tx, &id)?;
+    } else {
+        engine.host.store_secret(&tx, &id, &secrets)?;
+    }
     tx.commit()?;
-    engine
-        .carddav_secrets
-        .lock()
-        .unwrap()
-        .insert(id.clone(), secrets);
+    let mut cache = engine.carddav_secrets.lock().unwrap();
+    if secrets.is_empty() {
+        cache.remove(&id);
+    } else {
+        cache.insert(id.clone(), secrets);
+    }
     Ok(id)
 }
 
 fn sync_account(engine: &Engine, client: &Client, account: Account) -> Result<usize> {
     let mut changed = 0;
     for book in account.books.into_iter().filter(|book| book.enabled) {
-        changed += sync_book(engine, client, &book, account.google)?;
+        changed += sync_book(engine, client, &book)?;
     }
     Ok(changed)
 }
 
-fn sync_book(engine: &Engine, client: &Client, saved: &SavedBook, google: bool) -> Result<usize> {
+fn sync_book(engine: &Engine, client: &Client, saved: &SavedBook) -> Result<usize> {
     let known: BTreeMap<String, String> = {
         let db = lock(engine)?;
         let mut stmt = db.prepare("SELECT url, etag FROM carddav_cards WHERE book=?1")?;
@@ -448,25 +491,11 @@ fn sync_book(engine: &Engine, client: &Client, saved: &SavedBook, google: bool) 
         url: saved.book.url.clone(),
         name: saved.book.name.clone(),
     };
-    let incremental = if google && !saved.sync_token.is_empty() {
-        client.incremental(&book, &saved.sync_token, &known)?
-    } else {
-        None
-    };
-    let (versions, cards, token) = match incremental {
-        Some(delta) => delta,
-        None => {
-            // Take the token first, so changes racing the full listing will
-            // still be replayed by the next sync-collection report.
-            let token = if google {
-                client.sync_token(&book)?
-            } else {
-                String::new()
-            };
-            let (versions, cards) = client.snapshot(&book, &known)?;
-            (versions, cards, token)
-        }
-    };
+    // Always the full listing (names and versions only; changed cards are
+    // then fetched), never Google's sync-collection: its sync token can move
+    // past a contact it has not reported yet, a new one just written here
+    // included, and incremental syncs never report that contact afterwards.
+    let (versions, cards) = client.snapshot(&book, &known)?;
     let mut db = lock(engine)?;
     let tx = db.transaction()?;
     let mut count = cards.len();
@@ -481,10 +510,6 @@ fn sync_book(engine: &Engine, client: &Client, saved: &SavedBook, google: bool) 
             ON CONFLICT(book, url) DO UPDATE SET etag=excluded.etag, name=excluded.name, emails=excluded.emails, note=excluded.note, invalid=excluded.invalid",
             params![saved.id, card.url, card.etag, card.name, serde_json::to_string(&card.emails)?, card.note, card.invalid])?;
     }
-    tx.execute(
-        "UPDATE carddav_books SET sync_token=?1 WHERE id=?2",
-        params![token, saved.id],
-    )?;
     tx.commit()?;
     Ok(count)
 }

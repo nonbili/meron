@@ -147,7 +147,7 @@ pub(super) fn mutate(engine: &Engine, book_id: &str, method: &str, p: &Value) ->
         )?;
     }
     // A failed pull after a successful write must not invite a repeat POST.
-    let sync_error = sync_book(engine, &client, book, account.google)
+    let sync_error = sync_book(engine, &client, book)
         .err()
         .map(|err| err.to_string());
     Ok(json!({"sync_error": sync_error}))
