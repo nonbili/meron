@@ -88,7 +88,7 @@ pub(crate) fn record_pref_write(
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
     req: &Request,
-    _out: &Writer,
+    out: &Writer,
 ) -> anyhow::Result<Value> {
     let p = &req.params;
     match req.method.as_str() {
@@ -137,6 +137,11 @@ pub(crate) async fn dispatch(
                 if key == proxy::SETTING_KEY {
                     proxy::set_global(proxy::parse_global(&value));
                 }
+            }
+            // Tasks sync rests while Tasks is off: catch up when it is back.
+            if key == "tasks_enabled" && value == Value::Bool(true) {
+                crate::sidecar::dispatch::google_tasks::spawn_sync(engine.clone(), out.clone());
+                crate::sidecar::dispatch::caldav::spawn_sync(engine.clone(), out.clone(), None);
             }
             Ok(json!({ "ok": true }))
         }

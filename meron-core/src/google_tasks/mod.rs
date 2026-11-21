@@ -20,7 +20,10 @@ use crate::google_grant::{self, Connected};
 use crate::oauth::GOOGLE_TASKS_SCOPE;
 use crate::store as db;
 
-pub use store::{has_account, is_list, pending, queue, queue_delete, require_writable};
+pub use store::{
+    has_account, is_list, pending, pending_emails, queue, queue_delete, require_writable,
+    sync_intervals,
+};
 
 fn lock(db: &Mutex<Connection>) -> Result<std::sync::MutexGuard<'_, Connection>> {
     db.lock().map_err(|_| anyhow!("store lock poisoned"))
@@ -89,7 +92,15 @@ fn connect(engine: &Engine, email: &str, params: &Value) -> Result<Value> {
                 return Err(err);
             }
         };
-        store::save_account(&*lock(&engine.db)?, email)?;
+        {
+            let conn = lock(&engine.db)?;
+            store::save_account(&conn, email)?;
+            // Switched off while the sign-in was open: keep queued edits for
+            // when Tasks is back, as a paused sync would.
+            if !db::tasks_enabled(&conn)? {
+                return store::accounts_payload(&conn);
+            }
+        }
         let outcome = sync_lists(&engine.db, &client, email, lists);
         let conn = lock(&engine.db)?;
         store::record_sync(&conn, email, outcome.as_ref().err())?;

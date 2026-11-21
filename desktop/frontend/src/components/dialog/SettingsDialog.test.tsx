@@ -114,6 +114,24 @@ describe('SettingsDialog reveal', () => {
     await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))))
     expect(document.activeElement).toBe(toggle)
   })
+
+  it('keeps Calendar and Tasks settings on their own page, reachable with both off', async () => {
+    ;(window as any).go = { main: { App: { Invoke: async () => ({ accounts: [] }) } } }
+    const calendar = settings$.calendarEnabled.peek()
+    const tasks = settings$.tasksEnabled.peek()
+    settings$.calendarEnabled.set(false)
+    settings$.tasksEnabled.set(false)
+    openSettingsAt('general', '')
+    const view = render(<SettingsDialog />)
+    expect(view.queryByRole('switch', { name: 'Enable Tasks' })).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: 'Calendars & tasks' }))
+    expect(view.getByRole('switch', { name: 'Enable Calendar' })).toBeTruthy()
+    expect(view.queryByRole('heading', { name: 'Accounts' })).toBeNull()
+    await act(async () => fireEvent.click(view.getByRole('switch', { name: 'Enable Tasks' })))
+    expect(view.getByRole('heading', { name: 'Accounts' })).toBeTruthy()
+    settings$.calendarEnabled.set(calendar)
+    settings$.tasksEnabled.set(tasks)
+  })
 })
 
 describe('SettingsDialog remote senders', () => {

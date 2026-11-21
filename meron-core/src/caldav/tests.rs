@@ -1438,3 +1438,60 @@ fn losing_vtodo_support_only_resets_the_event_listing_once() {
     assert_eq!(next.ctag, "new-ctag");
     assert_eq!(next.sync_token, "new-token");
 }
+
+#[test]
+fn task_only_calendars_rest_while_tasks_is_off() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    store::save_account(
+        &conn,
+        &store::DavAccount {
+            id: "fixture".into(),
+            username: "sam@example.test".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let remote = |name: &str, components: &[&str]| Calendar {
+        url: format!("https://cal.example.test/{name}/"),
+        components: components.iter().map(|c| c.to_string()).collect(),
+        ..Default::default()
+    };
+    let calendars = store::reconcile_calendars(
+        &conn,
+        "fixture",
+        &[
+            remote("todo", &["VTODO"]),
+            remote("both", &["VEVENT", "VTODO"]),
+        ],
+    )
+    .unwrap();
+    for calendar in &calendars {
+        store::set_tasks_enabled(&conn, calendar, true).unwrap();
+    }
+    let calendars = store::calendars(&conn, "fixture").unwrap();
+    let todo = calendars.iter().find(|c| c.url.contains("/todo/")).unwrap();
+    let both = calendars.iter().find(|c| c.url.contains("/both/")).unwrap();
+
+    let payload = crate::tasks::lists_payload(&conn).unwrap();
+    let synced: Vec<_> = payload["lists"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|list| list["provider"] == "caldav")
+        .collect();
+    assert_eq!(synced.len(), 2);
+    assert!(
+        synced
+            .iter()
+            .all(|list| list["account"] == "sam@example.test" && list["account_id"] == "fixture")
+    );
+
+    assert!(crate::store::tasks_enabled(&conn).unwrap());
+    assert!(super::sync::syncs(todo, true));
+    crate::store::setting_set(&conn, "tasks_enabled", &serde_json::json!(false)).unwrap();
+    let tasks_on = crate::store::tasks_enabled(&conn).unwrap();
+    assert!(!tasks_on);
+    assert!(!super::sync::syncs(todo, tasks_on));
+    assert!(super::sync::syncs(both, tasks_on));
+}

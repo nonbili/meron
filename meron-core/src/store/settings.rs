@@ -14,6 +14,12 @@ fn setting_get(conn: &Connection, key: &str) -> Result<Option<String>> {
         .optional()?)
 }
 
+/// Whether the Tasks feature is on (the desktop's "Enable Tasks"). Tasks
+/// sync pauses while it is off. Unset counts as on.
+pub fn tasks_enabled(conn: &Connection) -> Result<bool> {
+    Ok(setting_get(conn, "tasks_enabled")?.as_deref() != Some("false"))
+}
+
 pub fn settings_get(conn: &Connection, keys: &[String]) -> Result<serde_json::Value> {
     let mut out = serde_json::Map::new();
     for key in keys {

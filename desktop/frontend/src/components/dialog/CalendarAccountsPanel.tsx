@@ -5,6 +5,7 @@ import { formatThreadDate } from '../../lib/date'
 import { errorMessage } from '../../lib/errors'
 import { isGoogleMailbox } from '../../lib/googleMailbox'
 import { accounts$ } from '../../states/accounts'
+import { settings$ } from '../../states/settings'
 import {
   SYNC_INTERVALS,
   addCalendarAccount,
@@ -39,7 +40,7 @@ import { SettingRow, SettingsGroup, Switch } from './AccountSettingsRows'
 import { CalendarPickerDialog } from './CalendarPickerDialog'
 import { CalendarColorEditor } from '../calendar/CalendarColorEditor'
 import { PlainHttpWarning } from '../field/PlainHttpWarning'
-import { GoogleTasksAccounts } from './GoogleTasksAccounts'
+import { GoogleTasksSwitch, OrphanGoogleTasksAccounts, useGoogleTasks, type GoogleTasks } from './GoogleTasksAccounts'
 
 type CalendarFormValues = { server?: string; email: string }
 
@@ -54,6 +55,9 @@ export function CalendarAccountsPanel() {
   const [mailboxId, setMailboxId] = useState('')
   const [discovering, setDiscovering] = useState(false)
   const [connectingGoogle, setConnectingGoogle] = useState(false)
+  // The address typed to add a Google account with no mailbox here; null
+  // while that form is closed.
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null)
   // Bumped to abandon a Google sign-in left in the browser: its late answer
   // still lists the account but no longer holds the panel.
   const googleAttempt = useRef(0)
@@ -74,6 +78,8 @@ export function CalendarAccountsPanel() {
         )
       : undefined
   const busy = discovering || connectingGoogle
+  const googleTasks = useGoogleTasks()
+  const tasksEnabled = useValue(settings$.tasksEnabled)
 
   const revealNewAccount = () => {
     const created = caldav$.accounts.peek().find((account) => !accounts.some(({ id }) => id === account.id))
@@ -86,6 +92,10 @@ export function CalendarAccountsPanel() {
     setConnectingGoogle(true)
     try {
       const id = await connectGoogleCalendar(options)
+      // A reconnect renews the grant Google Tasks shares: retry its sync too.
+      if (live() && options.accountId && settings$.tasksEnabled.peek() && googleTasks.find(options.email)) {
+        void googleTasks.run('googleTasks.sync', { email: options.email })
+      }
       if (live() && id && !options.accountId) {
         setNewAccountId(id)
         setPickingAccountId(id)
@@ -136,12 +146,55 @@ export function CalendarAccountsPanel() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <p className="max-w-lg text-xs text-secondary">{t('settings.calendars.intro')}</p>
-        {!adding && (
-          <Button size="sm" leftIcon={Plus} disabled={busy} onClick={() => setAdding({})}>
-            {t('settings.calendars.add')}
-          </Button>
+        {!adding && googleEmail === null && (
+          <div className="flex flex-wrap gap-2">
+            {/* A Google account needs no mailbox here: sign in to add its
+                calendars, then switch on its tasks in the card. */}
+            {googleConfigured && (
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => setGoogleEmail('')}>
+                {t('accounts.oauth.signInWith', { provider: 'Google' })}
+              </Button>
+            )}
+            <Button size="sm" leftIcon={Plus} disabled={busy} onClick={() => setAdding({})}>
+              {t('settings.calendars.add')}
+            </Button>
+          </div>
         )}
       </div>
+      {googleEmail !== null && (
+        <SettingsGroup title={t('accounts.oauth.signInWith', { provider: 'Google' })}>
+          {/* The address comes first so the sign-in can keep the access its
+              other services (Contacts, Tasks) already have. */}
+          <form
+            className="flex flex-wrap items-center gap-2 p-3.5"
+            onSubmit={(event) => {
+              event.preventDefault()
+              // One sign-in at a time: a second would orphan the first's answer.
+              if (busy) return
+              const email = googleEmail.trim()
+              setGoogleEmail(null)
+              void connectGoogle({ email })
+            }}
+          >
+            <TextInput
+              autoFocus
+              type="email"
+              required
+              className="min-w-0 grow"
+              value={googleEmail}
+              onChange={(event) => setGoogleEmail(event.target.value)}
+              placeholder={t('accounts.fields.emailAddress')}
+              aria-label={t('accounts.fields.emailAddress')}
+            />
+            <Button variant="secondary" size="sm" onClick={() => setGoogleEmail(null)}>
+              {t('buttons.cancel')}
+            </Button>
+            <Button type="submit" size="sm" disabled={busy || !googleEmail.trim()}>
+              {t('accounts.oauth.signInWith', { provider: 'Google' })}
+            </Button>
+          </form>
+        </SettingsGroup>
+      )}
       {connectingGoogle && (
         <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-raised/80 px-3.5 py-2.5">
           <p role="status" className="min-w-0 flex-1 text-xs text-secondary">
@@ -179,7 +232,7 @@ export function CalendarAccountsPanel() {
                 ? t('common.loading')
                 : connectingGoogle && isGoogleMailbox(mailbox)
                   ? t('settings.calendars.connecting')
-                  : t(googleAccount ? 'settings.calendars.chooseToSync' : 'settings.calendars.findForMailbox')}
+                  : t(googleAccount ? 'settings.calendars.choose' : 'settings.calendars.find')}
             </Button>
           </form>
         </SettingsGroup>
@@ -218,6 +271,8 @@ export function CalendarAccountsPanel() {
                   : undefined
               }
               connectingGoogle={busy}
+              googleTasks={googleTasks}
+              googleConfigured={googleConfigured}
             />
           ))}
         </div>
@@ -225,7 +280,13 @@ export function CalendarAccountsPanel() {
       {pickingAccountId && (
         <CalendarPickerDialog accountId={pickingAccountId} onClose={() => setPickingAccountId(undefined)} />
       )}
-      <GoogleTasksAccounts canConnect={googleConfigured} />
+      {tasksEnabled && (
+        <OrphanGoogleTasksAccounts
+          tasks={googleTasks}
+          calendarEmails={accounts.filter((account) => account.google).map((account) => account.username)}
+          canConnect={googleConfigured}
+        />
+      )}
     </div>
   )
 }
@@ -365,34 +426,50 @@ function AccountCard({
   newlyAdded,
   onReconnect,
   connectingGoogle,
+  googleTasks,
+  googleConfigured,
 }: {
   account: CalendarAccount
   newlyAdded: boolean
   onReconnect?: () => void
   connectingGoogle: boolean
+  googleTasks: GoogleTasks
+  googleConfigured: boolean
 }) {
   const { t } = useTranslation()
   const id = useId()
   const name = account.name
-  const [expanded, setExpanded] = useState(!!account.last_error || newlyAdded)
+  const tasksEnabled = useValue(settings$.tasksEnabled)
+  // Google Tasks rides on a Google account's card; while Tasks is off it rests.
+  const tasksAccount = account.google && tasksEnabled ? googleTasks.find(account.username) : undefined
+  const tasksError = tasksAccount?.last_error ?? ''
+  const [expanded, setExpanded] = useState(!!account.last_error || !!tasksError || newlyAdded)
   useEffect(() => {
-    if (account.last_error || newlyAdded) setExpanded(true)
-  }, [account.last_error, newlyAdded])
+    if (account.last_error || tasksError || newlyAdded) setExpanded(true)
+  }, [account.last_error, tasksError, newlyAdded])
   const [syncing, setSyncing] = useState(false)
   const [password, setPassword] = useState<string | null>(null)
   const [passwordError, setPasswordError] = useState('')
   const eventCalendars = account.calendars.filter((calendar) => calendar.events)
-  const taskCalendars = account.calendars.filter((calendar) => calendar.tasks || calendar.tasks_enabled)
+  const taskCalendars = tasksEnabled
+    ? account.calendars.filter((calendar) => calendar.tasks || calendar.tasks_enabled)
+    : []
 
   const status = account.last_error
     ? t('settings.calendars.syncFailed', { error: account.last_error })
     : account.last_sync_at
       ? t('settings.calendars.lastSynced', { time: formatThreadDate(account.last_sync_at) })
       : t('settings.calendars.notSynced')
+  // Collapsed, a Google Tasks failure shows here too; open, its own row has it.
+  const tasksFailure = !account.last_error && !expanded && tasksError
+  const summary = tasksFailure ? `Google Tasks · ${t('settings.calendars.syncFailed', { error: tasksError })}` : status
 
   const sync = async () => {
     setSyncing(true)
-    await syncCalendarAccount(account.id)
+    await Promise.all([
+      syncCalendarAccount(account.id),
+      tasksAccount && googleTasks.run('googleTasks.sync', { email: tasksAccount.email }),
+    ])
     setSyncing(false)
   }
 
@@ -437,11 +514,11 @@ function AccountCard({
             {account.username && <span className="min-w-0 max-w-1/2 truncate">{account.username}</span>}
             {account.username && !(expanded && account.last_error) && <span aria-hidden>·</span>}
             <span
-              className={`min-w-0 truncate ${account.last_error ? 'text-rose-500' : ''}`}
-              title={status}
+              className={`min-w-0 truncate ${account.last_error || tasksFailure ? 'text-rose-500' : ''}`}
+              title={summary}
               hidden={expanded && !!account.last_error}
             >
-              {status}
+              {summary}
             </span>
           </span>
         </span>
@@ -482,6 +559,9 @@ function AccountCard({
               </div>
             ))}
           </div>
+        )}
+        {account.google && tasksEnabled && (
+          <GoogleTasksSwitch tasks={googleTasks} email={account.username} canConnect={googleConfigured} />
         )}
         <div className="divide-y divide-border/40 border-t border-border/40">
           <SettingRow

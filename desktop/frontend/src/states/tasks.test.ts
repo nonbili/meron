@@ -13,6 +13,7 @@ import {
   openTaskMail,
   openTasksPanel,
   restoreTasksSession,
+  taskListGroups,
   tasks$,
   toggleTasksPanel,
   type Task,
@@ -509,4 +510,30 @@ it('does not resurrect an older snapshot when a post-mutation read fails', async
   await old
   expect(tasks$.items.peek()[0].id).toBe('current')
   expect(tasks$.loading.peek()).toBe(false)
+})
+
+describe('taskListGroups', () => {
+  it('keeps local lists first and tells same-named lists of two accounts apart', () => {
+    const groups = taskListGroups([
+      { id: 'g1', title: 'My Tasks', provider: 'google', account: 'sam@example.test' },
+      { id: 'local', title: 'My Tasks' },
+      { id: 'c1', title: 'Work', provider: 'caldav', account: 'sam@example.test' },
+      { id: 'g2', title: 'My Tasks', provider: 'google', account: 'alex@example.test' },
+      { id: 'g3', title: 'Errands', provider: 'google', account: 'sam@example.test' },
+    ])
+    expect(groups.map(({ label, lists }) => [label, lists.map(({ id }) => id)])).toEqual([
+      ['', ['local']],
+      ['sam@example.test · Google Tasks', ['g1', 'g3']],
+      ['sam@example.test · CalDAV', ['c1']],
+      ['alex@example.test · Google Tasks', ['g2']],
+    ])
+  })
+
+  it('names the servers of two CalDAV accounts that share a username', () => {
+    const groups = taskListGroups([
+      { id: 'a', title: 'Tasks', provider: 'caldav', account: 'sam', account_id: '1', server: 'https://dav.one.test/' },
+      { id: 'b', title: 'Tasks', provider: 'caldav', account: 'sam', account_id: '2', server: 'https://dav.two.test/' },
+    ])
+    expect(groups.map(({ label }) => label)).toEqual(['sam · CalDAV (dav.one.test)', 'sam · CalDAV (dav.two.test)'])
+  })
 })

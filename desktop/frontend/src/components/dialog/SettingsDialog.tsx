@@ -168,7 +168,6 @@ export function SettingsDialog() {
   const selectGeneral = () => ui$.accountSettingsId.set('')
   const selectAccount = (id: string) => ui$.accountSettingsId.set(id)
 
-  const calendarEnabled = useValue(settings$.calendarEnabled)
   const selectedAccount = accounts.find((acc) => acc.id === selected)
   const selectedBoard = !selectedAccount ? boards.find((board) => board.id === selected) : undefined
   // A removed account/board (or a stale id) falls back to General.
@@ -232,12 +231,10 @@ export function SettingsDialog() {
             <Lock size={15} className="shrink-0" />
             <span>{t('crypto.peers.nav')}</span>
           </NavItem>
-          {calendarEnabled && (
-            <NavItem active={activeKey === 'calendars'} onClick={() => selectAccount('calendars')}>
-              <CalendarDays size={15} className="shrink-0" />
-              <span>{t('settings.calendars.nav')}</span>
-            </NavItem>
-          )}
+          <NavItem active={activeKey === 'calendars'} onClick={() => selectAccount('calendars')}>
+            <CalendarDays size={15} className="shrink-0" />
+            <span>{t('settings.calendars.nav')}</span>
+          </NavItem>
           <BoardGroup boards={boards} activeKey={activeKey} onSelect={selectAccount} />
           <AccountGroup
             label={t('settings.sections.mailAccounts')}
@@ -276,8 +273,8 @@ export function SettingsDialog() {
             <McpSettingsPanel />
           ) : selected === 'encryption' ? (
             <EncryptionSettingsPage />
-          ) : selected === 'calendars' && calendarEnabled ? (
-            <CalendarAccountsPanel />
+          ) : selected === 'calendars' ? (
+            <CalendarsTasksSection />
           ) : selected === 'messages' ? (
             <MessagesSection />
           ) : selected === 'composer' ? (
@@ -477,10 +474,7 @@ function GeneralSection() {
   const showUnreadAccountBadge = useValue(settings$.showUnreadAccountBadge)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
   const showCalendarInSideNav = useValue(settings$.showCalendarInSideNav)
-  const tasksEnabled = useValue(settings$.tasksEnabled)
   const calendarEnabled = useValue(settings$.calendarEnabled)
-  const reminderLeadMinutes = useValue(settings$.reminderLeadMinutes)
-  const reminderAllDayDays = useValue(settings$.reminderAllDayDays)
   const kanbanColumnWidth = useValue(settings$.kanbanColumnWidth)
   const kanbanLockScroll = useValue(settings$.kanbanLockScroll)
   const language = useValue(settings$.language)
@@ -590,19 +584,45 @@ function GeneralSection() {
             </button>
           }
         />
-        <ToggleRow
-          icon={<SquareCheckBig size={15} />}
-          title={t('settings.tasks.enable')}
-          hint={t('settings.tasks.enableHint')}
-          checked={tasksEnabled}
-          onChange={() => setTasksEnabled(!tasksEnabled)}
-        />
+        <CloseToTrayRow />
+        <IntegratedTitlebarRow />
+        <AutoUpdateRow />
+      </SettingsGroup>
+
+      <SettingsGroup title={t('settings.sections.data')}>
+        <BackupRow />
+        <StorageRows />
+        <LogsRow />
+      </SettingsGroup>
+    </div>
+  )
+}
+
+// Calendar and Tasks: whether they are on, their defaults, and the accounts
+// they sync with (CalDAV calendars and task lists, Google Tasks).
+function CalendarsTasksSection() {
+  const { t } = useTranslation()
+  const tasksEnabled = useValue(settings$.tasksEnabled)
+  const calendarEnabled = useValue(settings$.calendarEnabled)
+  const reminderLeadMinutes = useValue(settings$.reminderLeadMinutes)
+  const reminderAllDayDays = useValue(settings$.reminderAllDayDays)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SettingsGroup title={t('settings.sections.general')}>
         <ToggleRow
           icon={<CalendarDays size={15} />}
           title={t('settings.calendar.enable')}
           hint={t('settings.calendar.enableHint')}
           checked={calendarEnabled}
           onChange={() => setCalendarEnabled(!calendarEnabled)}
+        />
+        <ToggleRow
+          icon={<SquareCheckBig size={15} />}
+          title={t('settings.tasks.enable')}
+          hint={t('settings.tasks.enableHint')}
+          checked={tasksEnabled}
+          onChange={() => setTasksEnabled(!tasksEnabled)}
         />
         {calendarEnabled && (
           <SelectRow
@@ -630,16 +650,14 @@ function GeneralSection() {
             onChange={(value) => settings$.reminderAllDayDays.set(Number(value))}
           />
         )}
-        <CloseToTrayRow />
-        <IntegratedTitlebarRow />
-        <AutoUpdateRow />
       </SettingsGroup>
 
-      <SettingsGroup title={t('settings.sections.data')}>
-        <BackupRow />
-        <StorageRows />
-        <LogsRow />
-      </SettingsGroup>
+      {(calendarEnabled || tasksEnabled) && (
+        <section data-setting-title={t('settings.calendars.accounts')} className="mt-2">
+          <h3 className="mb-2 px-1 text-[0.75rem] font-semibold text-secondary">{t('settings.calendars.accounts')}</h3>
+          <CalendarAccountsPanel />
+        </section>
+      )}
     </div>
   )
 }

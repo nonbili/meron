@@ -85,15 +85,15 @@ fn refresh(db: &Mutex<Connection>, client: &Client) -> Result<bool> {
 fn list_id(db: &Mutex<Connection>) -> String {
     let conn = db.lock().unwrap();
     let result = tasks::lists_payload(&conn).unwrap();
-    result["lists"]
+    let list = result["lists"]
         .as_array()
         .unwrap()
         .iter()
         .find(|list| list["provider"] == "google")
-        .unwrap()["id"]
-        .as_str()
-        .unwrap()
-        .to_string()
+        .unwrap();
+    // Lists named alike on two Google accounts are told apart by it.
+    assert_eq!(list["account"], EMAIL);
+    list["id"].as_str().unwrap().to_string()
 }
 
 fn create_local(db: &Mutex<Connection>, list: &str) -> String {
@@ -278,4 +278,30 @@ fn a_refused_connection_leaves_creation_pending_for_retry() {
     let client = Client::new("test-tasks").unwrap().with_endpoint(endpoint);
     assert!(push(&db, &client, &list, &mapping(), &mut HashMap::new()).is_err());
     assert_eq!(mapping().state, store::CREATED);
+}
+
+#[test]
+fn accounts_follow_their_google_calendar_sync_interval() {
+    let conn = Connection::open_in_memory().unwrap();
+    db::run_migrations(&conn).unwrap();
+    store::save_account(&conn, EMAIL).unwrap();
+    store::save_account(&conn, "alone@example.test").unwrap();
+    crate::caldav::store::save_account(
+        &conn,
+        &crate::caldav::store::DavAccount {
+            id: "google-calendars".into(),
+            username: "Tasks@Example.test".into(),
+            google: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    crate::caldav::store::set_sync_interval(&conn, "google-calendars", 0).unwrap();
+    assert_eq!(
+        sync_intervals(&conn).unwrap(),
+        [
+            ("alone@example.test".to_string(), 15),
+            (EMAIL.to_string(), 0)
+        ]
+    );
 }

@@ -7,7 +7,7 @@ import { isLocalAccountId } from '../../states/accounts'
 import type { Account } from '../../types'
 
 /** A Settings dialog page that isn't an account or a board. */
-export type SettingsPage = 'general' | 'messages' | 'composer' | 'rules' | 'mcp' | 'encryption'
+export type SettingsPage = 'general' | 'messages' | 'composer' | 'rules' | 'mcp' | 'encryption' | 'calendars'
 
 export type SettingEntry = {
   page: SettingsPage
@@ -58,20 +58,6 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { page: 'general', titleKey: 'settings.kanban.lockScroll', keywords: 'board' },
   { page: 'general', titleKey: 'settings.sections.network', keywords: 'proxy socks http' },
   { page: 'general', titleKey: 'shortcuts.title', keywords: 'keys bindings customize' },
-  { page: 'general', titleKey: 'settings.tasks.enable', keywords: 'todo' },
-  { page: 'general', titleKey: 'settings.calendar.enable', keywords: 'events' },
-  {
-    page: 'general',
-    titleKey: 'settings.calendar.reminderLead',
-    keywords: 'alert notification event',
-    available: calendarOn,
-  },
-  {
-    page: 'general',
-    titleKey: 'settings.calendar.allDayAlert',
-    keywords: 'reminder notification event',
-    available: calendarOn,
-  },
   { page: 'general', titleKey: 'settings.window.closeToTray', keywords: 'quit minimize', available: () => !isMac },
   {
     page: 'general',
@@ -117,6 +103,28 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { page: 'rules', titleKey: 'rules.title', keywords: 'filters automation' },
   { page: 'mcp', titleKey: 'mcp.title', keywords: 'ai assistant server' },
   { page: 'encryption', titleKey: 'crypto.peers.nav', keywords: 'pgp openpgp s/mime smime keys' },
+
+  // Calendars & tasks
+  { page: 'calendars', titleKey: 'settings.calendar.enable', keywords: 'events' },
+  { page: 'calendars', titleKey: 'settings.tasks.enable', keywords: 'todo' },
+  {
+    page: 'calendars',
+    titleKey: 'settings.calendar.reminderLead',
+    keywords: 'alert notification event',
+    available: calendarOn,
+  },
+  {
+    page: 'calendars',
+    titleKey: 'settings.calendar.allDayAlert',
+    keywords: 'reminder notification event',
+    available: calendarOn,
+  },
+  {
+    page: 'calendars',
+    titleKey: 'settings.calendars.accounts',
+    keywords: 'caldav google tasks sync nextcloud fastmail icloud',
+    available: () => settings$.calendarEnabled.peek() || settings$.tasksEnabled.peek(),
+  },
 ]
 
 /** Which accounts a per-account setting applies to, as the settings page splits them. */

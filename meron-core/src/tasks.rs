@@ -13,7 +13,7 @@ mod tests;
 
 use anyhow::{Result, anyhow};
 use base64::Engine as _;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value, json};
 
 use crate::store::{self, Task, TaskList};
@@ -99,11 +99,39 @@ pub fn lists_payload(conn: &Connection) -> Result<Value> {
         .iter()
         .map(|list| {
             let mut value = list_json(list);
-            if todo::calendar_id(&list.id).is_some() {
+            // A synced list names the account it syncs with, so lists of the
+            // same name on two accounts can be told apart.
+            if let Some(calendar) = todo::calendar_id(&list.id) {
                 value["provider"] = json!("caldav");
                 value["read_only"] = json!(!todo::writable(conn, &list.id)?);
+                // One username can sign in to two servers: the account ID
+                // keeps their lists apart and the server tells them apart.
+                if let Some((account, account_id, server)) = conn
+                    .query_row(
+                        "SELECT a.username, a.id, a.server_url FROM dav_calendars c
+                         JOIN dav_accounts a ON a.id = c.account WHERE c.id = ?1",
+                        [calendar],
+                        |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, String>(1)?,
+                                row.get::<_, String>(2)?,
+                            ))
+                        },
+                    )
+                    .optional()?
+                {
+                    value["account"] = json!(account);
+                    value["account_id"] = json!(account_id);
+                    value["server"] = json!(server);
+                }
             } else if google_tasks::is_list(&list.id) {
                 value["provider"] = json!("google");
+                value["account"] = json!(list_account(
+                    conn,
+                    "SELECT email FROM google_task_lists WHERE id = ?1",
+                    &list.id,
+                )?);
             }
             Ok(value)
         })
@@ -112,6 +140,13 @@ pub fn lists_payload(conn: &Connection) -> Result<Value> {
         "lists": lists?,
         "default_list_id": default_id,
     }))
+}
+
+fn list_account(conn: &Connection, sql: &str, id: &str) -> Result<String> {
+    Ok(conn
+        .query_row(sql, [id], |row| row.get::<_, String>(0))
+        .optional()?
+        .unwrap_or_default())
 }
 
 pub fn tasks_payload(conn: &Connection, list_id: &str, include_completed: bool) -> Result<Value> {

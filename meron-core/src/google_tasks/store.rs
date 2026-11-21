@@ -71,6 +71,25 @@ pub(super) fn accounts_payload(conn: &Connection) -> Result<Value> {
     Ok(json!({ "accounts": accounts }))
 }
 
+/// Each account with the minutes between its background syncs: those of the
+/// Google calendar account on the same address (0 = only when asked), or
+/// the calendar default when there is none.
+pub fn sync_intervals(conn: &Connection) -> Result<Vec<(String, i64)>> {
+    let calendars = crate::caldav::store::accounts(conn)?;
+    Ok(emails(conn)?
+        .into_iter()
+        .map(|email| {
+            let minutes = calendars
+                .iter()
+                .find(|account| account.google && account.username.eq_ignore_ascii_case(&email))
+                .map_or(crate::caldav::store::DEFAULT_SYNC_INTERVAL, |account| {
+                    account.sync_interval
+                });
+            (email, minutes)
+        })
+        .collect())
+}
+
 pub(super) fn record_sync(
     conn: &Connection,
     email: &str,
@@ -83,6 +102,18 @@ pub(super) fn record_sync(
         params![email, error, db::now_unix()],
     )?;
     Ok(())
+}
+
+/// The accounts with edits waiting to be sent.
+pub fn pending_emails(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT l.email FROM google_task_items i JOIN google_task_lists l ON l.id = i.list_id
+         WHERE i.state IN ('created', 'changed', 'deleted', 'deleted_while_creating')
+         ORDER BY l.email",
+    )?;
+    Ok(stmt
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 pub fn pending(conn: &Connection) -> Result<bool> {

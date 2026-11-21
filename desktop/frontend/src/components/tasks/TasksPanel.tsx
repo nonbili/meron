@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { TaskListMenuItems } from './TaskListMenuItems'
 import { DndContext, closestCenter } from '@dnd-kit/core'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -30,7 +31,6 @@ import {
   deleteTask,
   deleteTaskList,
   loadTaskLists,
-  taskListLabel,
   loadTasks,
   openTaskMail,
   renameTaskList,
@@ -252,19 +252,16 @@ export function TasksPanel({ listId }: { listId: string }) {
           overlay
           className="fixed z-50 min-w-[200px] shadow-xl"
         >
-          {lists.map((list) => (
-            <MenuItem
-              key={list.id}
-              icon={<ListTodo size={13} className="text-secondary" />}
-              label={taskListLabel(list)}
-              trailing={list.id === listId ? <Check size={13} className="text-accent" /> : undefined}
-              onClick={() => {
-                setListMenu(null)
-                tasks$.editingId.set('')
-                ui$.activeTaskList.set(list.id)
-              }}
-            />
-          ))}
+          <TaskListMenuItems
+            lists={lists}
+            selected={listId}
+            icon={<ListTodo size={13} className="text-secondary" />}
+            onPick={(id) => {
+              setListMenu(null)
+              tasks$.editingId.set('')
+              ui$.activeTaskList.set(id)
+            }}
+          />
           <div className="my-1 border-t border-border" />
           <MenuItem
             icon={<Plus size={13} className="text-secondary" />}

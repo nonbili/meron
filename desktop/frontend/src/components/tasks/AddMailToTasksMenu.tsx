@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { TaskListMenuItems } from './TaskListMenuItems'
 import { useValue } from '@legendapp/state/react'
-import { Check, ChevronRight, ListPlus } from 'lucide-react'
+import { ChevronRight, ListPlus } from 'lucide-react'
 import { errorMessage } from '../../lib/errors'
 import { useTranslation } from '../../lib/i18n'
-import { addTaskFromMessage, loadTaskLists, taskListLabel, type TaskList } from '../../states/tasks'
+import { addTaskFromMessage, loadTaskLists, type TaskList } from '../../states/tasks'
 import { showToast, ui$ } from '../../states/ui'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
@@ -65,14 +66,7 @@ export function AddMailToTasksMenu({
           dataAttribute="data-thread-context-menu"
           className="fixed z-[51] max-h-[calc(100vh-1rem)] w-[200px] overflow-y-auto shadow-xl"
         >
-          {lists.map((list) => (
-            <MenuItem
-              key={list.id}
-              label={taskListLabel(list)}
-              trailing={list.id === selectedList ? <Check size={13} /> : undefined}
-              onClick={() => pick(list.id)}
-            />
-          ))}
+          <TaskListMenuItems lists={lists} selected={selectedList} onPick={pick} />
         </FloatingContextMenu>
       )}
     </div>

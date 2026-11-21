@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import { TaskListMenuItems } from './TaskListMenuItems'
 import { useValue } from '@legendapp/state/react'
-import { Check, ListPlus } from 'lucide-react'
+import { ListPlus } from 'lucide-react'
 import { errorMessage } from '../../lib/errors'
 import { useTranslation } from '../../lib/i18n'
-import {
-  addTaskFromMessage,
-  loadTaskLists,
-  taskListLabel,
-  warnIfThreadInTasks,
-  type TaskList,
-} from '../../states/tasks'
+import { addTaskFromMessage, loadTaskLists, warnIfThreadInTasks, type TaskList } from '../../states/tasks'
 import { showToast, ui$ } from '../../states/ui'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
-import { MenuItem } from '../menu/MenuItem'
 
 // The conversation header's twin of AddMailToTasksMenu. Lists are read on press
 // rather than on mount, so one made in the panel meanwhile is offered; with a
@@ -73,14 +67,7 @@ export function AddToTasksButton({ title, account, threadId }: { title: string; 
           overlayClassName="fixed inset-0 z-[60]"
           className="fixed z-[61] max-h-[calc(100vh-1rem)] w-[200px] overflow-y-auto shadow-xl"
         >
-          {menu.lists.map((list) => (
-            <MenuItem
-              key={list.id}
-              label={taskListLabel(list)}
-              trailing={list.id === selectedList ? <Check size={13} /> : undefined}
-              onClick={() => void add(list.id)}
-            />
-          ))}
+          <TaskListMenuItems lists={menu.lists} selected={selectedList} onPick={(id) => void add(id)} />
         </FloatingContextMenu>
       )}
     </>

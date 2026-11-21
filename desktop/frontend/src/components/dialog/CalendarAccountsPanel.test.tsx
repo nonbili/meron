@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
+import { settings$ } from '../../states/settings'
 import { caldav$, setCalendarTasksEnabled, type CalendarAccount } from '../../states/caldav'
 import { settleConfirm, ui$ } from '../../states/ui'
 import type { Account, SystemCheck } from '../../types'
@@ -104,10 +105,12 @@ describe('finding calendars for existing mail accounts', () => {
   })
 
   async function find() {
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Find calendars for a mail account' })))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Find calendars' })))
   }
 
-  it('connects Google Tasks independently with the supplied account', async () => {
+  it("switches Google Tasks on from the Google account's calendar card", async () => {
+    caldav$.accounts.set([googleCalendars])
+    calendarAccounts = [googleCalendars]
     const invoke = (window as any).go.main.App.Invoke
     ;(window as any).go.main.App.Invoke = async (method: string, payload: unknown) => {
       if (method === 'googleTasks.connect') {
@@ -117,16 +120,99 @@ describe('finding calendars for existing mail accounts', () => {
       return invoke(method, payload)
     }
     render(<CalendarAccountsPanel />)
-    const section = within(screen.getByRole('heading', { name: 'Google Tasks' }).closest('section')!)
-    fireEvent.change(section.getByRole('textbox', { name: 'Email Address' }), { target: { value: google.email } })
-    await act(async () =>
-      fireEvent.submit(section.getByRole('button', { name: 'Sign in with Google' }).closest('form')!),
-    )
+    expect(screen.queryByRole('heading', { name: 'Google Tasks' })).toBeNull()
+    expect(screen.queryByRole('textbox', { name: 'Email Address' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: googleCalendars.name }))
+    const toggle = screen.getByRole('switch', { name: 'Google Tasks' })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    await act(async () => fireEvent.click(toggle))
     expect(calls.filter(({ method }) => method === 'googleTasks.connect')).toEqual([
       { method: 'googleTasks.connect', payload: { login_hint: google.email } },
     ])
-    expect(section.getByText(google.email)).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Google Tasks' }).getAttribute('aria-checked')).toBe('true')
     expect(calls.some(({ method }) => method === 'caldav.connectGoogle')).toBe(false)
+  })
+
+  function withGoogleTasks(account: Record<string, unknown>) {
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (method: string, payload: unknown) =>
+      method === 'googleTasks.accounts'
+        ? { accounts: [{ email: google.email, last_sync_at: 0, last_error: '', ...account }] }
+        : invoke(method, payload)
+  }
+
+  it('shows a Google Tasks failure on the card and opens it', async () => {
+    caldav$.accounts.set([googleCalendars])
+    calendarAccounts = [googleCalendars]
+    withGoogleTasks({ last_error: 'Reconnect Google Tasks' })
+    render(<CalendarAccountsPanel />)
+    const card = screen.getByRole('button', { name: googleCalendars.name })
+    await waitFor(() => expect(card.getAttribute('aria-expanded')).toBe('true'))
+    expect(screen.getByText('Sync failed: Reconnect Google Tasks')).toBeTruthy()
+    fireEvent.click(card)
+    expect(screen.getByText('Google Tasks · Sync failed: Reconnect Google Tasks')).toBeTruthy()
+  })
+
+  it('reconnects Google Tasks from its own row when only Tasks fails', async () => {
+    caldav$.accounts.set([googleCalendars])
+    calendarAccounts = [googleCalendars]
+    withGoogleTasks({ last_error: 'Reconnect Google Tasks' })
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (method: string, payload: unknown) => {
+      if (method !== 'googleTasks.connect') return invoke(method, payload)
+      calls.push({ method, payload })
+      return { accounts: [{ email: google.email, last_error: '', last_sync_at: 1 }] }
+    }
+    render(<CalendarAccountsPanel />)
+    const reconnect = await screen.findByRole('button', { name: 'Reconnect · Google Tasks' })
+    await act(async () => fireEvent.click(reconnect))
+    expect(calls.filter(({ method }) => method === 'googleTasks.connect')).toEqual([
+      { method: 'googleTasks.connect', payload: { login_hint: google.email } },
+    ])
+  })
+
+  it('signs in to a Google account without a mailbox for it', async () => {
+    accounts$.set([mailbox])
+    connectedAccount = googleCalendars
+    render(<CalendarAccountsPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email Address' }), { target: { value: google.email } })
+    await act(async () => fireEvent.submit(screen.getByRole('textbox', { name: 'Email Address' }).closest('form')!))
+    // The address goes along, so the sign-in asks for every scope the
+    // account's other Google services hold.
+    expect(calls.filter(({ method }) => method === 'caldav.connectGoogle').map(({ payload }) => payload)).toEqual([
+      { account_id: undefined, login_hint: google.email },
+    ])
+  })
+
+  it('hides Google Tasks while Tasks is switched off', async () => {
+    const tasksEnabled = settings$.tasksEnabled.peek()
+    settings$.tasksEnabled.set(false)
+    try {
+      caldav$.accounts.set([googleCalendars])
+      calendarAccounts = [googleCalendars]
+      withGoogleTasks({ last_error: 'Reconnect Google Tasks' })
+      render(<CalendarAccountsPanel />)
+      await act(async () => {})
+      const card = screen.getByRole('button', { name: googleCalendars.name })
+      expect(card.getAttribute('aria-expanded')).toBe('false')
+      fireEvent.click(card)
+      expect(screen.queryByRole('switch', { name: 'Google Tasks' })).toBeNull()
+      expect(screen.queryByText(/Reconnect Google Tasks/)).toBeNull()
+    } finally {
+      settings$.tasksEnabled.set(tasksEnabled)
+    }
+  })
+
+  it('still lists a Google Tasks account whose calendar account was removed', async () => {
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (method: string, payload: unknown) =>
+      method === 'googleTasks.accounts'
+        ? { accounts: [{ email: google.email, last_error: '', last_sync_at: 0 }] }
+        : invoke(method, payload)
+    render(<CalendarAccountsPanel />)
+    const heading = await screen.findByRole('heading', { name: 'Google Tasks' })
+    expect(within(heading.closest('section')!).getByText(google.email)).toBeTruthy()
   })
 
   it('asks before discarding unsent CalDAV tasks when switching off a list', async () => {
@@ -268,7 +354,7 @@ describe('finding calendars for existing mail accounts', () => {
     ]
     ui$.selectedAccount.set(google.id)
     render(<CalendarAccountsPanel />)
-    const choose = await screen.findByRole('button', { name: 'Choose calendars to sync' })
+    const choose = await screen.findByRole('button', { name: 'Choose calendars' })
     fireEvent.click(choose)
     const picker = within(screen.getByRole('dialog', { name: 'Choose calendars to sync' }))
     expect(picker.getByText(google.email)).toBeTruthy()
@@ -297,7 +383,7 @@ describe('finding calendars for existing mail accounts', () => {
     refreshedAccounts = [googleCalendars]
     ui$.selectedAccount.set(google.id)
     render(<CalendarAccountsPanel />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Choose calendars to sync' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose calendars' }))
     const picker = within(screen.getByRole('dialog', { name: 'Choose calendars to sync' }))
     expect(picker.getByRole('status').textContent).toBe(warning)
     expect(picker.getAllByRole('checkbox')).toHaveLength(1)

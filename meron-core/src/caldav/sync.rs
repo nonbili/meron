@@ -219,9 +219,10 @@ fn sync_calendars(
     let Some(calendars) = calendars else {
         return Ok(());
     };
+    let tasks_on = db.with(crate::store::tasks_enabled)?;
     let synced: Vec<_> = calendars
         .iter()
-        .filter(|c| c.syncs_events() || c.syncs_tasks())
+        .filter(|c| syncs(c, tasks_on))
         .map(|c| Ok((c, client.for_calendar(&c.url)?)))
         .collect::<Result<_>>()?;
 
@@ -278,6 +279,12 @@ fn sync_calendars(
         }
     }
     Ok(())
+}
+
+/// Whether a calendar takes part in a sync. Task lists rest while Tasks is
+/// switched off; a calendar that also holds events still syncs for them.
+pub(super) fn syncs(calendar: &store::DavCalendar, tasks_on: bool) -> bool {
+    calendar.syncs_events() || (tasks_on && calendar.syncs_tasks())
 }
 
 // An empty sync token returns a full snapshot, so missing objects are deletions.

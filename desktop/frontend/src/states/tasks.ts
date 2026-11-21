@@ -10,12 +10,53 @@ export type TaskList = {
   id: string
   title: string
   provider?: 'caldav' | 'google'
+  /** The address of the account a synced list belongs to. */
+  account?: string
+  /** CalDAV only: the account, as one username may sign in to two servers. */
+  account_id?: string
+  server?: string
   read_only?: boolean
 }
 
-export function taskListLabel(list: TaskList): string {
-  const provider = list.provider === 'google' ? 'Google Tasks' : list.provider === 'caldav' ? 'CalDAV' : ''
-  return provider ? `${list.title} · ${provider}` : list.title
+function serverHost(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
+
+export type TaskListGroup = { key: string; label: string; lists: TaskList[] }
+
+/** Lists kept on this device (unlabelled) first, then one group per synced
+ * account, labelled by its address and service, in the order lists come.
+ * Two CalDAV accounts with one username also name their servers. */
+export function taskListGroups(lists: TaskList[]): TaskListGroup[] {
+  const groups = new Map<string, TaskListGroup & { server?: string }>()
+  const local: TaskListGroup = { key: '', label: '', lists: [] }
+  for (const list of lists) {
+    if (!list.provider) {
+      local.lists.push(list)
+      continue
+    }
+    const service = list.provider === 'google' ? 'Google Tasks' : 'CalDAV'
+    const key = `${list.provider}:${list.account_id || list.account || ''}`
+    let group = groups.get(key)
+    if (!group) {
+      const label = list.account ? `${list.account} · ${service}` : service
+      group = { key, label, lists: [], server: list.server }
+      groups.set(key, group)
+    }
+    group.lists.push(list)
+  }
+  const labels = [...groups.values()].map((group) => group.label)
+  for (const group of groups.values()) {
+    if (group.server && labels.indexOf(group.label) !== labels.lastIndexOf(group.label)) {
+      group.label = `${group.label} (${serverHost(group.server)})`
+    }
+    delete group.server
+  }
+  return [...(local.lists.length ? [local] : []), ...groups.values()]
 }
 
 export type Task = {
