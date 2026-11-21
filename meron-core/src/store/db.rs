@@ -1680,6 +1680,42 @@ mod tests {
     }
 
     #[test]
+    fn other_contacts_leave_out_every_address_an_enabled_book_holds() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        contact_message(&conn, 1, "INBOX", 10);
+        let addrs = |unsaved: bool| {
+            super::super::list_contacts_in(
+                &conn,
+                "",
+                "",
+                20,
+                super::super::ContactSort::Name,
+                true,
+                unsaved,
+            )
+            .unwrap()
+            .into_iter()
+            .map(|contact| contact.addr)
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(addrs(true), ["person@example.com"]);
+        conn.execute_batch(
+            r#"INSERT INTO carddav_accounts(id, server, username) VALUES ('a', 'https://dav.example.test/', 'cora@example.test');
+            INSERT INTO carddav_books(id, account, url, name, enabled) VALUES ('b', 'a', '/b/', 'Work', 1);
+            INSERT INTO carddav_cards(book, url, etag, name, emails) VALUES ('b', '/b/1.vcf', '"v1"', 'Person', '["Person@Example.com"]');
+            INSERT INTO carddav_cards(book, url, etag, name, emails) VALUES ('b', '/b/2.vcf', '"v1"', 'Bea', '["bea@example.test"]');"#,
+        )
+        .unwrap();
+        // Saved in a book, whatever the case: no longer an other contact.
+        assert!(addrs(true).is_empty());
+        assert_eq!(addrs(false), ["bea@example.test", "person@example.com"]);
+        conn.execute("UPDATE carddav_books SET enabled = 0", [])
+            .unwrap();
+        assert_eq!(addrs(true), ["person@example.com"]);
+    }
+
+    #[test]
     fn v32_makes_every_cached_card_download_again() {
         let conn = Connection::open_in_memory().unwrap();
         run_migrations(&conn).unwrap();

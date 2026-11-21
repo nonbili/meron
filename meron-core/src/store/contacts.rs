@@ -205,6 +205,20 @@ pub fn list_contacts(
     sort: ContactSort,
     directory: bool,
 ) -> Result<Vec<Contact>> {
+    list_contacts_in(conn, account, query, limit, sort, directory, false)
+}
+
+/// [`list_contacts`], or with `unsaved_only` just the addresses no enabled
+/// address book holds: the people known only from mail ("Other contacts").
+pub fn list_contacts_in(
+    conn: &Connection,
+    account: &str,
+    query: &str,
+    limit: u32,
+    sort: ContactSort,
+    directory: bool,
+    unsaved_only: bool,
+) -> Result<Vec<Contact>> {
     use std::collections::{HashMap, HashSet};
 
     let q = query.trim().to_lowercase();
@@ -311,7 +325,13 @@ pub fn list_contacts(
 
     // Book contacts are separate records, but the directory and composer
     // return one suggestion per mailbox address across all contact sources.
-    for (name, addr) in crate::carddav::contacts(conn)? {
+    let booked = crate::carddav::contacts(conn)?;
+    if unsaved_only {
+        for (_, addr) in &booked {
+            tallies.remove(&addr.to_lowercase());
+        }
+    }
+    for (name, addr) in booked.into_iter().filter(|_| !unsaved_only) {
         let entry = tallies.entry(addr.to_lowercase()).or_insert_with(|| Tally {
             names: Vec::new(),
             addr,

@@ -1,19 +1,20 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import {
   ArrowUpDown,
   BookUser,
   Check,
+  ChevronDown,
   ChevronLeft,
-  Cloud,
   CloudUpload,
   Copy,
-  Lock,
   Mail,
+  MonitorSmartphone,
   Pencil,
   Plus,
   Pin,
   PinOff,
+  Settings2,
   SquarePen,
   Trash2,
   UserPlus,
@@ -48,7 +49,7 @@ import { confirmAction, showToast, ui$ } from '../../states/ui'
 import { mail$ } from '../../states/mail'
 import { IconButton } from '../button/IconButton'
 import { useNarrowWindow } from '../../lib/useNarrowWindow'
-import { ContactNotes, NoteMarkdown } from './ContactNotes'
+import { AddNoteButton, ContactNotes, ContactSection, NoteMarkdown } from './ContactNotes'
 import { AddressBooks } from './AddressBooks'
 import {
   ContactEditor,
@@ -59,6 +60,14 @@ import {
   type EditorResult,
 } from './ContactEditor'
 import { Button } from '../button/Button'
+
+/** `contacts$.book` for the correspondents no address book holds. */
+const OTHER_CONTACTS = ':other'
+/** Rows per `carddav.contacts` page. */
+const BOOK_PAGE = 50
+
+/** A card as an address book's list gives it (see `carddav.contacts`). */
+type ListedCard = { id: string; name: string; emails: string[] }
 
 const SORT_LABELS = {
   frequent: 'contacts.sortFrequent',
@@ -78,6 +87,13 @@ export function ContactsView() {
   const [copied, setCopied] = useState(false)
   const sort = useValue(contacts$.sort)
   const [sortOpen, setSortOpen] = useState(false)
+  const [bookMenuOpen, setBookMenuOpen] = useState(false)
+  const bookMenuRef = useRef<HTMLDivElement>(null)
+  useDismissOnOutside(
+    bookMenuOpen,
+    (target) => Boolean(bookMenuRef.current?.contains(target as Node)),
+    () => setBookMenuOpen(false),
+  )
   const [addressBooks, setAddressBooks] = useState(false)
   const sortRef = useRef<HTMLDivElement>(null)
   useDismissOnOutside(
@@ -88,6 +104,9 @@ export function ContactsView() {
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(100)
   const [contacts, setContacts] = useState<Contact[]>([])
+  // Whether `contacts` came from the Other contacts filter, so rows from the
+  // other list never show under its title.
+  const [contactsOther, setContactsOther] = useState<boolean | null>(null)
   const selected = useValue(contacts$.selected)
   // Our own address is drawn as the account, as the reader draws our messages.
   const ownAccount = accountOwning(accounts, selected?.addr)
@@ -106,6 +125,30 @@ export function ContactsView() {
   // Enabled address books (where a new contact can go), and the cards saved
   // in them for the open contact's address.
   const [books, setBooks] = useState<AddressBook[]>([])
+  const [booksLoaded, setBooksLoaded] = useState(false)
+  // The address book the list shows; one since disabled or removed shows
+  // every contact again, without forgetting the choice before books load.
+  const chosenBook = useValue(contacts$.book)
+  const book = books.find((b) => b.id === chosenBook)
+  // With no address book every contact is an other one: nothing to choose.
+  const otherOnly = chosenBook === OTHER_CONTACTS && books.length > 0
+  const shown = book?.id ?? (otherOnly ? OTHER_CONTACTS : '')
+  // The rows loaded for one book and search, and the refresh they came from.
+  const [bookCards, setBookCards] = useState<{
+    book: string
+    query: string
+    refresh: number
+    cards: ListedCard[]
+    /** Where the next page starts: rows read, before dropping repeats. */
+    offset: number
+    more: boolean
+  } | null>(null)
+  const bookCardsRef = useRef(bookCards)
+  bookCardsRef.current = bookCards
+  // How many rows the book list should hold: Load more asks for another page.
+  const [bookWant, setBookWant] = useState(BOOK_PAGE)
+  const [bookLoading, setBookLoading] = useState(false)
+  const [bookError, setBookError] = useState(false)
   const [cards, setCards] = useState<BookCard[]>([])
   // The address whose cards `cards` holds, so "only in your mail" is not
   // shown before they have loaded.
@@ -120,6 +163,8 @@ export function ContactsView() {
     note?: string
     /** The note is the one kept on this device: drop that copy once saved. */
     movesLocalNote?: boolean
+    /** Where a new contact goes unless another book is picked. */
+    bookId?: string
   }>(null)
   // The note kept only on this device for the open contact. Once the contact
   // is in an address book, its note lives on the card instead.
@@ -130,6 +175,12 @@ export function ContactsView() {
   }, [selectedAddr])
 
   const localNoteEditing = !!localNoteState && localNoteState.draft !== localNoteState.saved
+  // The address whose device note was opened from the "private note" link.
+  const [deviceNoteOpen, setDeviceNoteOpen] = useState('')
+  // A contact saved in an address book has its notes there: the device card
+  // shows only once there is a note on this device, or one is being written.
+  const savedInBook = !!selected && cardsAddr === selected.addr && cards.length > 0
+  const deviceCard = !savedInBook || !!localNote || localNoteEditing || deviceNoteOpen === selectedAddr
   /** Once confirmed, add the device note to a card's note on the server,
    * then drop it here. Whoever can read that address book will see it. */
   async function moveLocalNote(addr: string, card: BookCard, text: string) {
@@ -185,20 +236,23 @@ export function ContactsView() {
       accounts: { username: string; books: { id: string; name: string; enabled: boolean }[] }[]
     }>('carddav.accounts')
       .then((res) => {
-        if (!cancelled)
-          setBooks(
-            (res?.accounts ?? []).flatMap((account) =>
-              account.books
-                .filter((book) => book.enabled)
-                .map(({ id, name }) => ({
-                  id,
-                  name,
-                  account: account.username,
-                })),
-            ),
-          )
+        if (cancelled) return
+        setBooksLoaded(true)
+        setBooks(
+          (res?.accounts ?? []).flatMap((account) =>
+            account.books
+              .filter((book) => book.enabled)
+              .map(({ id, name }) => ({
+                id,
+                name,
+                account: account.username,
+              })),
+          ),
+        )
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setBooksLoaded(true)
+      })
     return () => {
       cancelled = true
     }
@@ -246,14 +300,74 @@ export function ContactsView() {
     }
   }
 
+  const bookId = book?.id ?? ''
+  useEffect(() => {
+    if (!bookId) return
+    let cancelled = false
+    setBookError(false)
+    setBookLoading(true)
+    const timer = setTimeout(() => {
+      void (async () => {
+        // More of the same list carries on from its rows; anything else (a
+        // new search, or a refresh after a change) loads every page afresh,
+        // so no deleted, renamed or reordered card is left behind.
+        const old = bookCardsRef.current
+        const same = old?.book === bookId && old.query === query && old.refresh === retry
+        let cards = same ? old.cards : []
+        let offset = same ? old.offset : 0
+        let more = same ? old.more : true
+        while (more && cards.length < bookWant) {
+          const res = await invoke<{ contacts: ListedCard[]; more: boolean }>('carddav.contacts', {
+            book_id: bookId,
+            query,
+            offset,
+          })
+          if (cancelled) return
+          // A sync between pages can shift a card into the next one.
+          cards = [...new Map([...cards, ...res.contacts].map((card) => [card.id, card])).values()]
+          offset += res.contacts.length
+          more = res.more && res.contacts.length > 0
+        }
+        setBookCards({ book: bookId, query, refresh: retry, cards, offset, more })
+      })()
+        .catch(() => {
+          if (!cancelled) setBookError(true)
+        })
+        .finally(() => {
+          if (!cancelled) setBookLoading(false)
+        })
+    }, 150)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [bookId, query, bookWant, retry])
+
+  function chooseBook(id: string) {
+    setBookMenuOpen(false)
+    if (id === chosenBook) return
+    contacts$.book.set(id)
+    setBookCards(null)
+    setBookWant(BOOK_PAGE)
+  }
+
   useEffect(() => {
     let cancelled = false
     setContactsLoading(true)
     setContactsError(false)
     const timer = setTimeout(() => {
-      void invoke<{ contacts: Contact[] }>('mail.suggestContacts', { account: '', query, limit, sort, directory: true })
+      void invoke<{ contacts: Contact[] }>('mail.suggestContacts', {
+        account: '',
+        query,
+        limit,
+        sort,
+        directory: true,
+        unsaved: otherOnly,
+      })
         .then((res) => {
-          if (!cancelled) setContacts(res.contacts)
+          if (cancelled) return
+          setContacts(res.contacts)
+          setContactsOther(otherOnly)
         })
         .catch(() => {
           if (!cancelled) setContactsError(true)
@@ -266,7 +380,7 @@ export function ContactsView() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [query, limit, sort, retry, accounts])
+  }, [query, limit, sort, retry, accounts, otherOnly])
 
   useEffect(() => {
     if (!selected) return
@@ -318,10 +432,11 @@ export function ContactsView() {
     </button>
   )
   const isPinned = (contact: Contact) => pinned.some((c) => contactKey(c.addr) === contactKey(contact.addr))
-  const matchingPins = pinned
+  // Other contacts are a filter of the directory, pinned ones included.
+  const matchingPins = (otherOnly ? [] : pinned)
     .filter((c) => `${c.name} ${c.addr}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => (a.name || a.addr).localeCompare(b.name || b.addr))
-  const others = contacts.filter((c) => !isPinned(c))
+  const others = otherOnly ? contacts : contacts.filter((c) => !isPinned(c))
   const contactRow = (contact: Contact) => (
     <div key={contactKey(contact.addr)} className="group mb-0.5 flex items-center rounded-lg pr-1.5 hover:bg-hover">
       <button
@@ -341,7 +456,16 @@ export function ContactsView() {
           )}
         </span>
       </button>
-      {/* Not an everyday action, so it stays out of sight until the row is hovered. */}
+      {/* Not everyday actions, so they stay out of sight until the row is hovered. */}
+      {canSend && (
+        <IconButton
+          icon={SquarePen}
+          size="sm"
+          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          label={t('composer.actions.newMessage')}
+          onClick={() => openComposeTab({ to: formatContact(contact) })}
+        />
+      )}
       <IconButton
         icon={isPinned(contact) ? PinOff : Pin}
         size="sm"
@@ -384,31 +508,106 @@ export function ContactsView() {
               setThreads([])
             }}
           />
+        ) : addressBooks ? (
+          <IconButton icon={ChevronLeft} size="sm" label={t('buttons.back')} onClick={() => setAddressBooks(false)} />
         ) : (
           <Users size={17} className="text-accent" />
         )}
-        <h1 className="min-w-0 flex-1 truncate">
-          {editor
-            ? editor.card
-              ? t('contacts.editContact', { defaultValue: 'Edit contact' })
-              : t('contacts.newContact', { defaultValue: 'New contact' })
-            : t('contacts.title')}
-        </h1>
+        {!editor && !selected && !addressBooks ? (
+          // The title names what the list shows, and switches it.
+          <div ref={bookMenuRef} className="relative flex min-w-0 flex-1">
+            <button
+              className="-ml-1.5 flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 hover:bg-hover cursor-pointer"
+              aria-haspopup="menu"
+              aria-expanded={bookMenuOpen}
+              aria-label={t('contacts.showBook', { defaultValue: 'Show address book' })}
+              title={book ? bookLabel(book.name, book.account) : undefined}
+              onClick={() => setBookMenuOpen(!bookMenuOpen)}
+            >
+              <h1 className="min-w-0 truncate">
+                {book
+                  ? book.name
+                  : otherOnly
+                    ? t('contacts.otherContacts', { defaultValue: 'Other contacts' })
+                    : t('contacts.title')}
+              </h1>
+              <ChevronDown size={14} aria-hidden className="shrink-0 text-secondary" />
+            </button>
+            {bookMenuOpen && (
+              <MenuSurface
+                role="menu"
+                className="absolute left-0 top-full z-50 mt-1 max-h-[calc(100vh-7rem)] min-w-[14rem] max-w-[18rem] overflow-y-auto p-1"
+              >
+                {[
+                  {
+                    id: '',
+                    label: t('contacts.allContacts', { defaultValue: 'All contacts' }),
+                    icon: <Users size={14} aria-hidden className="shrink-0" />,
+                  },
+                  // With no address book every contact is an other one.
+                  ...(books.length
+                    ? [
+                        {
+                          id: OTHER_CONTACTS,
+                          label: t('contacts.otherContacts', { defaultValue: 'Other contacts' }),
+                          icon: <Mail size={14} aria-hidden className="shrink-0" />,
+                        },
+                      ]
+                    : []),
+                  ...books.map((b) => ({
+                    id: b.id,
+                    label: bookLabel(b.name, b.account),
+                    icon: <BookUser size={14} aria-hidden className="shrink-0" />,
+                  })),
+                ].map((option, index) => (
+                  <Fragment key={option.id}>
+                    {/* Every contact, then where they are kept. */}
+                    {index === 2 && <div role="separator" className="mx-1 my-1 border-t border-border/50" />}
+                    <MenuItem
+                      icon={option.icon}
+                      label={option.label}
+                      pressed={option.id === shown}
+                      trailing={
+                        option.id === shown ? (
+                          <Check size={13} className="text-accent" />
+                        ) : (
+                          <span className="w-[13px]" />
+                        )
+                      }
+                      onClick={() => chooseBook(option.id)}
+                    />
+                  </Fragment>
+                ))}
+                <div role="separator" className="mx-1 my-1 border-t border-border/50" />
+                <MenuItem
+                  icon={<Settings2 size={14} aria-hidden className="shrink-0" />}
+                  label={t('contacts.manageAddressBooks', { defaultValue: 'Manage address books…' })}
+                  trailing={<span className="w-[13px]" />}
+                  onClick={() => {
+                    setBookMenuOpen(false)
+                    setAddressBooks(true)
+                  }}
+                />
+              </MenuSurface>
+            )}
+          </div>
+        ) : (
+          <h1 className="min-w-0 flex-1 truncate">
+            {editor
+              ? editor.card
+                ? t('contacts.editContact', { defaultValue: 'Edit contact' })
+                : t('contacts.newContact', { defaultValue: 'New contact' })
+              : addressBooks
+                ? t('contacts.addressBooks', { defaultValue: 'Address books' })
+                : t('contacts.title')}
+          </h1>
+        )}
         {!editor && !selected && !addressBooks && books.length > 0 && (
           <IconButton
             icon={UserPlus}
             size="sm"
             label={t('contacts.newContact', { defaultValue: 'New contact' })}
-            onClick={() => setEditor({})}
-          />
-        )}
-        {!editor && !selected && (
-          <IconButton
-            icon={BookUser}
-            size="sm"
-            label={t('contacts.addressBooks', { defaultValue: 'Address books' })}
-            active={addressBooks}
-            onClick={() => setAddressBooks(!addressBooks)}
+            onClick={() => setEditor({ bookId: book?.id })}
           />
         )}
         {!editor && selected && (
@@ -428,6 +627,7 @@ export function ContactsView() {
           initialName={editor.name}
           initialEmail={editor.email}
           initialNote={editor.note}
+          initialBookId={editor.bookId}
           books={books}
           onCancel={() => setEditor(null)}
           onDone={editorDone}
@@ -435,9 +635,9 @@ export function ContactsView() {
       ) : !selected && addressBooks ? (
         <AddressBooks onChange={() => setRetry((n) => n + 1)} />
       ) : !selected ? (
-        <>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="m-3 flex items-center gap-1.5">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="m-3">
+            <div className="flex items-center gap-1.5">
               <input
                 className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
                 value={query}
@@ -446,74 +646,131 @@ export function ContactsView() {
                 onChange={(event) => {
                   setQuery(event.target.value)
                   setLimit(100)
+                  setBookWant(BOOK_PAGE)
+                  // Back to one page: rows loaded for this search before are read again.
+                  setBookCards((old) => old && { ...old, refresh: -1 })
                 }}
               />
-              <div ref={sortRef} className="relative">
-                <IconButton
-                  icon={ArrowUpDown}
-                  size="md"
-                  radius="lg"
-                  active={sortOpen}
-                  label={`${t('contacts.sort')}: ${t(SORT_LABELS[sort])}`}
-                  aria-haspopup="menu"
-                  aria-expanded={sortOpen}
-                  onClick={() => setSortOpen(!sortOpen)}
-                />
-                {sortOpen && (
-                  <MenuSurface role="menu" className="absolute right-0 top-full z-50 mt-1 min-w-[10rem] p-1">
-                    {CONTACT_SORTS.map((option) => (
-                      <MenuItem
-                        key={option}
-                        label={t(SORT_LABELS[option])}
-                        pressed={option === sort}
-                        trailing={
-                          option === sort ? <Check size={13} className="text-accent" /> : <span className="w-[13px]" />
-                        }
-                        onClick={() => {
-                          contacts$.sort.set(option)
-                          setLimit(100)
-                          setSortOpen(false)
-                        }}
-                      />
-                    ))}
-                  </MenuSurface>
-                )}
-              </div>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-2">
-              {matchingPins.length > 0 && (
-                <>
-                  <h2 className="px-2 py-2 text-xs font-semibold text-secondary">{t('contacts.pinned')}</h2>
-                  {matchingPins.map(contactRow)}
-                </>
+              {/* An address book lists by name. */}
+              {!book && (
+                <div ref={sortRef} className="relative">
+                  <IconButton
+                    icon={ArrowUpDown}
+                    size="md"
+                    radius="lg"
+                    active={sortOpen}
+                    label={`${t('contacts.sort')}: ${t(SORT_LABELS[sort])}`}
+                    aria-haspopup="menu"
+                    aria-expanded={sortOpen}
+                    onClick={() => setSortOpen(!sortOpen)}
+                  />
+                  {sortOpen && (
+                    <MenuSurface role="menu" className="absolute right-0 top-full z-50 mt-1 min-w-[10rem] p-1">
+                      {CONTACT_SORTS.map((option) => (
+                        <MenuItem
+                          key={option}
+                          label={t(SORT_LABELS[option])}
+                          pressed={option === sort}
+                          trailing={
+                            option === sort ? (
+                              <Check size={13} className="text-accent" />
+                            ) : (
+                              <span className="w-[13px]" />
+                            )
+                          }
+                          onClick={() => {
+                            contacts$.sort.set(option)
+                            setLimit(100)
+                            setSortOpen(false)
+                          }}
+                        />
+                      ))}
+                    </MenuSurface>
+                  )}
+                </div>
               )}
-              {contactsLoading && !contacts.length ? (
-                <p className="p-3 text-sm text-secondary">{t('common.loading')}</p>
-              ) : contactsError ? (
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-2">
+            {book ? (
+              bookError ? (
                 retryButton
+              ) : bookCards?.book !== book.id ? (
+                <p className="p-3 text-sm text-secondary">{t('common.loading')}</p>
               ) : (
                 <>
-                  {matchingPins.length > 0 && others.length > 0 && (
-                    <h2 className="px-2 py-2 text-xs font-semibold text-secondary">{t('contacts.other')}</h2>
+                  {bookCards.cards.map((card) => (
+                    <BookCardRow
+                      key={card.id}
+                      card={card}
+                      onCompose={
+                        canSend ? (addr) => openComposeTab({ to: formatContact({ name: card.name, addr }) }) : undefined
+                      }
+                      onSelect={(addr) => {
+                        contacts$.selected.set({ name: card.name, addr: contactKey(addr) })
+                        setThreads([])
+                        setCursor('')
+                        setPage('')
+                      }}
+                    />
+                  ))}
+                  {!bookCards.cards.length && (
+                    <p className="p-3 text-sm text-secondary">
+                      {query.trim()
+                        ? t('contacts.empty')
+                        : t('contacts.bookEmpty', { defaultValue: 'No contacts in this address book yet.' })}
+                    </p>
                   )}
-                  {others.map(contactRow)}
-                  {!contacts.length && !matchingPins.length && (
-                    <p className="p-3 text-sm text-secondary">{t('contacts.empty')}</p>
-                  )}
-                  {contacts.length >= limit && (
+                  {/* Only for the rows on screen: a search still loading has none yet. */}
+                  {bookCards.more && bookCards.query === query && (
                     <button
-                      disabled={contactsLoading}
+                      disabled={bookLoading}
                       className="p-3 text-sm text-accent"
-                      onClick={() => setLimit(limit + 100)}
+                      onClick={() => setBookWant(bookCards.cards.length + BOOK_PAGE)}
                     >
                       {t('threads.actions.loadMore')}
                     </button>
                   )}
                 </>
-              )}
-            </div>
+              )
+            ) : chosenBook && !booksLoaded ? (
+              <p className="p-3 text-sm text-secondary">{t('common.loading')}</p>
+            ) : (
+              <>
+                {matchingPins.length > 0 && (
+                  <>
+                    <h2 className="px-2 py-2 text-xs font-semibold text-secondary">{t('contacts.pinned')}</h2>
+                    {matchingPins.map(contactRow)}
+                  </>
+                )}
+                {contactsError ? (
+                  retryButton
+                ) : (contactsLoading && !contacts.length) || contactsOther !== otherOnly ? (
+                  <p className="p-3 text-sm text-secondary">{t('common.loading')}</p>
+                ) : (
+                  <>
+                    {matchingPins.length > 0 && others.length > 0 && (
+                      <h2 className="px-2 py-2 text-xs font-semibold text-secondary">{t('contacts.other')}</h2>
+                    )}
+                    {others.map(contactRow)}
+                    {!contacts.length && !matchingPins.length && (
+                      <p className="p-3 text-sm text-secondary">{t('contacts.empty')}</p>
+                    )}
+                    {contacts.length >= limit && (
+                      <button
+                        disabled={contactsLoading}
+                        className="p-3 text-sm text-accent"
+                        onClick={() => setLimit(limit + 100)}
+                      >
+                        {t('threads.actions.loadMore')}
+                      </button>
+                    )}
+                  </>
+                )}
+              </>
+            )}
           </div>
-        </>
+        </div>
       ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex items-center gap-3 px-4 pt-4 pb-2">
@@ -547,87 +804,57 @@ export function ContactsView() {
             )}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {cardsAddr === selected.addr && (
-              <section className="pb-2">
-                <h2 className="px-2 pt-1 pb-1.5 text-xs font-semibold text-secondary">
-                  {t('contacts.addressBook', { defaultValue: 'Address book' })}
-                </h2>
-                {cards.map((card) => (
-                  <div key={`${card.book_id}\n${card.id}`}>
-                    <div className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-hover">
-                      <BookUser size={16} aria-hidden className="shrink-0 text-accent" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm">{card.book_name}</span>
-                        <span className="block truncate text-xs text-secondary">
-                          {card.google ? `Google Contacts · ${card.account}` : card.account}
-                        </span>
-                      </span>
-                      <IconButton
-                        icon={Pencil}
-                        size="sm"
-                        label={t('contacts.editContact', { defaultValue: 'Edit contact' })}
-                        onClick={() => setEditor({ card })}
-                      />
-                      <IconButton
-                        icon={Trash2}
-                        size="sm"
-                        label={t('contacts.editorDelete', { defaultValue: 'Delete contact' })}
-                        className="text-rose-600 hover:text-rose-600 dark:text-rose-400"
-                        onClick={() =>
-                          void deleteBookCard(card, t).then((deleted) => {
-                            if (deleted) setRetry((n) => n + 1)
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                ))}
-                {!cards.length && (
-                  <div className="flex items-center gap-2.5 px-2 py-1.5">
-                    <Mail size={16} aria-hidden className="shrink-0 text-secondary" />
-                    <span className="min-w-0 flex-1 text-sm text-secondary">
-                      {t('contacts.onlyInMail', { defaultValue: 'Only in your mail' })}
-                    </span>
-                    {books.length > 0 && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        leftIcon={Plus}
-                        onClick={() =>
-                          setEditor({
-                            name: selected.name,
-                            email: selected.addr,
-                            note: localNote || undefined,
-                            movesLocalNote: !!localNote,
-                          })
-                        }
-                      >
-                        {t('contacts.saveToAddressBook', { defaultValue: 'Save to address book' })}
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </section>
-            )}
             {cardsFailed === selected.addr && (
               <button className="px-2 pb-2 text-xs text-accent" onClick={() => setRetry((n) => n + 1)}>
                 {t('contacts.addressBookRetry', { defaultValue: 'Could not check the address book. Try again' })}
               </button>
             )}
-            {(cardsAddr === selected.addr && !cards.length) || cardsFailed === selected.addr ? (
-              <ContactNotes key={selected.addr} addr={selected.addr} />
-            ) : (
-              cardsAddr === selected.addr && (
-                <>
-                  {/* Saved in an address book: each place a note is kept says
-                      so, and moving one up is the user's choice. */}
-                  {(localNote || localNoteEditing) && (
-                    <ContactNotes
-                      key={selected.addr}
-                      addr={selected.addr}
-                      icon={<Lock size={12} aria-hidden className="shrink-0 text-secondary" />}
-                      title={t('contacts.deviceNote', { defaultValue: 'Note only on this device' })}
-                      footer={
+            {cardsAddr === selected.addr &&
+              cards.map((card) => (
+                <BookSection
+                  key={`${card.book_id}\n${card.id}`}
+                  card={card}
+                  addr={selected.addr}
+                  onEdit={() => setEditor({ card })}
+                  onDelete={() =>
+                    void deleteBookCard(card, t).then((deleted) => {
+                      if (deleted) setRetry((n) => n + 1)
+                    })
+                  }
+                />
+              ))}
+            {/* Kept only here, never synced: a note for any address, saved in
+                an address book or not. Moving it there is the user's choice. */}
+            {savedInBook && !deviceCard && localNoteState?.loaded && (
+              <button
+                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-secondary transition-colors hover:bg-hover hover:text-primary"
+                onClick={() => setDeviceNoteOpen(selected.addr)}
+              >
+                <MonitorSmartphone size={12} aria-hidden />
+                {t('contacts.addDeviceNote', { defaultValue: 'Add a private note on this device' })}
+              </button>
+            )}
+            {(cardsAddr === selected.addr || cardsFailed === selected.addr) && deviceCard && (
+              <ContactNotes
+                key={selected.addr}
+                addr={selected.addr}
+                autoEdit={deviceNoteOpen === selected.addr}
+                onClose={() => {
+                  // Only its own: a save finishing late leaves another contact's editor open.
+                  const addr = selected.addr
+                  setDeviceNoteOpen((open) => (open === addr ? '' : open))
+                }}
+                icon={<MonitorSmartphone size={14} aria-hidden />}
+                title={t('contacts.onThisDevice', { defaultValue: 'On this device' })}
+                subtitle={
+                  cardsAddr === selected.addr && !cards.length
+                    ? t('contacts.onlyInMail', { defaultValue: 'Only in your mail' })
+                    : t('contacts.deviceNoteHint', { defaultValue: 'Private note, not synced' })
+                }
+                footer={
+                  cardsAddr === selected.addr &&
+                  (cards.length
+                    ? localNote && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {cards.map((card) => (
                             <Button
@@ -642,14 +869,32 @@ export function ContactsView() {
                             </Button>
                           ))}
                         </div>
-                      }
-                    />
-                  )}
-                  {cards.map((card) => (
-                    <BookNote key={`${card.book_id}\n${card.id}`} card={card} onEdit={() => setEditor({ card })} />
-                  ))}
-                </>
-              )
+                      )
+                    : books.length > 0 && (
+                        <div className="mt-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            leftIcon={Plus}
+                            // The device note goes with it, so wait for it; one that can't be
+                            // read stays here and the contact is saved without it.
+                            disabled={!localNoteState?.loaded && !localNoteState?.error}
+                            onClick={() =>
+                              setEditor({
+                                name: selected.name,
+                                email: selected.addr,
+                                note: localNote || undefined,
+                                movesLocalNote: !!localNote,
+                                bookId: book?.id,
+                              })
+                            }
+                          >
+                            {t('contacts.saveToAddressBook', { defaultValue: 'Save to address book' })}
+                          </Button>
+                        </div>
+                      ))
+                }
+              />
             )}
             <h2 className="px-2 pt-4 pb-2 text-xs font-semibold text-secondary">{t('contacts.recentConversations')}</h2>
             {!selected ? (
@@ -701,39 +946,99 @@ export function ContactsView() {
   )
 }
 
-/** A contact's note as its address book keeps it, shared with other clients. */
-function BookNote({ card, onEdit }: { card: BookCard; onEdit: () => void }) {
+/** A row in one address book's list. A card is opened by its first
+ * address; one with none can't be, as contacts are reached by address. */
+function BookCardRow({
+  card,
+  onSelect,
+  onCompose,
+}: {
+  card: ListedCard
+  onSelect: (addr: string) => void
+  /** Write to the card's first address; none when no account can send. */
+  onCompose?: (addr: string) => void
+}) {
   const { t } = useTranslation()
-  const label = bookLabel(card.book_name, card.account)
+  const addr = card.emails[0]
+  const label = card.name || addr || t('contacts.noName', { defaultValue: 'No name' })
   return (
-    <section className="border-b border-border/50 px-2 pt-1 pb-4" aria-label={label}>
-      <div className="flex h-8 items-center gap-2">
-        <Cloud size={12} aria-hidden className="shrink-0 text-secondary" />
-        <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-secondary" title={label}>
-          {label}
-        </h2>
-        {card.note && (
-          <button
-            className="-mr-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[0.6875rem] font-semibold text-secondary transition-colors hover:bg-hover hover:text-primary"
-            aria-label={t('contacts.editNote', { defaultValue: 'Edit note' })}
-            onClick={onEdit}
-          >
-            <Pencil size={12} className="stroke-[2.5]" />
-            {t('contacts.notesEdit')}
-          </button>
-        )}
-      </div>
-      {card.note ? (
-        <NoteMarkdown text={card.note} />
-      ) : (
-        <button
-          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-left text-sm text-secondary transition-colors hover:border-accent/50 hover:text-accent"
-          onClick={onEdit}
-        >
-          <Plus size={14} className="stroke-[2.5]" />
-          {t('contacts.notesPlaceholder')}
-        </button>
+    <div className={`group mb-0.5 flex items-center rounded-lg pr-1.5 ${addr ? 'hover:bg-hover' : 'opacity-60'}`}>
+      <button
+        className="flex min-w-0 flex-1 items-center gap-2.5 p-2 text-left enabled:cursor-pointer"
+        disabled={!addr}
+        onClick={() => addr && onSelect(addr)}
+      >
+        <Avatar name={label} email={addr} size={32} />
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">{label}</span>
+          <span className="block truncate text-xs text-secondary">
+            {addr ?? t('contacts.noEmail', { defaultValue: 'No email address' })}
+            {card.emails.length > 1 && ` +${card.emails.length - 1}`}
+          </span>
+        </span>
+      </button>
+      {addr && onCompose && (
+        <IconButton
+          icon={SquarePen}
+          size="sm"
+          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          label={t('composer.actions.newMessage')}
+          onClick={() => onCompose(addr)}
+        />
       )}
-    </section>
+    </div>
+  )
+}
+
+/** A contact as one address book keeps it, shared with other clients. */
+function BookSection({
+  card,
+  addr,
+  onEdit,
+  onDelete,
+}: {
+  card: BookCard
+  /** The open address: the card's others are listed. */
+  addr: string
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const { t } = useTranslation()
+  const others = card.emails.filter((email) => contactKey(email) !== contactKey(addr))
+  return (
+    <ContactSection
+      icon={<BookUser size={14} aria-hidden className="text-accent" />}
+      title={card.book_name}
+      subtitle={card.google ? `Google Contacts · ${card.account}` : card.account}
+      actions={
+        <>
+          <IconButton
+            icon={Pencil}
+            size="sm"
+            label={t('contacts.editContact', { defaultValue: 'Edit contact' })}
+            onClick={onEdit}
+          />
+          <IconButton
+            icon={Trash2}
+            size="sm"
+            label={t('contacts.editorDelete', { defaultValue: 'Delete contact' })}
+            className="text-secondary hover:text-rose-600 dark:hover:text-rose-400"
+            onClick={onDelete}
+          />
+        </>
+      }
+    >
+      {others.length > 0 && (
+        <ul className="mb-2 space-y-0.5">
+          {others.map((email) => (
+            <li key={email} className="flex min-w-0 items-center gap-1.5 text-xs text-secondary">
+              <Mail size={12} aria-hidden className="shrink-0" />
+              <span className="truncate select-text">{email}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {card.note ? <NoteMarkdown text={card.note} /> : <AddNoteButton onClick={onEdit} />}
+    </ContactSection>
   )
 }

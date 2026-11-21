@@ -73,6 +73,7 @@ export function ContactEditor({
   initialName = '',
   initialEmail = '',
   initialNote,
+  initialBookId,
   onDone,
   onCancel,
 }: {
@@ -83,6 +84,8 @@ export function ContactEditor({
   initialEmail?: string
   /** Prefills the note, e.g. with one kept only on this device. */
   initialNote?: string
+  /** The address book a new contact goes to unless another is picked. */
+  initialBookId?: string
   /** After the server took the change: what was saved, or null when deleted. */
   onDone: (result: EditorResult) => void
   onCancel: () => void
@@ -92,7 +95,9 @@ export function ContactEditor({
   const [name, setName] = useState(card?.name ?? initialName)
   const [emails, setEmails] = useState(card?.emails.length ? card.emails : [initialEmail])
   const [note, setNote] = useState(initialNote ?? card?.note ?? '')
-  const [bookId, setBookId] = useState(card?.book_id ?? books[0]?.id ?? '')
+  const [bookId, setBookId] = useState(
+    card?.book_id ?? books.find((book) => book.id === initialBookId)?.id ?? books[0]?.id ?? '',
+  )
   // One per new contact, so a retried create cannot make a second card.
   const [creationId] = useState(() => (card ? undefined : crypto.randomUUID()))
   const [busy, setBusy] = useState(false)

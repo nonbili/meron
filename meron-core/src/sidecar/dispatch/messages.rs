@@ -208,13 +208,16 @@ pub(crate) async fn dispatch(
             let sort =
                 store::ContactSort::parse(p.get("sort").and_then(Value::as_str).unwrap_or(""));
             let directory = p.get("directory").and_then(Value::as_bool).unwrap_or(false);
-            let contacts = store::list_contacts(
+            // Only addresses no address book holds.
+            let unsaved = p.get("unsaved").and_then(Value::as_bool).unwrap_or(false);
+            let contacts = store::list_contacts_in(
                 &engine.db.lock().unwrap(),
                 &account,
                 &query,
                 limit,
                 sort,
                 directory,
+                unsaved,
             )?;
             Ok(json!({ "contacts": contacts }))
         }

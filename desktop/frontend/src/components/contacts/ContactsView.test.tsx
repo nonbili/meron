@@ -1,11 +1,12 @@
 import { afterEach, expect, it } from 'bun:test'
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { ContactsView } from './ContactsView'
 import { settleConfirm, ui$ } from '../../states/ui'
 import { contactNotes$, contacts$, openContact } from '../../states/contacts'
 import { AddressRow } from '../chat/AddressList'
 import { mail$ } from '../../states/mail'
 import { accounts$ } from '../../states/accounts'
+import { compose$ } from '../../states/composeState'
 import type { Account, Message, SystemCheck } from '../../types'
 
 afterEach(() => {
@@ -15,6 +16,7 @@ afterEach(() => {
   contacts$.selected.set(null)
   contacts$.pinned.set([])
   contacts$.sort.set('frequent')
+  contacts$.book.set('')
   ui$.contactsOpen.set(false)
   ui$.calendarOpen.set(false)
   ui$.system.set(null)
@@ -22,6 +24,11 @@ afterEach(() => {
   accounts$.set([])
   for (const key of Object.keys(contactNotes$.peek())) contactNotes$[key].delete()
 })
+
+function manageAddressBooks(view: ReturnType<typeof render>) {
+  fireEvent.click(view.getByRole('button', { name: 'Show address book' }))
+  fireEvent.click(view.getByRole('button', { name: 'Manage address books…' }))
+}
 
 async function settle() {
   await act(async () => {
@@ -46,8 +53,9 @@ it('reconnects Google Contacts using the connected account as the login hint', a
     },
   }
   const view = render(<ContactsView />)
-  fireEvent.click(view.getByRole('button', { name: 'Address books' }))
+  manageAddressBooks(view)
   const reconnect = await view.findByRole('button', { name: 'Reconnect' })
+  expect(view.getByRole('heading', { name: 'Address books' })).toBeTruthy()
   await act(async () => fireEvent.click(reconnect))
   expect(calls).toContainEqual([
     'carddav.connectGoogle',
@@ -72,14 +80,14 @@ it('connects an address book and shows the synced contact in the directory', asy
     },
   }
   const view = render(<ContactsView />)
-  fireEvent.click(view.getByRole('button', { name: 'Address books' }))
+  manageAddressBooks(view)
   fireEvent.click(view.getByRole('button', { name: 'Enter server' }))
   fireEvent.change(view.getByLabelText('CardDAV server URL'), { target: { value: 'https://dav.example.test' } })
   fireEvent.change(view.getByLabelText('Username'), { target: { value: 'cora@example.test' } })
   fireEvent.change(view.getByLabelText('Password'), { target: { value: 'fictional-app-password' } })
   await act(async () => fireEvent.submit(view.getByRole('button', { name: 'Connect' }).closest('form')!))
   expect(calls).toContainEqual(['carddav.sync', { account_id: 'book-account' }])
-  fireEvent.click(view.getByRole('button', { name: 'Address books' }))
+  fireEvent.click(view.getByRole('button', { name: 'Back' }))
   await settle()
   expect(view.getByText('Cora Fixture')).toBeTruthy()
 })
@@ -114,7 +122,7 @@ it("finds a mail account's address book and signs in with its saved password", a
     },
   }
   const view = render(<ContactsView />)
-  fireEvent.click(view.getByRole('button', { name: 'Address books' }))
+  manageAddressBooks(view)
   await act(async () => fireEvent.click(view.getByRole('button', { name: 'Find address book' })))
   expect(calls).toContainEqual(['carddav.discoverServer', { email: 'cora@example.test' }])
   expect((view.getByLabelText('CardDAV server URL') as HTMLInputElement).value).toBe('https://dav.example.test/')
@@ -168,7 +176,7 @@ it('lets an abandoned Google sign-in be cancelled', async () => {
     },
   }
   const view = render(<ContactsView />)
-  fireEvent.click(view.getByRole('button', { name: 'Address books' }))
+  manageAddressBooks(view)
   await act(async () => fireEvent.click(view.getByRole('button', { name: 'Find address book' })))
   expect(calls).toContainEqual(['carddav.connectGoogle', { account_id: undefined, login_hint: 'cora@example.test' }])
   expect(view.getByRole('status').textContent).toContain('Google')
@@ -191,7 +199,7 @@ it('cancels a connection to a server that does not answer', async () => {
     },
   }
   const view = render(<ContactsView />)
-  fireEvent.click(view.getByRole('button', { name: 'Address books' }))
+  manageAddressBooks(view)
   fireEvent.click(view.getByRole('button', { name: 'Enter server' }))
   expect(view.queryByRole('note')).toBeNull()
   fireEvent.change(view.getByLabelText('CardDAV server URL'), { target: { value: 'http://192.0.2.10' } })
@@ -372,8 +380,10 @@ it('labels where each note is kept and moves the device note only when asked', a
   const { calls, state } = noteFixture('From the server')
   await act(async () => openContact({ name: 'Cora Fixture', addr: 'cora@example.test' }))
   const view = render(<ContactsView />)
-  expect(await view.findByRole('heading', { name: 'Note only on this device' })).toBeTruthy()
-  expect(view.getByRole('heading', { name: 'Work · cora@dav.example.test' })).toBeTruthy()
+  expect(await view.findByRole('heading', { name: 'On this device' })).toBeTruthy()
+  expect(await view.findByText('Prefers calls')).toBeTruthy()
+  expect(view.getByRole('heading', { name: 'Work' })).toBeTruthy()
+  expect(view.getByText('cora@dav.example.test')).toBeTruthy()
   expect(view.getByText('From the server')).toBeTruthy()
   await settle()
   // Nothing leaves the device by itself, nor when the move is declined.
@@ -383,7 +393,14 @@ it('labels where each note is kept and moves the device note only when asked', a
   await moveNote(view, 'Work')
   await waitFor(() => expect(state.deviceNote).toBe(''))
   expect(updates(calls)).toEqual(['From the server\n\nPrefers calls'])
-  await waitFor(() => expect(view.queryByRole('heading', { name: 'Note only on this device' })).toBeNull())
+  // Nothing left on the device: its card folds into a link.
+  await waitFor(() => expect(view.queryByRole('region', { name: 'On this device' })).toBeNull())
+  expect(within(view.getByRole('region', { name: 'Work' })).getByText('Prefers calls')).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: 'Add a private note on this device' }))
+  expect(within(view.getByRole('region', { name: 'On this device' })).getByRole('textbox')).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: 'Cancel' }))
+  expect(view.queryByRole('region', { name: 'On this device' })).toBeNull()
+  expect(view.queryByRole('button', { name: 'Move to Work' })).toBeNull()
 })
 
 it('fills an empty card note with the moved device note', async () => {
@@ -412,7 +429,164 @@ it('keeps the device note when the server refuses the move', async () => {
   await settle()
   expect(updates(calls)).toEqual(['Prefers calls'])
   expect(state.deviceNote).toBe('Prefers calls')
-  expect(view.getByRole('heading', { name: 'Note only on this device' })).toBeTruthy()
+  expect(view.getByText('Prefers calls')).toBeTruthy()
+})
+
+it('lists one address book when chosen and adds new contacts to it', async () => {
+  const calls: Array<[string, Record<string, unknown>]> = []
+  ;(window as any).go = {
+    main: {
+      App: {
+        Invoke: async (method: string, params: Record<string, unknown>) => {
+          calls.push([method, params])
+          if (method === 'carddav.accounts') return bookAccounts
+          if (method === 'carddav.contacts')
+            return {
+              contacts: [
+                { id: 'ada.vcf', name: 'Ada Lane', emails: ['Ada@example.test', 'ada@home.example.test'] },
+                { id: 'nomail.vcf', name: 'Nobody Mail', emails: [] },
+              ],
+              more: false,
+            }
+          if (method === 'carddav.cardsFor') return { cards: [] }
+          if (method === 'contacts.noteGet') return { prefs: {} }
+          return { contacts: [{ name: 'Mail Only', addr: 'mail@example.test' }], threads: [] }
+        },
+      },
+    },
+  }
+  const view = render(<ContactsView />)
+  expect(await view.findByText('Mail Only')).toBeTruthy()
+  fireEvent.click(await view.findByRole('button', { name: 'Show address book' }))
+  fireEvent.click(view.getByRole('button', { name: 'Family · cora@example.test' }))
+  expect(contacts$.book.peek()).toBe('family')
+  expect(await view.findByText('Ada Lane')).toBeTruthy()
+  expect(calls).toContainEqual(['carddav.contacts', { book_id: 'family', query: '', offset: 0 }])
+  expect(view.queryByText('Mail Only')).toBeNull()
+  // Picking the book already shown keeps its list.
+  fireEvent.click(view.getByRole('button', { name: 'Show address book' }))
+  fireEvent.click(view.getByRole('button', { name: 'Family · cora@example.test' }))
+  await settle()
+  expect(view.getByText('Ada Lane')).toBeTruthy()
+  // Listed by name only, so there is no order to pick.
+  expect(view.queryByRole('button', { name: /^Sort/ })).toBeNull()
+  // A card with no address can't be opened.
+  expect((view.getByText('Nobody Mail').closest('button') as HTMLButtonElement).disabled).toBe(true)
+
+  fireEvent.click(view.getByRole('button', { name: 'New contact' }))
+  expect((view.getByRole('combobox') as HTMLSelectElement).value).toBe('family')
+  fireEvent.click(view.getByRole('button', { name: 'Back' }))
+
+  fireEvent.click(view.getByText('Ada Lane'))
+  expect(contacts$.selected.peek()).toEqual({ name: 'Ada Lane', addr: 'ada@example.test' })
+  fireEvent.click(view.getByRole('button', { name: 'Back' }))
+  fireEvent.click(view.getByRole('button', { name: 'Show address book' }))
+  fireEvent.click(view.getByRole('button', { name: 'Other contacts' }))
+  expect(await view.findByText('Mail Only')).toBeTruthy()
+  await waitFor(() =>
+    expect(calls.at(-1)).toEqual([
+      'mail.suggestContacts',
+      { account: '', query: '', limit: 100, sort: 'frequent', directory: true, unsaved: true },
+    ]),
+  )
+  expect(view.getByRole('heading', { name: 'Other contacts' })).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: 'Show address book' }))
+  fireEvent.click(view.getByRole('button', { name: 'All contacts' }))
+  await waitFor(() => expect(calls.at(-1)?.[1]).toMatchObject({ unsaved: false }))
+})
+
+it('reloads every loaded page of a book after a change, dropping deleted cards', async () => {
+  let cards = Array.from({ length: 60 }, (_, i) => ({
+    id: `c${String(i).padStart(2, '0')}.vcf`,
+    name: `Person ${String(i).padStart(2, '0')}`,
+    emails: [`p${i}@example.test`],
+  }))
+  const offsets: unknown[] = []
+  ;(window as any).go = {
+    main: {
+      App: {
+        Invoke: async (method: string, params: Record<string, unknown>) => {
+          if (method === 'carddav.accounts') return bookAccounts
+          if (method === 'carddav.contacts') {
+            offsets.push(params.offset)
+            const offset = params.offset as number
+            return { contacts: cards.slice(offset, offset + 50), more: cards.length > offset + 50 }
+          }
+          if (method === 'carddav.cardsFor')
+            return {
+              cards: [
+                {
+                  book_id: 'work',
+                  book_name: 'Work',
+                  id: 'c55.vcf',
+                  version: '"v1"',
+                  name: 'Person 55',
+                  emails: ['p55@example.test'],
+                  account: 'cora@example.test',
+                  google: false,
+                  note: '',
+                },
+              ],
+            }
+          if (method === 'carddav.deleteContact') cards = cards.filter((card) => card.id !== 'c55.vcf')
+          if (method === 'contacts.noteGet') return { prefs: {} }
+          return { contacts: [], threads: [] }
+        },
+      },
+    },
+  }
+  contacts$.book.set('work')
+  const view = render(<ContactsView />)
+  expect(await view.findByText('Person 00')).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: 'Load more' }))
+  expect(await view.findByText('Person 59')).toBeTruthy()
+  expect(offsets).toEqual([0, 50])
+  fireEvent.click(view.getByText('Person 55'))
+  fireEvent.click(await view.findByRole('button', { name: 'Delete contact' }))
+  await waitFor(() => expect(ui$.confirm.peek()).not.toBeNull())
+  await act(async () => settleConfirm(true))
+  fireEvent.click(view.getByRole('button', { name: 'Back' }))
+  await settle()
+  // Both pages again, from the start: the deleted card is gone, the rest stay.
+  expect(offsets.slice(2)).toEqual([0, 50])
+  expect(view.queryByText('Person 55')).toBeNull()
+  expect(view.getByText('Person 59')).toBeTruthy()
+})
+
+it('writes to a contact straight from the list', async () => {
+  accounts$.set([
+    {
+      id: 'mail-1',
+      email: 'cora@example.test',
+      display_name: 'Cora',
+      provider: 'custom',
+      auth_type: 'password',
+      imap_host: 'mail.example.test',
+      imap_port: 993,
+      smtp_host: 'mail.example.test',
+      smtp_port: 465,
+      tls: true,
+    } as Account,
+  ])
+  const tabs = compose$.tabs.peek().length
+  ;(window as any).go = {
+    main: {
+      App: {
+        Invoke: async (method: string) => {
+          if (method === 'carddav.accounts') return { accounts: [] }
+          return { contacts: [{ name: 'Ada Lane', addr: 'ada@example.test' }], threads: [] }
+        },
+      },
+    },
+  }
+  const view = render(<ContactsView />)
+  await view.findByText('Ada Lane')
+  fireEvent.click(view.getByRole('button', { name: 'New message' }))
+  expect(compose$.tabs.peek()).toHaveLength(tabs + 1)
+  expect(compose$.tabs.peek().at(-1)?.compose?.to).toBe('Ada Lane <ada@example.test>')
+  // The list stays where it was.
+  expect(contacts$.selected.peek()).toBeNull()
+  compose$.tabs.set(compose$.tabs.peek().slice(0, tabs))
 })
 
 it('a save that finishes after leaving the editor leaves the next editor open', async () => {

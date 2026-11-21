@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import Markdown from 'react-markdown'
-import { Pencil, Plus } from 'lucide-react'
+import { Pencil, Plus, StickyNote } from 'lucide-react'
 import { clsx } from '../../lib/utils'
 import { MarkdownIcon } from '../icons/Icons'
 import { contactKey, contactNotes$, loadContactNote, saveContactNote } from '../../states/contacts'
@@ -9,27 +9,88 @@ import { useTranslation } from '../../lib/i18n'
 import { openExternal } from '../../lib/native'
 import { Button } from '../button/Button'
 
+/** One place a contact is kept (an address book, or this device): a card
+ * with where it is in the heading and what is kept there under it. */
+export function ContactSection({
+  icon,
+  title,
+  subtitle,
+  actions,
+  children,
+}: {
+  icon: ReactNode
+  title: string
+  subtitle?: string
+  actions?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <section className="mb-2 rounded-xl border border-border/60 px-3 pt-2 pb-3" aria-label={title}>
+      <div className="flex min-h-9 items-center gap-2.5">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-hover text-secondary">
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-sm font-semibold" title={title}>
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="truncate text-xs text-secondary" title={subtitle}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+        {actions}
+      </div>
+      <div className="mt-2">{children}</div>
+    </section>
+  )
+}
+
+export const noteEditButtonClass =
+  'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[0.6875rem] font-semibold text-secondary transition-colors hover:bg-hover hover:text-primary'
+
+/** A dashed "Add a note…" button, for a contact with no note yet. */
+export function AddNoteButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <button
+      className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-left text-sm text-secondary transition-colors hover:border-accent/50 hover:text-accent"
+      onClick={onClick}
+    >
+      <Plus size={14} className="stroke-[2.5]" />
+      {t('contacts.notesPlaceholder')}
+    </button>
+  )
+}
+
+/** The note kept only on this device for `addr`, edited in place. */
 export function ContactNotes({
   addr,
   title,
+  subtitle,
   icon,
-  action,
   footer,
+  autoEdit = false,
+  onClose,
 }: {
   addr: string
   /** Defaults to "Notes". */
   title?: string
-  /** Shown in the heading while the note is not being edited. */
-  action?: ReactNode
+  subtitle?: string
   /** Shown before the title: where this note is kept. */
   icon?: ReactNode
   /** Shown under the note while it is not being edited. */
   footer?: ReactNode
+  /** Open with the editor showing. */
+  autoEdit?: boolean
+  /** After the editor closes, saved or cancelled. */
+  onClose?: () => void
 }) {
   const { t } = useTranslation()
   const key = contactKey(addr)
   const note = useValue(contactNotes$[key])
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(autoEdit)
   const [preview, setPreview] = useState(false)
   useEffect(() => {
     void loadContactNote(key)
@@ -38,12 +99,17 @@ export function ContactNotes({
   const text = note?.draft ?? ''
   const editorOpen = editing || dirty
   const showPreview = preview && !!text
+  const startEditing = () => {
+    setEditing(true)
+    setPreview(false)
+  }
   const cancel = () => {
     const current = contactNotes$[key].peek()
     contactNotes$[key].draft.set(current.saved)
     contactNotes$[key].error.set(false)
     setEditing(false)
     setPreview(false)
+    onClose?.()
   }
   const save = async () => {
     await saveContactNote(key)
@@ -51,6 +117,7 @@ export function ContactNotes({
     if (!current.error && current.draft === current.saved) {
       setEditing(false)
       setPreview(false)
+      onClose?.()
     }
   }
   const rendered = <NoteMarkdown text={text} />
@@ -60,24 +127,21 @@ export function ContactNotes({
       active ? 'bg-hover text-primary' : 'text-secondary hover:text-primary',
     )
   return (
-    <section className="border-b border-border/50 px-2 pt-1 pb-4" aria-label={title ?? t('contacts.notes')}>
-      <div className="flex h-8 items-center gap-2">
-        {icon}
-        <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-secondary">{title ?? t('contacts.notes')}</h2>
-        {note?.loaded && !editorOpen && action}
-        {note?.loaded && !editorOpen && text && (
-          <button
-            className="-mr-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[0.6875rem] font-semibold text-secondary transition-colors hover:bg-hover hover:text-primary"
-            onClick={() => {
-              setEditing(true)
-              setPreview(false)
-            }}
-          >
+    <ContactSection
+      icon={icon ?? <StickyNote size={14} aria-hidden />}
+      title={title ?? t('contacts.notes')}
+      subtitle={subtitle}
+      actions={
+        note?.loaded &&
+        !editorOpen &&
+        text && (
+          <button className={noteEditButtonClass} onClick={startEditing}>
             <Pencil size={12} className="stroke-[2.5]" />
             {t('contacts.notesEdit')}
           </button>
-        )}
-      </div>
+        )
+      }
+    >
       {!note?.loaded ? (
         note?.error ? (
           <button className="text-xs text-accent" onClick={() => void loadContactNote(key)}>
@@ -144,24 +208,16 @@ export function ContactNotes({
       ) : text ? (
         rendered
       ) : (
-        <button
-          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-left text-sm text-secondary transition-colors hover:border-accent/50 hover:text-accent"
-          onClick={() => {
-            setEditing(true)
-            setPreview(false)
-          }}
-        >
-          <Plus size={14} className="stroke-[2.5]" />
-          {t('contacts.notesPlaceholder')}
-        </button>
+        <AddNoteButton onClick={startEditing} />
       )}
-      {note?.loaded && !editorOpen && text && footer}
+      {/* Not tied to the note: what it offers must not wait on it loading. */}
+      {!editorOpen && footer}
       {note?.loaded && note.error && (
         <p role="status" className="mt-2 text-xs text-red-500">
           {t('contacts.notesSaveError')}
         </p>
       )}
-    </section>
+    </ContactSection>
   )
 }
 

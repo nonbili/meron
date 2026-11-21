@@ -15,6 +15,8 @@ export const contacts$ = observable({
   selected: null as Contact | null,
   pinned: [] as Contact[],
   sort: 'frequent' as ContactSort,
+  /** The address book the list shows, or '' for every contact. */
+  book: '',
 })
 
 export type ContactNote = {
@@ -94,10 +96,14 @@ const sort = persistedField(
   (raw) => (CONTACT_SORTS.includes(raw as ContactSort) ? (raw as ContactSort) : undefined),
   { session: WRITE_SESSION },
 )
-export const CONTACTS_PREF_KEYS = [pins.key, sort.key]
+const book = persistedField(contacts$.book, 'contacts_book', (raw) => (typeof raw === 'string' ? raw : undefined), {
+  session: WRITE_SESSION,
+})
+export const CONTACTS_PREF_KEYS = [pins.key, sort.key, book.key]
 export function restoreContacts(prefs: Record<string, unknown>) {
   pins.restore(prefs)
   sort.restore(prefs)
+  book.restore(prefs)
 }
 
 export function toggleContactPin(contact: Contact) {
