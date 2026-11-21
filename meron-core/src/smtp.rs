@@ -930,11 +930,243 @@ fn bare_id(token: &str) -> String {
         .to_string()
 }
 
+/// The bare addresses in `raw`, as a composer field takes them, deduplicated and
+/// joined with `, `. An entry that isn't an address is an error.
+pub fn normalize_recipients(raw: &str) -> Result<String> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for entry in parse_addrs(raw) {
+        let addr = bare_addr(&entry);
+        anyhow::ensure!(is_bare_email(&addr), "{entry} is not an email address");
+        if seen.insert(addr.to_lowercase()) {
+            out.push(addr);
+        }
+    }
+    Ok(out.join(", "))
+}
+
+/// What a forward made by a rule says it is (RFC 3834), so that no rule
+/// forwards it again: two rules forwarding to each other would never stop.
+const RULE_FORWARD_MARK: &str = "auto-forwarded";
+
+/// Whether `raw` is a forward a rule made, here or elsewhere.
+pub fn is_rule_forward(raw: &[u8]) -> bool {
+    mailparse::parse_headers(raw).is_ok_and(|(headers, _)| {
+        use mailparse::MailHeaderMap as _;
+        headers
+            .get_first_value("Auto-Submitted")
+            .is_some_and(|value| value.trim().to_lowercase().starts_with(RULE_FORWARD_MARK))
+    })
+}
+
+/// A forward of `original` for a rule: what it says inline, as the composer's
+/// plain forward does, and the original itself attached whole, so nothing of it
+/// (its HTML, files, signature) is lost to the reading.
+pub fn build_rule_forward(
+    sender_name: &str,
+    from: &str,
+    to: &str,
+    original: &[u8],
+) -> Result<Vec<u8>> {
+    use mail_builder::{headers::raw::Raw, mime::MimePart};
+
+    // Read without our keys: an encrypted original goes out as it came, and
+    // its text must not ride along in the clear.
+    let message = crate::parse::parse_message_with(
+        original,
+        None,
+        &crate::openpgp::keyring::Keyring::default(),
+    );
+    let encrypted = message
+        .crypto
+        .as_ref()
+        .is_some_and(|crypto| crypto.encrypted);
+    let date = mailparse::parse_headers(original)
+        .ok()
+        .and_then(|(headers, _)| {
+            use mailparse::MailHeaderMap as _;
+            headers.get_first_value("Date")
+        })
+        .unwrap_or_default();
+    let from_line = if message.from_name.is_empty() {
+        message.from_addr.clone()
+    } else {
+        format!("{} <{}>", message.from_name, message.from_addr)
+    };
+    let subject = message.subject.trim();
+    let header: Vec<String> = [
+        ("From", from_line.as_str()),
+        ("Date", date.trim()),
+        (
+            "Subject",
+            if subject.is_empty() {
+                "(no subject)"
+            } else {
+                subject
+            },
+        ),
+        ("To", message.to.trim()),
+        ("Cc", message.cc.trim()),
+    ]
+    .into_iter()
+    .filter(|(_, value)| !value.is_empty())
+    .map(|(label, value)| format!("{label}: {value}"))
+    .collect();
+    let text = match &message.body_html {
+        _ if encrypted => String::new(),
+        Some(html) => crate::parse::html_to_text(html),
+        None => message.body.clone(),
+    };
+    let body = format!(
+        "---------- Forwarded message ---------\n{}\n\n{}",
+        header.join("\n"),
+        text.trim_end()
+    );
+
+    let forwarded_subject = if subject.is_empty() {
+        "Fwd: (no subject)".to_string()
+    } else if crate::quote::is_forward_subject(subject) {
+        subject.to_string()
+    } else {
+        format!("Fwd: {subject}")
+    };
+    let filename = format!(
+        "{}.eml",
+        if subject.is_empty() {
+            "message"
+        } else {
+            subject
+        }
+    );
+    // An attached message is never base64 (RFC 2046 5.2.1): its own parts say
+    // how they are encoded.
+    let encoding = if original.is_ascii() { "7bit" } else { "8bit" };
+    let attached = MimePart::new("message/rfc822", original.to_vec())
+        .attachment(filename)
+        .transfer_encoding(encoding);
+    use mail_builder::headers::address::Address;
+    let name = sender_name.trim();
+    let sender = Address::new_address((!name.is_empty()).then_some(name), from);
+    let recipients: Vec<Address> = parse_addrs(to)
+        .into_iter()
+        .map(|entry| Address::new_address(None::<&str>, bare_addr(&entry)))
+        .collect();
+    let domain = from.rsplit('@').next().unwrap_or("localhost");
+    MessageBuilder::new()
+        .from(sender)
+        .to(recipients)
+        .message_id(format!("{}@{domain}", uuid::Uuid::new_v4()))
+        .subject(forwarded_subject)
+        .header("Auto-Submitted", Raw::new(RULE_FORWARD_MARK))
+        .body(MimePart::new(
+            "multipart/mixed",
+            vec![MimePart::new("text/plain", body), attached],
+        ))
+        .write_to_vec()
+        .context("build MIME message")
+}
+
+/// Send a rule's forward of `original` to `to` from `from`. Answers with what
+/// went out, for the Sent folder.
+pub async fn send_rule_forward(
+    creds: &Creds,
+    from: &str,
+    sender_name: &str,
+    to: &str,
+    original: &[u8],
+) -> Result<Vec<u8>> {
+    let raw = build_rule_forward(sender_name, from, to, original)?;
+    submit(creds, from, &parse_addrs(to), &[], &[], &raw).await?;
+    Ok(raw)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        as_smtp_cert_error, bare_addr, bare_id, build_message, parse_addrs, split_name_addr,
+        as_smtp_cert_error, bare_addr, bare_id, build_message, build_rule_forward, is_rule_forward,
+        normalize_recipients, parse_addrs, split_name_addr,
     };
+
+    #[test]
+    fn recipients_normalize_to_bare_addresses() {
+        assert_eq!(
+            normalize_recipients("Ann <ann@example.com>; bob@example.org, ANN@example.com")
+                .unwrap(),
+            "ann@example.com, bob@example.org"
+        );
+        assert_eq!(normalize_recipients("  ").unwrap(), "");
+        assert!(normalize_recipients("not an address").is_err());
+    }
+
+    #[test]
+    fn a_rule_forward_of_encrypted_mail_says_nothing_of_its_text() {
+        use crate::openpgp::{keyring, keys, outgoing};
+        let secret = keys::generate(&["fwd-test@example.com".to_string()]).unwrap();
+        let public = secret.to_public_key();
+        let plain = "From: carol@example.net\r\n\
+            To: fwd-test@example.com\r\n\
+            Subject: Secret plans\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            The vault code is 4711.\r\n";
+        let encrypted = outgoing::wrap(plain.as_bytes(), &[&public], &secret, "").unwrap();
+        // Keys that could read it are in effect, as they are in the app.
+        keyring::replace(keyring::Keyring {
+            own: vec![keyring::own_key("fwd-test", secret, true)],
+            ..Default::default()
+        });
+        let raw =
+            build_rule_forward("", "fwd-test@example.com", "dan@example.org", &encrypted).unwrap();
+        let text = String::from_utf8_lossy(&raw);
+        assert!(!text.contains("4711"), "{text}");
+        assert!(text.contains("-----BEGIN PGP MESSAGE-----"), "{text}");
+    }
+
+    #[test]
+    fn a_rule_forward_carries_the_original_and_says_what_it_is() {
+        let original = "From: Carol Example <carol@example.net>\r\n\
+            To: me@example.com\r\n\
+            Date: Mon, 2 Nov 2026 09:00:00 +0000\r\n\
+            Subject: Lunch \u{e9}\r\n\
+            Message-ID: <lunch@example.net>\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            Content-Transfer-Encoding: 8bit\r\n\
+            \r\n\
+            Noon at the caf\u{e9}?\r\n";
+        let raw = build_rule_forward(
+            "Me",
+            "me@example.com",
+            "dan@example.org",
+            original.as_bytes(),
+        )
+        .unwrap();
+        assert!(is_rule_forward(&raw));
+        assert!(!is_rule_forward(original.as_bytes()));
+        let text = String::from_utf8(raw.clone()).unwrap();
+        assert!(text.contains("Content-Type: message/rfc822"), "{text}");
+        assert!(text.contains("Content-Transfer-Encoding: 8bit"), "{text}");
+        // The original goes in whole, as it was.
+        assert!(text.contains(original), "{text}");
+
+        assert!(text.contains("From: \"Me\" <me@example.com>\r\n"), "{text}");
+        assert!(text.contains("To: <dan@example.org>\r\n"), "{text}");
+        assert!(text.contains("@example.com>\r\n"), "{text}");
+        let parsed = crate::parse::parse_message(&raw, None);
+        assert_eq!(parsed.subject, "Fwd: Lunch \u{e9}");
+        assert_eq!(parsed.from_addr, "me@example.com");
+        assert_eq!(parsed.to, "dan@example.org");
+        assert!(
+            parsed
+                .body
+                .contains("---------- Forwarded message ---------")
+        );
+        assert!(
+            parsed
+                .body
+                .contains("From: Carol Example <carol@example.net>")
+        );
+        assert!(parsed.body.contains("Noon at the caf\u{e9}?"));
+    }
 
     /// A send and a sync fail the same way inside rustls; only the marker tells
     /// the UI which server to show and which pin to write. Without the re-tag a

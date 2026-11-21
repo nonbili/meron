@@ -59,12 +59,16 @@ pub struct Rule {
     pub copy_folder: String,
     #[serde(default)]
     pub copy_account: String,
+    /// Addresses to forward matching mail to, comma-separated as a composer's
+    /// field; `""` for none. The account the mail is in sends the forward.
+    #[serde(default)]
+    pub forward_to: String,
     /// Kept, but not run.
     #[serde(default)]
     pub disabled: bool,
     /// Runs on mail the user sent, as its copy shows up in the Sent folder,
     /// instead of on mail that arrives. Such a rule runs right away and leaves
-    /// the copy where it is: it can tag, star and copy it.
+    /// the copy where it is: it can tag, star and copy it, but not forward it.
     #[serde(default)]
     pub sent: bool,
 }
@@ -85,6 +89,7 @@ impl Rule {
             || self.star
             || !self.move_to.is_empty()
             || !self.copy_folder.is_empty()
+            || !self.forward_to.is_empty()
     }
 }
 
@@ -143,9 +148,12 @@ pub fn set_rules(conn: &Connection, incoming: Vec<Rule>) -> Result<Vec<Rule>> {
             !rule.sent || (rule.trigger == RuleTrigger::Arrival && rule.delay_seconds == 0),
             "a rule for sent mail runs right away"
         );
+        rule.forward_to = crate::smtp::normalize_recipients(&rule.forward_to)
+            .map_err(|err| anyhow::anyhow!("a rule's forward: {err}"))?;
         anyhow::ensure!(
-            !rule.sent || (!rule.mark_read && rule.move_to.is_empty()),
-            "a rule for sent mail can't move it or mark it read"
+            !rule.sent
+                || (!rule.mark_read && rule.move_to.is_empty() && rule.forward_to.is_empty()),
+            "a rule for sent mail can't move it, mark it read or forward it"
         );
         anyhow::ensure!(rule.has_action(), "a rule needs an action");
         if rule.id.is_empty() {
@@ -204,6 +212,9 @@ pub struct RuleAction {
     /// Where to copy to first. Kept until all of this is done, so each retry asks
     /// the target again before giving up the source.
     pub copies: Vec<RuleCopy>,
+    /// Addresses to forward to, before any move. Emptied once the forward is
+    /// out, as a forward can't be asked after, the way a copy's target is.
+    pub forwards: Vec<String>,
     /// The rules behind this, for the log.
     pub rule_ids: Vec<String>,
     /// Positive for manual runs, negative for scheduled runs, 0 for new mail.
@@ -761,6 +772,15 @@ fn add_rule_effects(
         }
         action.copies.sort();
         action.copies.dedup();
+        action.forwards.extend(
+            rule.forward_to
+                .split(',')
+                .map(str::trim)
+                .filter(|addr| !addr.is_empty())
+                .map(str::to_string),
+        );
+        action.forwards.sort_by_key(|addr| addr.to_lowercase());
+        action.forwards.dedup_by_key(|addr| addr.to_lowercase());
     }
     Ok(())
 }
@@ -783,14 +803,19 @@ fn queue_rule_actions(
                 copies.push(copy);
             }
         }
-        if !action.mark_read && !action.star && !action.moves() && copies.is_empty() {
+        if !action.mark_read
+            && !action.star
+            && !action.moves()
+            && copies.is_empty()
+            && action.forwards.is_empty()
+        {
             continue;
         }
         conn.execute(
             "INSERT OR REPLACE INTO rule_actions
                (account, folder, uid, uidvalidity, mark_read, star, trash, target, copies,
-                rule_ids, run, attempts)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0)",
+                rule_ids, run, attempts, forwards)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0, ?12)",
             params![
                 account,
                 action.folder,
@@ -802,7 +827,8 @@ fn queue_rule_actions(
                 action.target,
                 serde_json::to_string(&copies)?,
                 serde_json::to_string(&action.rule_ids)?,
-                run
+                run,
+                serde_json::to_string(&action.forwards)?
             ],
         )?;
     }
@@ -943,7 +969,8 @@ pub fn pending_rule_actions(
     folder: &str,
 ) -> Result<Vec<RuleAction>> {
     let mut stmt = conn.prepare(
-        "SELECT folder, uid, uidvalidity, mark_read, star, trash, target, copies, rule_ids, run
+        "SELECT folder, uid, uidvalidity, mark_read, star, trash, target, copies, rule_ids, run,
+                forwards
          FROM rule_actions WHERE account = ?1 AND folder = ?2 ORDER BY uid",
     )?;
     let rows = stmt.query_map(params![account, folder], |row| {
@@ -958,6 +985,7 @@ pub fn pending_rule_actions(
             copies: serde_json::from_str(&row.get::<_, String>(7)?).unwrap_or_default(),
             rule_ids: serde_json::from_str(&row.get::<_, String>(8)?).unwrap_or_default(),
             run: row.get(9)?,
+            forwards: serde_json::from_str(&row.get::<_, String>(10)?).unwrap_or_default(),
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -972,6 +1000,23 @@ pub fn log_rule_lost_moves(conn: &Connection, account: &str, lost: &[RuleAction]
         }
     }
     trim_rule_log(conn)
+}
+
+/// Note that `run`'s forward of `uid` is out, so retrying the rest of what it
+/// queued doesn't send it again.
+pub fn finish_rule_forward(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uid: u32,
+    run: i64,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE rule_actions SET forwards = '[]'
+         WHERE account = ?1 AND folder = ?2 AND uid = ?3 AND run = ?4",
+        params![account, folder, uid, run],
+    )?;
+    Ok(())
 }
 
 /// Clear what `run` queued for `uids`.
@@ -1109,6 +1154,52 @@ mod timing_tests {
         assert!(set_rules(&conn, vec![rule(RuleTrigger::Read, -1)]).is_err());
         assert!(set_rules(&conn, vec![rule(RuleTrigger::Age, i64::MAX)]).is_err());
         assert!(serde_json::from_str::<Rule>(r#"{"trigger":"unknown"}"#).is_err());
+    }
+
+    #[test]
+    fn forwards_are_queued_and_struck_off_once_out() {
+        let conn = db();
+        let forward = |id: &str, to: &str| Rule {
+            id: id.into(),
+            forward_to: to.into(),
+            ..Default::default()
+        };
+        let saved = set_rules(
+            &conn,
+            vec![
+                forward("one", "Dan Example <dan@example.org>; DAN@example.org"),
+                Rule {
+                    star: true,
+                    ..forward("two", "eve@example.org, dan@example.org")
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(saved[0].forward_to, "dan@example.org");
+        mail(&conn, 1, false, 100);
+        apply_rules(&conn, "a", "INBOX", 7, &[1]).unwrap();
+        let actions = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].forwards, ["dan@example.org", "eve@example.org"]);
+
+        // What else the rules want done stays queued for a retry.
+        finish_rule_forward(&conn, "a", "INBOX", 1, actions[0].run).unwrap();
+        let actions = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        assert!(actions[0].forwards.is_empty());
+        assert!(actions[0].star);
+    }
+
+    #[test]
+    fn a_forward_needs_addresses_and_received_mail() {
+        let conn = db();
+        let forward = |to: &str, sent| Rule {
+            forward_to: to.into(),
+            sent,
+            ..Default::default()
+        };
+        assert!(set_rules(&conn, vec![forward("not an address", false)]).is_err());
+        assert!(set_rules(&conn, vec![forward("dan@example.org", true)]).is_err());
+        assert!(set_rules(&conn, vec![forward("dan@example.org", false)]).is_ok());
     }
 
     #[test]

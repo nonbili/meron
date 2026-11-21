@@ -1,4 +1,4 @@
-PRAGMA user_version = 35;
+PRAGMA user_version = 36;
 
 -- table account_secrets
 CREATE TABLE account_secrets (
@@ -364,7 +364,7 @@ CREATE TABLE rule_actions (
             copies      TEXT NOT NULL DEFAULT '[]',
             rule_ids    TEXT NOT NULL DEFAULT '[]',
             run         INTEGER NOT NULL DEFAULT 0,
-            attempts    INTEGER NOT NULL DEFAULT 0,
+            attempts    INTEGER NOT NULL DEFAULT 0, forwards TEXT NOT NULL DEFAULT '[]',
             PRIMARY KEY (account, folder, uid, run)
          ) WITHOUT ROWID;
 

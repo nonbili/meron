@@ -107,7 +107,7 @@
 
 [removed_message_uids] account, folder, uid, epoch
 
-[rule_actions] account, folder, uid, uidvalidity, mark_read, star, trash, target, copies, rule_ids, run, attempts
+[rule_actions] account, folder, uid, uidvalidity, mark_read, star, trash, target, copies, rule_ids, run, attempts, forwards
 
 [rule_activation] rule_id, event_sequence
 

@@ -177,6 +177,7 @@ private fun MeronMobileState.ruleSummary(
         tr("chat.star").takeIf { rule.star },
         tr("rules.summaryCopy", mapOf("folder" to targetLabel(accounts, rule.copyAccount, rule.copyFolder)))
             .takeIf { rule.copyFolder.isNotEmpty() },
+        tr("rules.summaryForward", mapOf("addresses" to rule.forwardTo)).takeIf { rule.forwardTo.isNotEmpty() },
         tr("rules.summaryMove", mapOf("folder" to moveLabel(accounts, rule))).takeIf { rule.moveTo.isNotEmpty() },
     ).joinToString(" · ")
 
@@ -424,16 +425,18 @@ internal fun MeronMobileState.RulesPage(
     val nothing = tr("rules.runNothing")
     val nothingSent = tr("rules.runSentNothing")
     confirmRun?.let { (rule, count) ->
+        // Sending mail out can't be undone, so it is what the question is about.
         val message =
             when {
                 rule.sent -> "rules.runSentConfirm"
+                rule.forwardTo.isNotEmpty() -> "rules.runForwardConfirm"
                 rule.moveTo == "trash" -> "rules.runTrashConfirm"
                 else -> "rules.runConfirm"
             }
         AlertDialog(
             onDismissRequest = { confirmRun = null },
             title = { Text(tr("rules.run")) },
-            text = { Text(tr(message, mapOf("count" to count.toString()))) },
+            text = { Text(tr(message, mapOf("count" to count.toString(), "addresses" to rule.forwardTo))) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -851,7 +854,9 @@ internal fun MeronMobileState.RulesPage(
                             change(draft.copy(sent = false))
                         } else {
                             pickTiming("now")
-                            change(draft.copy(sent = true, markRead = false, moveTo = "", folder = "", folderAccount = ""))
+                            change(
+                                draft.copy(sent = true, markRead = false, moveTo = "", folder = "", folderAccount = "", forwardTo = ""),
+                            )
                         }
                     },
                 )
@@ -1097,6 +1102,19 @@ internal fun MeronMobileState.RulesPage(
             if (!draft.sent) {
                 Spacer(Modifier.height(CONNECTED_GAP))
                 Surface(
+                    shape = connectedShape(ConnectedPosition.Middle),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Box(Modifier.fillMaxWidth().padding(16.dp)) {
+                        SearchOptionsAddressField(this@RulesPage, "", tr("rules.forwardTo"), draft.forwardTo, {}) {
+                            change(draft.copy(forwardTo = it))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(CONNECTED_GAP))
+                Surface(
                     shape = connectedShape(ConnectedPosition.Last),
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 1.dp,
@@ -1118,6 +1136,14 @@ internal fun MeronMobileState.RulesPage(
                 }
             }
 
+            if (!draft.sent && draft.forwardTo.isNotBlank()) {
+                Text(
+                    tr("rules.forwardHint"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
             if (draft.moveTo == "trash") {
                 Text(
                     tr(if (fields == SearchFields()) "rules.trashAllHint" else "rules.trashHint"),

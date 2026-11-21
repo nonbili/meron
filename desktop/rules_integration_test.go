@@ -212,3 +212,84 @@ func TestIntegrationDelayedRules(t *testing.T) {
 		}
 	})
 }
+
+// A rule's forward goes out through SMTP with the original attached, is filed
+// in Sent and happens before the rule's move. A forward never sets off another:
+// bob's rule forwards it straight back, which would otherwise never stop.
+func TestIntegrationRuleForward(t *testing.T) {
+	server := startMailServer(t)
+	sidecar, _ := startSidecar(t)
+	const alice, bob = "alice@mail.test", "bob@mail.test"
+	connectAccount(t, sidecar, server, "alice", alice)
+	connectAccount(t, sidecar, server, "bob", bob)
+	deliver := func(user, account, subject string) {
+		t.Helper()
+		imapAppend(t, server.imapPort, user, testPassword, "INBOX", rawMessage([]string{
+			"From: Carol <carol@mail.test>", "To: " + user, "Subject: " + subject,
+			fmt.Sprintf("Message-ID: <%s@mail.test>", strings.ReplaceAll(subject, " ", "-")),
+			"Date: " + time.Now().Format(time.RFC1123Z),
+		}, "Please pay by Friday.\r\n"))
+		pollInbox(t, sidecar, account, func(message map[string]any) bool { return str(message, "subject") == subject })
+	}
+	// Establish the initial mailbox snapshots before testing new arrivals.
+	deliver(alice, "alice", "forward seed")
+	deliver(bob, "bob", "forward seed")
+
+	saved := callMap(t, sidecar, "rules.set", map[string]any{"rules": []map[string]any{
+		{
+			"query":      "subject:invoice",
+			"accounts":   []string{"alice"},
+			"forward_to": "Bob <bob@mail.test>; BOB@mail.test",
+			"move_to":    "trash",
+		},
+		{"query": "subject:invoice", "accounts": []string{"bob"}, "forward_to": alice},
+	}})
+	if got := str(saved["rules"].([]any)[0].(map[string]any), "forward_to"); got != bob {
+		t.Fatalf("forward_to was not normalized: %q", got)
+	}
+
+	const subject = "invoice 42"
+	deliver(alice, "alice", subject)
+	sync := func() {
+		for _, account := range []string{"alice", "bob"} {
+			callMap(t, sidecar, "messages.recent", map[string]any{"account": account, "folder": "INBOX", "refresh": true})
+		}
+	}
+	deadline := time.Now().Add(45 * time.Second)
+	for len(imapSearchSubject(t, server.imapPort, bob, testPassword, "INBOX", "Fwd: "+subject)) == 0 ||
+		len(imapSearchSubject(t, server.imapPort, alice, testPassword, "INBOX", subject)) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("rule never forwarded and binned: bob inbox %v, alice inbox %v",
+				imapSearchSubject(t, server.imapPort, bob, testPassword, "INBOX", subject),
+				imapSearchSubject(t, server.imapPort, alice, testPassword, "INBOX", subject))
+		}
+		sync()
+		time.Sleep(300 * time.Millisecond)
+	}
+	// Give a looping forward every chance to show up.
+	until := time.Now().Add(5 * time.Second)
+	for time.Now().Before(until) {
+		sync()
+		time.Sleep(300 * time.Millisecond)
+	}
+	uids := mcpAssertServerCopies(t, server, bob, "INBOX", "Fwd: "+subject, 1)
+	mcpAssertServerCopies(t, server, bob, "Sent", subject, 0)
+	mcpAssertServerCopies(t, server, alice, "INBOX", subject, 0)
+	mcpAssertServerCopies(t, server, alice, "Trash", subject, 1)
+	mcpAssertServerCopies(t, server, alice, "Sent", "Fwd: "+subject, 1)
+
+	raw := string(imapRawMessage(t, server.imapPort, bob, testPassword, "INBOX", uids[0]))
+	for _, want := range []string{
+		"From: <" + alice + ">",
+		"Auto-Submitted: auto-forwarded",
+		"---------- Forwarded message ---------",
+		"From: Carol <carol@mail.test>",
+		"Content-Type: message/rfc822",
+		"Message-ID: <invoice-42@mail.test>",
+		"Please pay by Friday.",
+	} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("forward lacks %q:\n%s", want, raw)
+		}
+	}
+}

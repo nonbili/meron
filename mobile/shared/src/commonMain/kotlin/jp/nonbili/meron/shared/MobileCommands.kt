@@ -1239,6 +1239,8 @@ data class Rule(
     val accounts: List<String> = emptyList(),
     val copyFolder: String = "",
     val copyAccount: String = "",
+    /** Addresses to forward matching mail to, comma-separated; empty for none. */
+    val forwardTo: String = "",
     /** Kept, but not run. */
     val disabled: Boolean = false,
     /** Runs on mail the user sent, as it shows up in Sent, instead of on mail that arrives. */
@@ -1259,6 +1261,7 @@ data class Rule(
             "accounts" to accounts.jsonStringArray(),
             "copy_folder" to copyFolder.jsonString(),
             "copy_account" to copyAccount.jsonString(),
+            "forward_to" to forwardTo.jsonString(),
             "disabled" to disabled.toString(),
             "sent" to sent.toString(),
         )

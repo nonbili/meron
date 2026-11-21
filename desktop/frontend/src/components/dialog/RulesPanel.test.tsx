@@ -404,7 +404,7 @@ it('shows an age rule in days and blocks saving an empty age', async () => {
 })
 
 it('turns a rule into one for sent mail, dropping what sent mail cannot have done to it', async () => {
-  const saved = stubCore([{ ...bills, trigger: 'read', delay_seconds: 300 }])
+  const saved = stubCore([{ ...bills, trigger: 'read', delay_seconds: 300, forward_to: 'dan@example.org' }])
   const view = render(<RulesPanel />)
   await waitFor(() => expect(view.getByText('From: billing')).toBeTruthy())
   fireEvent.click(view.getByRole('button', { name: 'Edit rule' }))
@@ -416,6 +416,7 @@ it('turns a rule into one for sent mail, dropping what sent mail cannot have don
   expect(view.queryByLabelText('When to run')).toBeNull()
   expect(view.queryByRole('button', { name: 'Move to' })).toBeNull()
   expect(view.queryByText('Mark as read')).toBeNull()
+  expect(view.queryByText('Forward to')).toBeNull()
   expect(view.getByRole('button', { name: 'Copy to' })).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: 'Save' }))
 
@@ -426,6 +427,7 @@ it('turns a rule into one for sent mail, dropping what sent mail cannot have don
     delay_seconds: 0,
     mark_read: false,
     move_to: '',
+    forward_to: '',
     tags: ['finance'],
   })
   await waitFor(() => expect(view.getByText('Sent mail · Tag finance')).toBeTruthy())
@@ -438,4 +440,36 @@ it('asks about Sent, not the Inbox, before running a rule for sent mail on exist
   await waitFor(() => expect(view.getByText('From: billing')).toBeTruthy())
   fireEvent.click(view.getByRole('button', { name: 'Run on existing mail' }))
   await waitFor(() => expect(ui$.confirm.get()?.message).toMatch(/already in Sent\? Matching messages: 3/))
+})
+
+it('adds a rule that forwards mail, saying how forwarding works', async () => {
+  const saved = stubCore([])
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('No rules yet.')).toBeTruthy())
+
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+  fireEvent.change(view.getByLabelText('From'), { target: { value: 'billing' } })
+  expect(view.queryByText(/with the original attached/)).toBeNull()
+  const forward = view.getByText('Forward to').parentElement!.querySelector('input')!
+  fireEvent.change(forward, { target: { value: 'dan@example.org' } })
+  expect(view.getByText(/with the original attached/)).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+
+  await waitFor(() => expect(saved.length).toBe(1))
+  expect(saved[0][0]).toMatchObject({ query: 'from:billing', forward_to: 'dan@example.org' })
+  await waitFor(() => expect(view.getByText('Forward to dan@example.org')).toBeTruthy())
+})
+
+it('asks about forwarding before running a forwarding rule on existing mail', async () => {
+  stubCore([{ ...bills, forward_to: 'dan@example.org' }])
+  matches = 4
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('From: billing')).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: 'Run on existing mail' }))
+  await waitFor(() =>
+    expect(ui$.confirm.get()?.message).toMatch(
+      /Forward matching mail in the Inbox to dan@example\.org\? Matching messages: 4/,
+    ),
+  )
+  expect(ui$.confirm.get()?.tone).toBe('danger')
 })

@@ -28,6 +28,8 @@ mod m0006_recipients;
 mod m0030_caldav;
 #[rustfmt::skip]
 mod m0032_carddav_notes;
+#[rustfmt::skip]
+mod m0036_rule_forwards;
 
 #[cfg(test)]
 mod tests;
@@ -104,6 +106,7 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
     sql!(33, "0033_google_grants"),
     sql!(34, "0034_openpgp_sign_plain"),
     sql!(35, "0035_google_tasks"),
+    rust!(36, m0036_rule_forwards),
 ];
 
 /// The `user_version` [`run_migrations`] leaves behind.

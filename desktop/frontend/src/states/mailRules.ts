@@ -21,6 +21,8 @@ export type Rule = {
   accounts: string[]
   copy_folder: string
   copy_account: string
+  /** Addresses to forward matching mail to, comma-separated; empty for none. */
+  forward_to?: string
   /** Kept, but not run. */
   disabled: boolean
   /** Runs on mail the user sent, as it shows up in Sent, instead of on mail that arrives. */

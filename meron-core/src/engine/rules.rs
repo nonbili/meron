@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use super::*;
+use crate::smtp;
 use crate::store::{RuleAction, RuleCopy};
 
 /// Small enough to finish well inside a sync's budget even on a server without
@@ -146,6 +147,7 @@ fn rule_action_batches(actions: Vec<RuleAction>) -> Vec<Vec<RuleAction>> {
             action.trash,
             action.target.clone(),
             action.copies.clone(),
+            action.forwards.clone(),
             action.run,
         );
         batches.entry(plan).or_default().push(action);
@@ -154,11 +156,13 @@ fn rule_action_batches(actions: Vec<RuleAction>) -> Vec<Vec<RuleAction>> {
 }
 
 /// What of `actions`, in UID order, one turn takes: up to [`RULE_RUN_TURN`]
-/// messages, but a message to copy alone, as it means downloading all of it and
-/// what is done must outlast the time running out. Never between two runs' work on
-/// one message, which has an order to keep.
+/// messages, but a message to copy or forward alone, as it means downloading all
+/// of it and what is done must outlast the time running out. Never between two
+/// runs' work on one message, which has an order to keep.
 fn one_turn(mut actions: Vec<RuleAction>) -> Vec<RuleAction> {
-    let copying = actions.iter().position(|action| !action.copies.is_empty());
+    let copying = actions
+        .iter()
+        .position(|action| !action.copies.is_empty() || !action.forwards.is_empty());
     let last = match copying {
         Some(0) => 0,
         Some(at) => (at - 1).min(RULE_RUN_TURN - 1),
@@ -304,7 +308,19 @@ async fn run_rule_turn(
             .filter(|action| action.copies.is_empty() || !unfinished.contains(&action.uid))
             .collect();
         let run = batch.first().map_or(0, |action| action.run);
-        match copy_batch(engine, account, folder, &batch, run).await {
+        let copied = match copy_batch(engine, account, folder, &batch, run).await {
+            Ok(mut gone) => {
+                batch.retain(|action| !gone.contains(&action.uid));
+                forward_batch(engine, account, folder, &batch, run)
+                    .await
+                    .map(|missing| {
+                        gone.extend(missing);
+                        gone
+                    })
+            }
+            Err(err) => Err(err),
+        };
+        match copied {
             Ok(gone) => {
                 batch.retain(|action| !gone.contains(&action.uid));
                 if batch.iter().any(RuleAction::moves) {
@@ -449,6 +465,90 @@ async fn copy_batch(
     let finished: Vec<u32> = gone.iter().copied().collect();
     store::finish_rule_actions(&engine.db.lock().unwrap(), account, folder, &finished, run)?;
     failure.map_or(Ok(gone), Err)
+}
+
+/// The forwards of `actions`, all of `run`, after their copies and before any
+/// move: only here does the queue's UID still mean this message. Each forward
+/// is struck off the queue once it is out, so a failure after it, of another
+/// forward or a move, doesn't send it twice. Answers with the messages found
+/// gone from here, whose work is over.
+async fn forward_batch(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    actions: &[RuleAction],
+    run: i64,
+) -> anyhow::Result<BTreeSet<u32>> {
+    let mut gone = BTreeSet::new();
+    let mut failure = None;
+    for action in actions.iter().filter(|action| !action.forwards.is_empty()) {
+        match forward_rule_mail(engine, account, folder, action, run).await {
+            Ok(true) => {}
+            Ok(false) => {
+                gone.insert(action.uid);
+            }
+            // Each on its own: one refused recipient mustn't hold back the rest.
+            Err(err) => failure = Some(err),
+        }
+    }
+    let finished: Vec<u32> = gone.iter().copied().collect();
+    store::finish_rule_actions(&engine.db.lock().unwrap(), account, folder, &finished, run)?;
+    failure.map_or(Ok(gone), Err)
+}
+
+/// Forward one message for a rule, from the address its account sends from,
+/// and strike the forward off `run`'s queue. Answers false when the message is
+/// gone from here. A forward a rule made is never forwarded again, so that
+/// rules forwarding to each other can't loop.
+async fn forward_rule_mail(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    action: &RuleAction,
+    run: i64,
+) -> anyhow::Result<bool> {
+    let done =
+        || store::finish_rule_forward(&engine.db.lock().unwrap(), account, folder, action.uid, run);
+    let mut messages = engine
+        .with_transfer_session(account, RULE_COPY_BUDGET, |session| {
+            let folder = folder.to_string();
+            let uid = action.uid;
+            Box::pin(
+                async move { imap::fetch_raw_messages_for_copy(session, &folder, &[uid]).await },
+            )
+        })
+        .await?;
+    let Some(message) = messages.pop() else {
+        return Ok(false);
+    };
+    if smtp::is_rule_forward(&message.raw) {
+        crate::mlog!(
+            crate::log::Level::Info,
+            "mail.rules",
+            "account={account}: not forwarding uid {}, a rule's forward itself",
+            action.uid
+        );
+        done()?;
+        return Ok(true);
+    }
+    let creds = engine.ensure_valid_creds(account).await?;
+    let (from, sender_name) =
+        store::resolve_send_from(&engine.db.lock().unwrap(), account, &creds.user, "")?;
+    let to = action.forwards.join(", ");
+    let raw = smtp::send_rule_forward(&creds, &from, &sender_name, &to, &message.raw).await?;
+    // Before anything else is awaited: a sync that runs out of time drops this
+    // mid-way, and a forward still queued would go out again.
+    done()?;
+    // Out already: filing it can't be what fails the forward, or a retry would
+    // send it again.
+    if let Err(err) = append_to_sent(engine, account, &raw).await {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.rules",
+            "account={account}: couldn't file a rule's forward in Sent: {err:#}"
+        );
+    }
+    Ok(true)
 }
 
 /// The moves of `actions`, all of `run`.

@@ -844,6 +844,7 @@ fun parseRulesResponse(responseJson: String): List<Rule> =
                 accounts = rule.topLevelStringArray("accounts"),
                 copyFolder = rule.findJsonStringProperty("copy_folder").orEmpty(),
                 copyAccount = rule.findJsonStringProperty("copy_account").orEmpty(),
+                forwardTo = rule.findJsonStringProperty("forward_to").orEmpty(),
                 disabled = rule.findJsonBooleanProperty("disabled") ?: false,
                 sent = rule.findJsonBooleanProperty("sent") ?: false,
             )

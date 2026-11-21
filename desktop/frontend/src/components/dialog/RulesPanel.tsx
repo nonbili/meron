@@ -67,6 +67,7 @@ type Draft = {
   accounts: string[]
   copy_folder: string
   copy_account: string
+  forward_to: string
   disabled: boolean
   sent: boolean
 }
@@ -97,6 +98,7 @@ const EMPTY_DRAFT: Draft = {
   accounts: [],
   copy_folder: '',
   copy_account: '',
+  forward_to: '',
   disabled: false,
   sent: false,
 }
@@ -231,15 +233,18 @@ export function RulesPanel() {
         return
       }
       const removes = rule.move_to === 'trash' || (rule.move_to === 'folder' && rule.folder_account !== '')
+      // Sending mail out can't be undone, so it is what the question is about.
+      const forwards = !rule.sent && !!rule.forward_to
       const confirmed = await confirmAction({
         title: t('rules.run'),
-        message: t(
-          rule.sent ? 'rules.runSentConfirm' : rule.move_to === 'trash' ? 'rules.runTrashConfirm' : 'rules.runConfirm',
-          { count },
-        ),
+        message: rule.sent
+          ? t('rules.runSentConfirm', { count })
+          : forwards
+            ? t('rules.runForwardConfirm', { count, addresses: rule.forward_to })
+            : t(rule.move_to === 'trash' ? 'rules.runTrashConfirm' : 'rules.runConfirm', { count }),
         confirmLabel: t('rules.runAction'),
         cancelLabel: t('buttons.cancel'),
-        tone: removes ? 'danger' : 'default',
+        tone: removes || forwards ? 'danger' : 'default',
       })
       if (!confirmed) return
       showToast(t('rules.runStarted', { count: await runRule(rule.id) }))
@@ -289,7 +294,16 @@ export function RulesPanel() {
   const pickSent = (sent: boolean) =>
     change(
       sent
-        ? { sent, timing: 'now', amount: '', mark_read: false, move_to: '', folder: '', folder_account: '' }
+        ? {
+            sent,
+            timing: 'now',
+            amount: '',
+            mark_read: false,
+            move_to: '',
+            folder: '',
+            folder_account: '',
+            forward_to: '',
+          }
         : { sent },
     )
 
@@ -343,7 +357,15 @@ export function RulesPanel() {
 
   const edit = async (rule: Rule) => {
     const request = ++formRequest.current
-    const { query: _, id: __, trigger = 'arrival', delay_seconds: delay = 0, sent = false, ...actions } = rule
+    const {
+      query: _,
+      id: __,
+      trigger = 'arrival',
+      delay_seconds: delay = 0,
+      sent = false,
+      forward_to = '',
+      ...actions
+    } = rule
     const fields = await ruleFields(rule.query)
     if (request !== formRequest.current) return
     const timing = trigger === 'arrival' && delay === 0 ? 'now' : trigger
@@ -351,6 +373,7 @@ export function RulesPanel() {
     setDraft({
       ...actions,
       sent,
+      forward_to,
       timing,
       amount: timing === 'now' ? '' : String(amount),
       unit,
@@ -428,6 +451,7 @@ export function RulesPanel() {
       rule.mark_read && t('notification.actionMarkRead'),
       rule.star && t('chat.star'),
       rule.copy_folder && t('rules.summaryCopy', { folder: copyLabel(rule) }),
+      rule.forward_to && t('rules.summaryForward', { addresses: rule.forward_to }),
       rule.move_to && t('rules.summaryMove', { folder: moveLabel(rule) }),
     ]
       .filter(Boolean)
@@ -636,6 +660,23 @@ export function RulesPanel() {
               />
             }
           />
+          {!draft.sent && (
+            <>
+              <div className="flex min-h-11 items-center gap-4 px-3.5 py-2">
+                <span className="shrink-0 text-xs font-normal text-primary">{t('rules.forwardTo')}</span>
+                <RecipientInput
+                  bare
+                  value={draft.forward_to}
+                  onChange={(forward_to) => change({ forward_to })}
+                  accountId=""
+                  className={`${inputClass} w-full`}
+                />
+              </div>
+              {draft.forward_to.trim() && (
+                <p className="px-3.5 py-2.5 text-[0.6875rem] text-secondary">{t('rules.forwardHint')}</p>
+              )}
+            </>
+          )}
           {!draft.sent && (
             <SettingRow
               title={t('rules.moveTo')}
