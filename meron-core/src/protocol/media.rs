@@ -79,9 +79,15 @@ pub(crate) fn mobile_storage_usage(data_dir: &str) -> Result<Value, String> {
     if data_dir.trim().is_empty() {
         return Err("mobile core is not initialized".to_string());
     }
+    let avatar_bytes = crate::avatar::mobile_cache_dir()
+        .map(path_size_bytes)
+        .transpose()
+        .map_err(|err| err.to_string())?
+        .unwrap_or_default();
     Ok(json!({
         "cacheBytes": path_size_bytes(&root.join("attachments")).map_err(|err| err.to_string())?
-            + path_size_bytes(&root.join("secure-media")).map_err(|err| err.to_string())?,
+            + path_size_bytes(&root.join("secure-media")).map_err(|err| err.to_string())?
+            + avatar_bytes,
         "dbBytes": path_size_bytes(&root.join("meron.db")).map_err(|err| err.to_string())?,
     }))
 }
@@ -97,6 +103,12 @@ pub(crate) fn clear_mobile_storage_cache(data_dir: &str) -> Result<Value, String
         std::fs::remove_dir_all(&secure_dir).map_err(|err| err.to_string())?;
     }
     std::fs::create_dir_all(&secure_dir).map_err(|err| err.to_string())?;
+    if let Some(dir) = crate::avatar::mobile_cache_dir()
+        && let Err(err) = std::fs::remove_dir_all(dir)
+        && err.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(err.to_string());
+    }
     mobile_storage_usage(data_dir)
 }
 

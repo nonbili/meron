@@ -6,12 +6,18 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::VecDeque,
     io::Read,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
+mod disk;
+
 const MAX_IMAGE_BYTES: usize = 1024 * 1024;
 const PLACEHOLDER_HASH: &str = "e5db88ea2322863ca17817b99d60006c625a31cff0dad49cf05d3c6d16a75c17";
+const CACHE_SUBDIR: &str = "_sender-avatars";
+#[cfg(target_os = "android")]
+static ANDROID_CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 #[derive(Clone, Default, Serialize)]
 pub struct SenderImage {
@@ -87,6 +93,35 @@ fn cached(key: String, load: impl FnOnce() -> Lookup) -> Lookup {
 }
 
 pub fn resolve(params: &serde_json::Value) -> SenderImage {
+    resolve_with_disk(params, mobile_cache_dir())
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn configure_android_cache(cache_dir: &str) {
+    if !cache_dir.is_empty() {
+        let _ = ANDROID_CACHE_DIR.set(Path::new(cache_dir).join(CACHE_SUBDIR));
+    }
+}
+
+pub(crate) fn mobile_cache_dir() -> Option<&'static Path> {
+    #[cfg(target_os = "android")]
+    {
+        ANDROID_CACHE_DIR.get().map(PathBuf::as_path)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        None
+    }
+}
+
+pub fn resolve_desktop(params: &serde_json::Value) -> SenderImage {
+    let cache = std::env::var_os("MERON_MEDIA_DIR")
+        .filter(|path| !path.is_empty())
+        .map(|path| PathBuf::from(path).join(CACHE_SUBDIR));
+    resolve_with_disk(params, cache.as_deref())
+}
+
+fn resolve_with_disk(params: &serde_json::Value, disk: Option<&Path>) -> SenderImage {
     let email = params["email"].as_str().unwrap_or("").trim().to_lowercase();
     let size = params["size"].as_u64().unwrap_or(96).clamp(16, 512);
     let Some((local, domain)) = email.rsplit_once('@') else {
@@ -95,18 +130,69 @@ pub fn resolve(params: &serde_json::Value) -> SenderImage {
     if local.is_empty() || local.contains('@') || favicon_domains(domain).is_empty() {
         return SenderImage::default();
     }
-    cached(format!("sender:{email}:{size}"), || {
-        resolve_sender_with(&email, domain, size, |url| {
-            let image = cached(format!("url:{url}"), || {
-                Ok(SenderImage {
-                    src: fetch_image(url)?.unwrap_or_default(),
-                    kind: "",
-                })
-            })?;
-            Ok((!image.src.is_empty()).then_some(image.src))
-        })
+    let key = format!("sender:{email}:{size}");
+    if let Some(root) = disk
+        && let Some((image, stale)) = disk::load(root, &key)
+    {
+        if stale {
+            cached(format!("refresh:{key}"), || {
+                disk::queue_refresh(root, &key, &email, size)?;
+                Ok(SenderImage::default())
+            })
+            .ok();
+        }
+        return image;
+    }
+    cached(key.clone(), || {
+        let mut downloaded = true;
+        let (image, source) = resolve_network(&email, domain, size, false, |url| {
+            if let Some(src) = disk.and_then(|root| disk::load_fresh_url(root, url)) {
+                downloaded = false;
+                return Ok(Some(src));
+            }
+            fetch_cached(url)
+        })?;
+        if let (Some(root), Some(url)) = (disk, source) {
+            disk::save(root, &key, &url, &image, downloaded);
+        }
+        Ok(image)
     })
     .unwrap_or_default()
+}
+
+fn fetch_cached(url: &str) -> Result<Option<String>, ()> {
+    let image = cached(format!("url:{url}"), || {
+        Ok(SenderImage {
+            src: fetch_image(url)?.unwrap_or_default(),
+            kind: "",
+        })
+    })?;
+    Ok((!image.src.is_empty()).then_some(image.src))
+}
+
+fn resolve_network(
+    email: &str,
+    domain: &str,
+    size: u64,
+    refreshing: bool,
+    mut fetch: impl FnMut(&str) -> Result<Option<String>, ()>,
+) -> Result<(SenderImage, Option<String>), ()> {
+    let mut source = None;
+    let mut transient = false;
+    let image = resolve_sender_with(email, domain, size, |url| {
+        let result = fetch(url);
+        if matches!(result, Ok(Some(_))) {
+            source = Some(url.to_owned());
+        }
+        transient |= result.is_err();
+        result
+    })?;
+    // A lower-priority fallback after a transient error shouldn't replace
+    // an image already available on disk.
+    if refreshing && transient {
+        source = None;
+    }
+    Ok((image, source))
 }
 
 fn resolve_sender_with(

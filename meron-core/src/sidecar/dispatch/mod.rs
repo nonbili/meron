@@ -64,7 +64,8 @@ pub(crate) async fn dispatch(
         "avatar.resolve" => {
             let params = p.clone();
             let image =
-                tokio::task::spawn_blocking(move || meron_core::avatar::resolve(&params)).await?;
+                tokio::task::spawn_blocking(move || meron_core::avatar::resolve_desktop(&params))
+                    .await?;
             Ok(serde_json::to_value(image)?)
         }
 

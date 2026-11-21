@@ -534,10 +534,14 @@ pub extern "C" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreProtocolVersion
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitializeAndroidContext(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     context: JObject,
+    cache_dir: JString,
 ) {
+    if let Ok(cache_dir) = env.get_string(&cache_dir) {
+        crate::avatar::configure_android_cache(&cache_dir.to_string_lossy());
+    }
     let mut stored_context = ANDROID_CONTEXT.lock().unwrap();
     if stored_context.is_some() {
         return;

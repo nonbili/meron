@@ -10,6 +10,9 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -86,6 +89,50 @@ public final class MeronCoreNativeContractTest {
     private void requireIsolatedRunner() {
         org.junit.Assume.assumeTrue("Requires IsolatedCoreTestRunner to protect installed profiles",
                 InstrumentationRegistry.getInstrumentation() instanceof IsolatedCoreTestRunner);
+    }
+
+    @Test
+    public void senderAvatarUsesAndroidCacheDirectory() throws Exception {
+        requireIsolatedRunner();
+        android.content.Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File dataDir = new File(context.getCacheDir(), "avatar-contract-" + System.nanoTime());
+        assertTrue(dataDir.mkdirs());
+        assertTrue(new JSONObject(MeronCoreNative.initJson(dataDir.getAbsolutePath())).getBoolean("ok"));
+
+        String domain = dataDir.getName() + ".example.com";
+        String email = "sender@" + domain;
+        String imageHash = sha256("https://icons.duckduckgo.com/ip3/" + domain + ".ico");
+        String src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
+                + "AAAAC0lEQVR42mP8/x8AAwMCAO+aKioAAAAASUVORK5CYII=";
+        File cache = new File(context.getCacheDir(), "_sender-avatars");
+        assertTrue(cache.isDirectory() || cache.mkdirs());
+        File image = new File(cache, imageHash + ".img");
+        File reference = new File(cache, sha256("sender:" + email + ":96") + ".ref");
+        try {
+            writeUtf8(image, src);
+            writeUtf8(reference, "favicon:" + imageHash);
+            JSONObject result = invoke("avatar.resolve", new JSONObject().put("email", email).put("size", 96));
+            assertEquals(src, result.getString("src"));
+            assertEquals("favicon", result.getString("kind"));
+        } finally {
+            reference.delete();
+            image.delete();
+        }
+    }
+
+    private static String sha256(String value) throws Exception {
+        StringBuilder hex = new StringBuilder();
+        for (byte b : MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))) {
+            hex.append(Character.forDigit((b >> 4) & 0xf, 16));
+            hex.append(Character.forDigit(b & 0xf, 16));
+        }
+        return hex.toString();
+    }
+
+    private static void writeUtf8(File file, String value) throws Exception {
+        try (FileOutputStream stream = new FileOutputStream(file)) {
+            stream.write(value.getBytes(StandardCharsets.UTF_8));
+        }
     }
 
     @Test
