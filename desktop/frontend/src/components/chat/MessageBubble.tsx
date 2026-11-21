@@ -12,7 +12,7 @@ import type { Message } from '../../types'
 import { targetWithin, useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { formatFullTimestamp, formatMessageStamp } from './messageHelpers'
 import { AddressRow } from './AddressList'
-import { BlockedRemoteButton } from './BlockedRemoteButton'
+import { RemoteContentButton } from './RemoteContentButton'
 import { CryptoBadge } from '../crypto/CryptoBadge'
 import { MessageContent } from './MessageContent'
 import { useMessageView } from './useMessageView'
@@ -182,11 +182,12 @@ export function MessageBubble({ message, galleryOffset }: MessageBubbleProps) {
               senderAddress={message.from_addr}
               size={14}
             />
-            <BlockedRemoteButton
+            <RemoteContentButton
               messageId={message.id}
               blocked={view.blockedRemote}
+              canReveal={view.canRevealRemote}
               hiddenRemoteCount={view.hiddenRemoteCount}
-              senderAddress={view.outgoing ? '' : view.senderAddress}
+              senderAddress={view.senderAddress}
               size={14}
             />
             <span title={formatFullTimestamp(message.date)}>

@@ -73,9 +73,9 @@ export function useMessageView(message: Message) {
   // A newsletter's remote images live in the HTML body, not in the attachment
   // list, so the reveal affordance has to look at the body too — otherwise the
   // most common blocked message offers no way to show its content.
-  // Decrypted mail can't reveal remote content, so it offers no reveal.
-  const blockedRemote =
-    !encrypted && !remoteVisible && (hiddenRemoteCount > 0 || (useHtmlBody && htmlHasRemoteMedia(message.body_html)))
+  // Even if detection misses a reference, the reader can try a one-time reveal.
+  const canRevealRemote = !encrypted && !remoteVisible && (hiddenRemoteCount > 0 || useHtmlBody)
+  const blockedRemote = canRevealRemote && (hiddenRemoteCount > 0 || htmlHasRemoteMedia(message.body_html))
   const bubbleAttachmentImages = standaloneAttachmentImages(attachmentImages, useHtmlBody, message.body_html)
 
   const replyToRaw = message.reply_to?.trim()
@@ -98,8 +98,9 @@ export function useMessageView(message: Message) {
     remoteVisible,
     /** Whether remote content is being held back and can be revealed. */
     blockedRemote,
+    canRevealRemote,
     /** Bare From address, the key the sender allowlist is stored under. */
-    senderAddress: fromEmail,
+    senderAddress: isRSS || isDraft || encrypted ? '' : fromEmail,
     attachmentImages,
     bubbleAttachmentImages,
     videos,

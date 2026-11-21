@@ -1367,6 +1367,7 @@ private fun MeronMobileScreenContent(
                             remoteImageSenders = remoteImageSenders,
                             detectOneTimeCodes = detectOneTimeCodes,
                             onToggleDetectOneTimeCodes = { saveDetectOneTimeCodes(!detectOneTimeCodes) },
+                            onAddRemoteImageSender = { addr -> setRemoteImageSender(addr, true) },
                             onRemoveRemoteImageSender = { addr -> setRemoteImageSender(addr, false) },
                             onSaveAccountSignature = ::saveAccountSignature,
                             onSaveAccountColor = ::saveAccountColor,

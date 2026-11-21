@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.automirrored.filled.ReplyAll
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.HideImage
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
@@ -84,6 +86,7 @@ import jp.nonbili.meron.shared.applyRemoteContentPolicy
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.formatRecipientSummary
 import jp.nonbili.meron.shared.htmlHasRemoteMedia
+import jp.nonbili.meron.shared.isInlineMedia
 import jp.nonbili.meron.shared.mailBodyCsp
 import jp.nonbili.meron.shared.standaloneAttachments
 import jp.nonbili.meron.shared.visibleImageAttachments
@@ -396,7 +399,7 @@ internal fun MessageBubble(
                         )
                     }
                 }
-                BlockedRemoteButton(
+                RemoteContentButton(
                     message = message,
                     remoteContent = remoteContent,
                     preferHtml = preferHtml,
@@ -886,38 +889,8 @@ internal fun ColumnScope.MessageBodyContent(
     }
 }
 
-/**
- * Whether a message is holding remote content back, and so has something for
- * [BlockedRemoteButton] to offer: blocked attachment images, or a body that
- * references remote media (a newsletter keeps its images there, not in the
- * attachment list).
- */
-internal fun blockedRemoteImageCount(
-    message: MessageBody,
-    remoteContent: MessageRemoteContent,
-    preferHtml: Boolean,
-    searchQuery: String,
-): Int? {
-    if (remoteContent.allowRemote) return null
-    val images = standaloneAttachments(message).filter { it.mimeType.startsWith("image/") }
-    val hidden = images.size - visibleImageAttachments(images, false).size
-    if (hidden > 0) return hidden
-    val htmlBody = usesHtmlBody(message, preferHtml, searchQuery)
-    return if (htmlBody && htmlHasRemoteMedia(message.bodyHtml)) 0 else null
-}
-
-/**
- * The whole blocked-remote-content affordance for one message: a tinted icon in
- * the header that opens the two reveal actions — show this message's remote
- * content once, or trust its sender for good. It replaces the strip that used
- * to sit above every body: on a newsletter-heavy mailbox that strip showed on
- * nearly every message.
- *
- * Renders nothing when the content is already allowed, or when the message has
- * no remote content to hold back.
- */
 @Composable
-internal fun BlockedRemoteButton(
+internal fun RemoteContentButton(
     message: MessageBody,
     remoteContent: MessageRemoteContent,
     preferHtml: Boolean,
@@ -925,43 +898,76 @@ internal fun BlockedRemoteButton(
     modifier: Modifier = Modifier,
     iconSize: Dp = 15.dp,
 ) {
-    val hiddenImageCount = blockedRemoteImageCount(message, remoteContent, preferHtml, searchQuery) ?: return
+    if (message.crypto?.encrypted == true) return
+    val canLoadRemote = !remoteContent.allowRemote
+    val showsHtml = usesHtmlBody(message, preferHtml, searchQuery)
+    val hiddenImageCount =
+        if (canLoadRemote) {
+            standaloneAttachments(message).count { it.mimeType.startsWith("image/") && !isInlineMedia(it) }
+        } else {
+            0
+        }
+    val blocked = canLoadRemote && (hiddenImageCount > 0 || (showsHtml && htmlHasRemoteMedia(message.bodyHtml)))
+    val canReveal = canLoadRemote && (hiddenImageCount > 0 || showsHtml)
+    val hasSender = remoteContent.senderAddress.isNotEmpty()
+    if (!canReveal && !hasSender) return
+
+    val senderAllowed = remoteContent.senderAllowed
+    val enabled = canReveal || !senderAllowed
     var menuOpen by remember { mutableStateOf(false) }
     Box(modifier) {
-        IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(24.dp)) {
+        IconButton(onClick = { menuOpen = true }, enabled = enabled, modifier = Modifier.size(24.dp)) {
             Icon(
-                Icons.Filled.HideImage,
-                contentDescription = tr("chat.remoteBlocked"),
+                when {
+                    blocked -> Icons.Filled.HideImage
+                    senderAllowed -> Icons.Filled.Check
+                    else -> Icons.Filled.Image
+                },
+                contentDescription =
+                    tr(
+                        when {
+                            blocked -> "chat.remoteBlocked"
+                            senderAllowed -> "chat.remoteSenderAllowed"
+                            else -> "settings.privacy.remoteSenders"
+                        },
+                    ),
                 modifier = Modifier.size(iconSize),
-                // The theme's accent, softened: muted grey among the other
-                // header icons reads as decoration, and this is the only sign
-                // that part of the message is missing.
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                tint =
+                    if (enabled) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+                    } else {
+                        LocalContentColor.current
+                    },
             )
         }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        if (hiddenImageCount > 0) {
-                            tr("chat.showImages", mapOf("count" to hiddenImageCount))
-                        } else {
-                            tr("chat.showRemoteContent")
-                        },
-                    )
-                },
-                onClick = {
-                    menuOpen = false
-                    remoteContent.onReveal()
-                },
-            )
-            // Trusting the sender is app-wide and outlives the thread, so it
-            // trails the one-off reveal.
-            if (remoteContent.senderAddress.isNotEmpty()) {
+        DropdownMenu(expanded = menuOpen && enabled, onDismissRequest = { menuOpen = false }) {
+            if (canReveal) {
                 DropdownMenuItem(
                     text = {
                         Text(
-                            tr("chat.allowRemoteFrom", mapOf("sender" to remoteContent.senderAddress)),
+                            if (hiddenImageCount > 0) {
+                                tr("chat.showImages", mapOf("count" to hiddenImageCount))
+                            } else {
+                                tr("chat.showRemoteContent")
+                            },
+                        )
+                    },
+                    onClick = {
+                        menuOpen = false
+                        remoteContent.onReveal()
+                    },
+                )
+            }
+            if (hasSender) {
+                DropdownMenuItem(
+                    enabled = !senderAllowed,
+                    text = {
+                        Text(
+                            if (senderAllowed) {
+                                tr("chat.remoteSenderAllowed")
+                            } else {
+                                tr("chat.allowRemoteFrom", mapOf("sender" to remoteContent.senderAddress))
+                            },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )

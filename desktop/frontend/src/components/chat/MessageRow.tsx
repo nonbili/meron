@@ -10,7 +10,7 @@ import type { Message } from '../../types'
 import { targetWithin, useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { Avatar } from '../avatar/Avatar'
 import { AddressRow } from './AddressList'
-import { BlockedRemoteButton } from './BlockedRemoteButton'
+import { RemoteContentButton } from './RemoteContentButton'
 import { CryptoBadge } from '../crypto/CryptoBadge'
 import { FrostedBand } from './FrostedBand'
 import { MessageContent } from './MessageContent'
@@ -213,11 +213,12 @@ export function MessageRow({
             senderName={message.from_name}
             senderAddress={message.from_addr}
           />
-          <BlockedRemoteButton
+          <RemoteContentButton
             messageId={message.id}
             blocked={view.blockedRemote}
+            canReveal={view.canRevealRemote}
             hiddenRemoteCount={view.hiddenRemoteCount}
-            senderAddress={view.outgoing ? '' : view.senderAddress}
+            senderAddress={view.senderAddress}
             size={15}
           />
           <span title={fullStamp}>{stamp}</span>
@@ -325,11 +326,12 @@ export function MessageRow({
               senderName={message.from_name}
               senderAddress={message.from_addr}
             />
-            <BlockedRemoteButton
+            <RemoteContentButton
               messageId={message.id}
               blocked={view.blockedRemote}
+              canReveal={view.canRevealRemote}
               hiddenRemoteCount={view.hiddenRemoteCount}
-              senderAddress={view.outgoing ? '' : view.senderAddress}
+              senderAddress={view.senderAddress}
               size={15}
             />
             <span title={fullStamp}>{stamp}</span>

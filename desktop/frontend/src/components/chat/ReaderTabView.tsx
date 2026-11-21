@@ -15,7 +15,7 @@ import { Composer } from '../composer/Composer'
 import { HtmlMessageView } from './HtmlMessageView'
 import { ReaderViewMode } from './ReaderViewMode'
 import { ReaderCorrespondents } from './ReaderCorrespondents'
-import { BlockedRemoteButton } from './BlockedRemoteButton'
+import { RemoteContentButton } from './RemoteContentButton'
 import { CryptoBadge } from '../crypto/CryptoBadge'
 import { CryptoStrip } from '../crypto/CryptoStrip'
 import { FrostedBand } from './FrostedBand'
@@ -60,10 +60,9 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
     (a) => !isInlineMedia(a) && a.url && (isImage(a) || isVideo(a)),
   )
   const hiddenRemoteCount = allowRemote ? 0 : remoteAttachments.length
-  const blockedRemote =
-    !encrypted &&
-    !allowRemote &&
-    (hiddenRemoteCount > 0 || (tab.viewMode === 'html' && htmlHasRemoteMedia(tab.bodyHtml)))
+  const canRevealRemote =
+    !encrypted && !allowRemote && (hiddenRemoteCount > 0 || (tab.viewMode === 'html' && !!tab.bodyHtml))
+  const blockedRemote = canRevealRemote && (hiddenRemoteCount > 0 || htmlHasRemoteMedia(tab.bodyHtml))
   const actionBar = bottomActions && !isRSS && !!tab.message
 
   return (
@@ -130,13 +129,12 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
                     senderName={tab.message?.from_name ?? ''}
                     senderAddress={sender}
                   />
-                  <BlockedRemoteButton
+                  <RemoteContentButton
                     messageId={tab.messageId}
                     blocked={blockedRemote}
                     hiddenRemoteCount={hiddenRemoteCount}
-                    // Trusting the sender of the user's own mail would be a no-op that
-                    // still grew the allowlist, so it only offers a reveal.
-                    senderAddress={tab.outgoing ? '' : sender}
+                    canReveal={canRevealRemote}
+                    senderAddress={isRSS || encrypted ? '' : sender}
                   />
                 </>
               }

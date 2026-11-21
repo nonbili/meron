@@ -218,7 +218,7 @@ private fun CollapsedMessageRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            BlockedRemoteButton(
+            RemoteContentButton(
                 message = message,
                 remoteContent = remoteContent,
                 preferHtml = preferHtml,
@@ -300,7 +300,7 @@ internal fun MessageRowHeader(
     textColor: Color,
     mutedColor: Color,
     // Whether this message's remote content may load, for the header's reveal
-    // affordance (see [BlockedRemoteButton]).
+    // affordance (see [RemoteContentButton]).
     remoteContent: MessageRemoteContent,
     preferHtml: Boolean,
     searchQuery: String,
@@ -389,7 +389,7 @@ internal fun MessageRowHeader(
                 }
             }
         }
-        BlockedRemoteButton(
+        RemoteContentButton(
             message = message,
             remoteContent = remoteContent,
             preferHtml = preferHtml,

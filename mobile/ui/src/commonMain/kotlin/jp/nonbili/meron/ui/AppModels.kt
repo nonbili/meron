@@ -65,9 +65,9 @@ internal data class KanbanBoardMediaTarget(
 internal data class MessageRemoteContent(
     /** Whether this message's remote content may load right now. */
     val allowRemote: Boolean,
-    /** Bare sender address, or empty where trusting the sender is not offered:
-     *  the user's own outgoing mail, or a message with no From address. */
+    /** Bare sender address, or empty when sender management is unavailable. */
     val senderAddress: String = "",
+    val senderAllowed: Boolean = false,
     /** Show this message's remote content, for as long as the thread is open. */
     val onReveal: () -> Unit = {},
     /** Add [senderAddress] to the app-wide allowlist. */

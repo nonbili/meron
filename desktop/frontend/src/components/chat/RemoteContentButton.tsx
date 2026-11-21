@@ -1,23 +1,17 @@
 import { useState } from 'react'
 import type { MouseEvent } from 'react'
-import { Image, ImageOff, UserCheck } from 'lucide-react'
+import { Check, Image, ImageOff, UserCheck } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { revealMessageRemote } from '../../states/compose'
-import { setRemoteImageSender } from '../../states/settings'
+import { useValue } from '@legendapp/state/react'
+import { normalizeSenderAddr, settings$, setRemoteImageSender } from '../../states/settings'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
 
-/**
- * The whole blocked-remote-content affordance for one message: a tinted icon in
- * the header that opens the two reveal actions. It replaces the banner that
- * used to sit above every newsletter body — on a newsletter-heavy inbox that
- * banner showed on nearly every message.
- *
- * Renders nothing when the message has no blocked remote content.
- */
-export function BlockedRemoteButton({
+export function RemoteContentButton({
   messageId,
   blocked,
+  canReveal = blocked,
   hiddenRemoteCount,
   senderAddress,
   size = 15,
@@ -26,10 +20,10 @@ export function BlockedRemoteButton({
   messageId?: string
   /** Whether this message is holding remote content back. */
   blocked: boolean
+  canReveal?: boolean
   /** Blocked attachment images/videos, 0 when only the body is held back. */
   hiddenRemoteCount: number
-  /** Bare From address, the key the sender allowlist is stored under; empty
-   *  when there is no sender worth trusting (an outgoing message). */
+  /** From address, or empty when sender management is unavailable. */
   senderAddress: string
   size?: number
   /** Standalone readers reveal content within their own session. */
@@ -38,7 +32,15 @@ export function BlockedRemoteButton({
   const { t } = useTranslation()
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null)
 
-  if (!blocked) return null
+  const senders = useValue(settings$.remoteImageSenders)
+  const sender = normalizeSenderAddr(senderAddress)
+  const senderAllowed = senders.includes(sender)
+  if (!canReveal && !sender) return null
+
+  const label = t(
+    blocked ? 'chat.remoteBlocked' : senderAllowed ? 'chat.remoteSenderAllowed' : 'settings.privacy.remoteSenders',
+  )
+  const StatusIcon = blocked ? ImageOff : senderAllowed ? Check : Image
 
   const openMenu = (event: MouseEvent<HTMLButtonElement>) => {
     // Both headers are click-to-collapse; the icon opens its menu instead.
@@ -52,21 +54,17 @@ export function BlockedRemoteButton({
       <button
         type="button"
         onClick={openMenu}
-        title={t('chat.remoteBlocked')}
-        aria-label={t('chat.remoteBlocked')}
-        // Tinted rather than muted: a grey glyph among the other header icons
-        // read as decoration, and this one is the only sign that part of the
-        // message is missing. The theme's accent at partial opacity — it tracks
-        // light/dark (and a custom accent) without shouting the way a full
-        // accent glyph next to the timestamp does.
-        className="flex items-center justify-center gap-1 rounded p-0.5 text-accent/65 hover:bg-accent/10 hover:text-accent cursor-pointer transition-colors"
+        title={label}
+        aria-label={label}
+        disabled={senderAllowed && !canReveal}
+        className="flex items-center justify-center gap-1 rounded p-0.5 text-accent/65 hover:bg-accent/10 hover:text-accent cursor-pointer transition-colors disabled:cursor-default disabled:text-secondary disabled:hover:bg-transparent"
       >
-        <ImageOff size={size} />
+        <StatusIcon size={size} />
         {hiddenRemoteCount > 0 && (
           <span className="text-[0.625rem] font-semibold leading-none">{hiddenRemoteCount}</span>
         )}
       </button>
-      {anchor && (
+      {anchor && (canReveal || !senderAllowed) && (
         <FloatingContextMenu
           x={anchor.x}
           y={anchor.y}
@@ -78,28 +76,31 @@ export function BlockedRemoteButton({
           overlayClassName="fixed inset-0 z-[60]"
           className="fixed z-[61] min-w-[180px] bg-header shadow-xl"
         >
-          <MenuItem
-            icon={<Image size={13} className="text-accent" />}
-            label={
-              hiddenRemoteCount > 0 ? t('chat.showImages', { count: hiddenRemoteCount }) : t('chat.showRemoteContent')
-            }
-            onClick={() => {
-              setAnchor(null)
-              if (onReveal) onReveal()
-              else if (messageId) revealMessageRemote(messageId)
-            }}
-          />
-          {!!senderAddress && (
+          {canReveal && (
             <MenuItem
-              icon={<UserCheck size={13} className="text-accent" />}
-              label={t('chat.allowRemoteFrom', { sender: senderAddress })}
+              icon={<Image size={13} className="text-accent" />}
+              label={
+                hiddenRemoteCount > 0 ? t('chat.showImages', { count: hiddenRemoteCount }) : t('chat.showRemoteContent')
+              }
+              onClick={() => {
+                setAnchor(null)
+                if (onReveal) onReveal()
+                else if (messageId) revealMessageRemote(messageId)
+              }}
+            />
+          )}
+          {!!sender && (
+            <MenuItem
+              icon={senderAllowed ? <Check size={13} /> : <UserCheck size={13} className="text-accent" />}
+              label={senderAllowed ? t('chat.remoteSenderAllowed') : t('chat.allowRemoteFrom', { sender })}
+              disabled={senderAllowed}
               // The sender address can be long; truncate rather than let one
               // row stretch the whole menu.
               className="max-w-[280px]"
               trailing={<span />}
               onClick={() => {
                 setAnchor(null)
-                setRemoteImageSender(senderAddress, true)
+                setRemoteImageSender(sender, true)
               }}
             />
           )}

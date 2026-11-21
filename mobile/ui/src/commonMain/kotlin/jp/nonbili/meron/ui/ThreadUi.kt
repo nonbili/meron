@@ -725,12 +725,16 @@ internal fun ThreadScreen(
 
     fun remoteContentFor(message: MessageBody): MessageRemoteContent {
         if (message.crypto?.encrypted == true) return MessageRemoteContent(allowRemote = false)
-        val sender = normalizeSenderAddr(message.fromAddr.ifBlank { message.from })
+        val sender =
+            if (isRss || folderIsDrafts(message.folderId)) {
+                ""
+            } else {
+                normalizeSenderAddr(message.fromAddr.ifBlank { message.from }).takeIf { '@' in it }.orEmpty()
+            }
         return MessageRemoteContent(
             allowRemote = remoteAllowed(message),
-            // Trusting the sender of the user's own mail would be a no-op that
-            // still grew the allowlist, so outgoing messages only offer a reveal.
-            senderAddress = if (isOutgoing(message, accountEmail)) "" else sender,
+            senderAddress = sender,
+            senderAllowed = sender in remoteContentPolicy.allowedSenders,
             onReveal = { revealedRemote = revealedRemote + message.id },
             onAllowSender = { onAllowRemoteSender(sender) },
         )

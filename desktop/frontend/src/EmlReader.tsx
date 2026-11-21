@@ -7,7 +7,7 @@ import { hydrateSettings, SETTINGS_DB_KEYS, settings$, watchSystemAppearance } f
 import { HtmlMessageView } from './components/chat/HtmlMessageView'
 import { ReaderCorrespondents } from './components/chat/ReaderCorrespondents'
 import { ReaderViewMode } from './components/chat/ReaderViewMode'
-import { BlockedRemoteButton } from './components/chat/BlockedRemoteButton'
+import { RemoteContentButton } from './components/chat/RemoteContentButton'
 import { htmlHasRemoteMedia } from './components/chat/messageHelpers'
 import { useValue } from '@legendapp/state/react'
 import type { Attachment } from './types'
@@ -165,7 +165,7 @@ export function EmlReader({ session }: { session: string }) {
                   date: message.date,
                 }}
                 remote={
-                  <BlockedRemoteButton
+                  <RemoteContentButton
                     blocked={!remote && mode === 'html' && htmlHasRemoteMedia(message.body_html)}
                     hiddenRemoteCount={0}
                     senderAddress=""

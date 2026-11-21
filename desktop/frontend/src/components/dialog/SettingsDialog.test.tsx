@@ -115,3 +115,34 @@ describe('SettingsDialog reveal', () => {
     expect(document.activeElement).toBe(toggle)
   })
 })
+
+describe('SettingsDialog remote senders', () => {
+  afterEach(() => {
+    cleanup()
+    ui$.settingsOpen.set(false)
+    settings$.remoteImageSenders.set([])
+  })
+
+  it('adds a normalized address from an empty allowlist and prevents duplicates', () => {
+    settings$.remoteImageSenders.set([])
+    openSettingsAt('messages', '')
+    const view = render(<SettingsDialog />)
+    const row = document.querySelector('[data-setting-title="Always load remote content"]')!
+    fireEvent.click(row.querySelector('button')!)
+
+    const address = view.getByRole('textbox', { name: 'Email Address' })
+    const add = view.getByRole('button', { name: 'Add' })
+    fireEvent.change(address, { target: { value: 'newsletter' } })
+    expect(add.hasAttribute('disabled')).toBe(true)
+
+    fireEvent.change(address, { target: { value: ' Newsletter <News@Example.COM> ' } })
+    fireEvent.click(add)
+    expect(view.getByText('news@example.com')).toBeTruthy()
+    expect(settings$.remoteImageSenders.peek()).toEqual(['news@example.com'])
+
+    fireEvent.change(address, { target: { value: 'NEWS@example.com' } })
+    expect(add.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(view.getByRole('button', { name: 'Stop allowing this sender' }))
+    expect(add.hasAttribute('disabled')).toBe(false)
+  })
+})

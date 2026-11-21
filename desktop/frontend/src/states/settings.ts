@@ -159,8 +159,7 @@ export type Settings = {
   signature: string
   /**
    * Sender addresses (bare, lowercased) whose remote content always loads,
-   * whatever an account's own "load remote images" toggle says. Grown from the
-   * "Always allow from …" action on a message with blocked remote content.
+   * whatever an account's own "load remote images" toggle says.
    */
   remoteImageSenders: string[]
   /** Ordered user-created kanban boards. */

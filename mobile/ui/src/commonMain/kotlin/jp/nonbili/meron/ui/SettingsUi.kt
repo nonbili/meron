@@ -204,6 +204,7 @@ internal fun SettingsScreen(
     remoteImageSenders: List<String>,
     detectOneTimeCodes: Boolean,
     onToggleDetectOneTimeCodes: () -> Unit,
+    onAddRemoteImageSender: (String) -> Unit,
     onRemoveRemoteImageSender: (String) -> Unit,
     onSaveAccountSignature: (AccountSummary, SignatureSpec) -> Unit,
     onSaveAccountColor: (AccountSummary, String) -> Unit,
@@ -480,6 +481,7 @@ internal fun SettingsScreen(
             composable(SettingsRoutes.RemoteSenders) {
                 RemoteSendersPage(
                     senders = remoteImageSenders,
+                    onAddSender = onAddRemoteImageSender,
                     onRemoveSender = onRemoveRemoteImageSender,
                     modifier = Modifier.fillMaxSize().navigationBarsPadding(),
                 )

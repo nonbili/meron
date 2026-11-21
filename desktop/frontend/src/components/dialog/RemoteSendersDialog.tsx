@@ -3,20 +3,19 @@ import { Image as ImageIcon, Trash2, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { Dialog } from './Dialog'
-import { settings$, setRemoteImageSender } from '../../states/settings'
+import { normalizeSenderAddr, settings$, setRemoteImageSender } from '../../states/settings'
+import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 import { TextInput } from '../field/Field'
 
-/**
- * The app-wide remote-content allowlist: every sender the user trusted with
- * "Always allow from …" on a blocked message. Lives behind a count row in
- * Settings so a long list never stretches the settings card, and exists mainly
- * so a decision made in a hurry can be taken back.
- */
 export function RemoteSendersDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
   const senders = useValue(settings$.remoteImageSenders)
   const [filter, setFilter] = useState('')
+  const [addressInput, setAddressInput] = useState('')
+  const address = normalizeSenderAddr(addressInput)
+  const alreadyAllowed = senders.includes(address)
+  const canAdd = /^[^\s@<>,;]+@[^\s@<>,;]+$/u.test(address) && !alreadyAllowed
 
   const query = filter.trim().toLowerCase()
   const visible = query ? senders.filter((sender) => sender.includes(query)) : senders
@@ -39,6 +38,35 @@ export function RemoteSendersDialog({ onClose }: { onClose: () => void }) {
 
       <div className="flex flex-1 flex-col gap-3 overflow-hidden px-6 py-4">
         <p className="text-[0.75rem] text-secondary">{t('settings.privacy.remoteSendersHint')}</p>
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (!canAdd) return
+            setRemoteImageSender(address, true)
+            setAddressInput('')
+            setFilter('')
+          }}
+        >
+          <TextInput
+            inputMode="email"
+            autoComplete="off"
+            spellCheck={false}
+            value={addressInput}
+            onChange={(event) => setAddressInput(event.target.value)}
+            aria-label={t('accounts.fields.emailAddress')}
+            placeholder={t('accounts.fields.emailAddress')}
+            className="flex-1"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!canAdd}
+            title={alreadyAllowed ? t('chat.remoteSenderAllowed') : undefined}
+          >
+            {t('common.add')}
+          </Button>
+        </form>
         {senders.length > 0 && (
           <TextInput
             type="search"

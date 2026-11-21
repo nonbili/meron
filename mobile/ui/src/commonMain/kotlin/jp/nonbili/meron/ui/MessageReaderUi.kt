@@ -259,7 +259,7 @@ internal fun MessageReaderScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                BlockedRemoteButton(
+                                RemoteContentButton(
                                     message = message,
                                     remoteContent = remoteContent,
                                     preferHtml = preferHtml,
