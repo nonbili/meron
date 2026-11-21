@@ -1,11 +1,80 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { accounts$ } from '../../states/accounts'
 import { mail$ } from '../../states/mail'
 import { settings$ } from '../../states/settings'
 import { ui$ } from '../../states/ui'
+import type { Account, Folder } from '../../types'
 import { SideNav } from './SideNav'
 
 afterEach(cleanup)
+
+it('marks participating inboxes read from the Unified Inbox menu with unread badges hidden', async () => {
+  const showUnifiedInbox = settings$.showUnifiedInboxInSideNav.peek()
+  const showUnreadBadge = settings$.showUnreadAccountBadge.peek()
+  const previousAccounts = accounts$.peek()
+  const previousFolders = mail$.foldersByAccount.peek()
+  const selectedAccount = ui$.selectedAccount.peek()
+  const previousGo = (window as any).go
+  const account = (id: string): Account => ({
+    id,
+    email: `${id}@example.com`,
+    display_name: id,
+    provider: 'custom',
+    auth_type: 'password',
+    imap_host: '',
+    imap_port: 993,
+    smtp_host: '',
+    smtp_port: 465,
+    tls: true,
+  })
+  const inbox = (id: string): Folder => ({ id: 'INBOX', account_id: id, name: 'Inbox', role: 'inbox', unread: 3 })
+  settings$.showUnifiedInboxInSideNav.set(true)
+  settings$.showUnreadAccountBadge.set(false)
+  accounts$.set([account('personal'), account('studio'), { ...account('other'), included_in_unified: false }])
+  mail$.foldersByAccount.set({ personal: [inbox('personal')], studio: [inbox('studio')], other: [inbox('other')] })
+  ui$.selectedAccount.set('other')
+  const writes: Array<{ account_id: string; folder_id: string }> = []
+  ;(window as any).go = {
+    main: {
+      App: {
+        Invoke: async (command: string, payload: { account_id: string; folder_id: string }) => {
+          if (command === 'mail.markAllRead') writes.push(payload)
+          if (command === 'mail.folderList') return { folders: [{ ...inbox(payload.account_id), unread: 0 }] }
+          return { folder_unreads: { [payload.account_id]: { INBOX: 0 } } }
+        },
+      },
+    },
+  }
+
+  try {
+    const view = render(<SideNav />)
+    const unifiedInbox = view.getByTitle(/unified inbox/i)
+    fireEvent.contextMenu(unifiedInbox)
+    fireEvent.click(view.getByRole('button', { name: 'Mark all as read' }))
+
+    await waitFor(() => {
+      expect(writes).toEqual([
+        { account_id: 'personal', folder_id: 'INBOX' },
+        { account_id: 'studio', folder_id: 'INBOX' },
+      ])
+      expect(mail$.foldersByAccount.studio[0].unread.peek()).toBe(0)
+    })
+    expect(mail$.foldersByAccount.other[0].unread.peek()).toBe(3)
+    expect(ui$.selectedAccount.peek()).toBe('other')
+    fireEvent.contextMenu(unifiedInbox)
+    expect((view.getByRole('button', { name: 'Mark all as read' }) as HTMLButtonElement).disabled).toBe(true)
+  } finally {
+    cleanup()
+    settings$.showUnifiedInboxInSideNav.set(showUnifiedInbox)
+    settings$.showUnreadAccountBadge.set(showUnreadBadge)
+    accounts$.set(previousAccounts)
+    mail$.foldersByAccount.set(previousFolders)
+    ui$.selectedAccount.set(selectedAccount)
+    if (previousGo === undefined) delete (window as any).go
+    else (window as any).go = previousGo
+  }
+})
 
 it('opens calendar settings from the Calendar context menu without hiding the tile', () => {
   const calendarEnabled = settings$.calendarEnabled.peek()

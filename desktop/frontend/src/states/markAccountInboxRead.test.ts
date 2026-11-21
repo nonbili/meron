@@ -3,7 +3,8 @@ import type { Message } from '../types'
 import { accounts$ } from './accounts'
 import { kanban$ } from './kanban'
 import { mail$ } from './mail'
-import { markAccountInboxRead } from './mailFlags'
+import { markAccountInboxRead, markUnifiedInboxRead } from './mailFlags'
+import { refreshAccountFoldersCache } from './mailFolders'
 import { ui$ } from './ui'
 
 const message = (overrides: Partial<Message> = {}): Message => ({
@@ -117,7 +118,7 @@ describe('markAccountInboxRead', () => {
     expect(kanban$.unreadCounts['unified\ninbox'].get()).toBe(7)
   })
 
-  it('rolls optimistic state back when the backend rejects the action', async () => {
+  it('preserves unread state when the backend rejects the action', async () => {
     ;(window as any).go.main.App.Invoke = async () => {
       throw new Error('offline')
     }
@@ -130,5 +131,64 @@ describe('markAccountInboxRead', () => {
     expect(kanban$.threads['unified\ninbox'][0].unread.get()).toBe(true)
     expect(kanban$.unreadCounts['acc-1\nINBOX'].get()).toBe(50)
     expect(kanban$.unreadCounts['unified\ninbox'].get()).toBe(57)
+  })
+
+  it('keeps a newer view and a successful sibling write when one account fails', async () => {
+    const failingWrite = Promise.withResolvers<never>()
+    const healthyWrite = Promise.withResolvers<{ folder_unreads: Record<string, Record<string, number>> }>()
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: any) => {
+      calls.push({ command, payload })
+      if (command === 'mail.markAllRead') {
+        return payload.account_id === 'acc-1' ? failingWrite.promise : healthyWrite.promise
+      }
+      return { folders: [{ id: 'INBOX', account_id: 'acc-2', name: 'Inbox', role: 'inbox', unread: 0 }] }
+    }
+
+    const unified = markUnifiedInboxRead()
+    const individual = markAccountInboxRead('acc-2')
+    healthyWrite.resolve({ folder_unreads: { 'acc-2': { INBOX: 0 } } })
+    await individual
+    expect(mail$.threads[2].unread.get()).toBe(false)
+    expect(kanban$.unreadCounts['unified\ninbox'].get()).toBe(50)
+
+    const archive = message({ id: 'archive', account_id: 'acc-2', folder_id: 'Archive' })
+    const archiveFolders = [{ id: 'Archive', account_id: 'acc-2', name: 'Archive', role: '', unread: 1 }]
+    ui$.selectedAccount.set('acc-2')
+    mail$.threads.set([archive])
+    mail$.messages.set([archive])
+    mail$.folders.set(archiveFolders)
+    failingWrite.reject(new Error('offline'))
+    await unified
+
+    expect(
+      calls.filter(({ command }) => command === 'mail.markAllRead').map(({ payload }) => payload.account_id),
+    ).toEqual(['acc-1', 'acc-2'])
+    expect(mail$.threads.get()).toEqual([archive])
+    expect(mail$.messages.get()).toEqual([archive])
+    expect(mail$.folders.get()).toEqual(archiveFolders)
+    expect(mail$.foldersByAccount['acc-1'][0].unread.get()).toBe(50)
+    expect(mail$.foldersByAccount['acc-2'][0].unread.get()).toBe(0)
+    expect(kanban$.unreadCounts['unified\ninbox'].get()).toBe(50)
+  })
+
+  it('keeps the confirmed count when an older folder refresh returns late', async () => {
+    const olderRefresh = Promise.withResolvers<unknown>()
+    let refreshes = 0
+    const inbox = mail$.foldersByAccount['acc-1'][0].get()
+    ;(window as any).go.main.App.Invoke = async (command: string) => {
+      if (command === 'mail.folderList') {
+        if (++refreshes === 1) return olderRefresh.promise
+        return { folders: [{ ...inbox, unread: 0 }] }
+      }
+      return { folder_unreads: { 'acc-1': { INBOX: 0 } } }
+    }
+
+    const pendingRefresh = refreshAccountFoldersCache('acc-1', false)
+    await markAccountInboxRead('acc-1')
+    olderRefresh.resolve({ folders: [inbox] })
+    await pendingRefresh
+
+    expect(mail$.foldersByAccount['acc-1'][0].unread.get()).toBe(0)
+    expect(mail$.folders[0].unread.get()).toBe(7)
   })
 })

@@ -2,7 +2,7 @@ import type { Message } from '../types'
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
 import { clearBulkSelection, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
-import { accounts$, unifiedAccounts } from './accounts'
+import { accounts$, isLocalAccountId, unifiedAccounts } from './accounts'
 import { kanban$ } from './kanban'
 import { isRssAccount } from '../lib/threadActions'
 import {
@@ -28,6 +28,7 @@ import {
   applyMutationFolderUnreads,
   decrementFolderUnread,
   folderMatches,
+  inboxUnread,
   loadFolders,
   type MutationResult,
   publishCachedFolders,
@@ -406,82 +407,83 @@ export async function markAllRead() {
   if (selectedAcc) publishCachedFolders(selectedAcc)
 }
 
+const pendingInboxReads = new Map<string, Promise<void>>()
+
+export async function markUnifiedInboxRead() {
+  await Promise.all(
+    unifiedAccounts()
+      .filter(({ id }) => !isLocalAccountId(id))
+      .map(({ id }) => markAccountInboxRead(id)),
+  )
+}
+
 // Mark one account's Inbox (or its synthetic RSS Inbox) read from account-level
 // chrome such as the side navigation menu. This deliberately does not depend on
 // the currently selected account/folder.
 export async function markAccountInboxRead(accountId: string) {
   if (!accountId || accountId === 'unified') return
+  const pending = pendingInboxReads.get(accountId)
+  if (pending) return pending
 
-  const accountFolders = mail$.foldersByAccount[accountId].get() ?? []
-  const inbox = accountFolders.find((folder) => folderMatches(folder, accountId, 'inbox'))
-  const folderId = inbox?.id || 'inbox'
-  const accountUnread = inbox?.unread ?? 0
-  const includedInUnified = accounts$.get().find((account) => account.id === accountId)?.included_in_unified !== false
-  const previousThreads = mail$.threads.get()
-  const previousMessages = mail$.messages.get()
-  const previousFolders = mail$.folders.get()
-  const previousAccountFolders = captureKeys(mail$.foldersByAccount.get(), [accountId])
+  const write = writeAccountInboxRead(accountId).finally(() => pendingInboxReads.delete(accountId))
+  pendingInboxReads.set(accountId, write)
+  return write
+}
+
+async function writeAccountInboxRead(accountId: string) {
+  const folderId =
+    mail$.foldersByAccount[accountId].get()?.find((folder) => folderMatches(folder, accountId, 'inbox'))?.id || 'inbox'
+  try {
+    const result = await invoke<MutationResult & { ok?: boolean }>('mail.markAllRead', {
+      account_id: accountId,
+      folder_id: folderId,
+    })
+    if (result?.ok === false) throw new Error(t('notification.markReadFailed'))
+    if (result?.folder_unreads?.[accountId]) applyMutationFolderUnreads(result)
+    else updateCachedFolderUnread(accountId, folderId, 0, 'mutation')
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : t('notification.markReadFailed'), 'error')
+    return
+  }
+
+  // Apply the confirmed write to the latest view. A failed write leaves the
+  // rows and counts intact while navigation, sync, and other writes continue.
+  const foldersByAccount = mail$.foldersByAccount.get()
+  const accountUnread = inboxUnread(foldersByAccount[accountId])
+  const participants = unifiedAccounts()
+  const includedInUnified = participants.some(({ id }) => id === accountId)
   const inAccountInbox = (item: Pick<Message, 'account_id' | 'folder_id'>) =>
     item.account_id === accountId &&
     folderMatches({ id: item.folder_id, account_id: accountId, name: '', role: '', unread: 0 }, accountId, folderId)
-  const affectedKanbanThreadIds = new Set(
-    Object.values(kanban$.threads.get())
-      .flat()
-      .filter((thread) => thread.unread && inAccountInbox(thread))
-      .map((thread) => thread.thread_id),
-  )
-  const directKanbanKeys = Array.from(
-    new Set([...Object.keys(kanban$.threads.get()), ...Object.keys(kanban$.unreadCounts.get())]),
-  ).filter((key) => {
-    const [columnAccountId, columnFolderId] = key.split('\n')
-    if (!columnAccountId || !columnFolderId) return false
-    if (columnAccountId === 'unified') return includedInUnified && unifiedFolderRole(columnFolderId) === 'inbox'
-    return (
-      columnAccountId === accountId &&
-      folderMatches({ id: columnFolderId, account_id: accountId, name: '', role: '', unread: 0 }, accountId, folderId)
+
+  if (accountUnread === 0) {
+    const markRead = (row: Message) =>
+      row.unread && inAccountInbox(row) ? { ...row, unread: false, unread_count: 0 } : row
+    mail$.threads.set(mail$.threads.get().map(markRead))
+    mail$.messages.set(mail$.messages.get().map(markRead))
+    const affectedKanbanThreadIds = new Set(
+      Object.values(kanban$.threads.get())
+        .flat()
+        .filter((thread) => thread.unread && inAccountInbox(thread))
+        .map((thread) => thread.thread_id),
     )
-  })
-  const affectedKanbanKeys = Array.from(
-    new Set([...directKanbanKeys, ...Array.from(affectedKanbanThreadIds).flatMap(kanbanKeysWithThread)]),
-  )
-  const previousKanbanThreads = captureKeys(kanban$.threads.get(), affectedKanbanKeys)
-  const previousKanbanUnreadCounts = captureKeys(kanban$.unreadCounts.get(), affectedKanbanKeys)
+    for (const threadId of affectedKanbanThreadIds) {
+      updateKanbanThread(threadId, markRead)
+    }
+  }
 
-  mail$.threads.set(
-    previousThreads.map((thread) =>
-      thread.unread && inAccountInbox(thread) ? { ...thread, unread: false, unread_count: 0 } : thread,
-    ),
-  )
-  mail$.messages.set(
-    previousMessages.map((message) =>
-      message.unread && inAccountInbox(message) ? { ...message, unread: false } : message,
-    ),
-  )
-  for (const threadId of affectedKanbanThreadIds) {
-    updateKanbanThread(threadId, (thread) => ({ ...thread, unread: false, unread_count: 0 }))
+  const unifiedUnread = participants.reduce((total, { id }) => total + inboxUnread(foldersByAccount[id]), 0)
+  const columnKeys = new Set([...Object.keys(kanban$.threads.get()), ...Object.keys(kanban$.unreadCounts.get())])
+  for (const key of columnKeys) {
+    const [columnAccountId, columnFolderId] = key.split('\n')
+    if (!columnFolderId) continue
+    if (includedInUnified && columnAccountId === 'unified' && unifiedFolderRole(columnFolderId) === 'inbox') {
+      kanban$.unreadCounts[key].set(unifiedUnread)
+    } else if (inAccountInbox({ account_id: columnAccountId, folder_id: columnFolderId })) {
+      kanban$.unreadCounts[key].set(accountUnread)
+    }
   }
-  // These badges are backend folder totals, not counts of the loaded cards.
-  // A single-account Inbox is fully cleared; a unified Inbox loses this
-  // account's whole cached contribution.
-  for (const key of directKanbanKeys) {
-    const [columnAccountId] = key.split('\n')
-    const previous = previousKanbanUnreadCounts.find(([candidate]) => candidate === key)?.[1] ?? 0
-    kanban$.unreadCounts[key].set(columnAccountId === 'unified' ? Math.max(0, previous - accountUnread) : 0)
-  }
-  updateCachedFolderUnread(accountId, folderId, 0)
-
-  try {
-    const result = await invoke<MutationResult>('mail.markAllRead', { account_id: accountId, folder_id: folderId })
-    applyMutationFolderUnreads(result)
-    void refreshAccountFoldersCache(accountId, false)
-  } catch (error) {
-    mail$.threads.set(previousThreads)
-    mail$.messages.set(previousMessages)
-    mail$.folders.set(previousFolders)
-    restoreAccountFolders(previousAccountFolders)
-    restoreKanbanColumns(previousKanbanThreads, previousKanbanUnreadCounts)
-    showToast(error instanceof Error ? error.message : t('notification.markReadFailed'), 'error')
-  }
+  void refreshAccountFoldersCache(accountId, false)
 }
 
 export async function markMessagesRead(threadId: string, messageIds: string[]) {

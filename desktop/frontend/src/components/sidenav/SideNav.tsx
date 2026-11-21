@@ -3,6 +3,7 @@ import type { DragEvent } from 'react'
 import {
   CalendarClock,
   CalendarDays,
+  CheckCheck,
   Mail,
   SquareCheckBig,
   MoreHorizontal,
@@ -24,6 +25,7 @@ import { moveFeed, RSS_FEED_DRAG_TYPE } from '../../states/feeds'
 import { kanban$, openMailAccount, reorderKanbanBoards, selectKanbanBoard } from '../../states/kanban'
 import { toggleContactsPanel } from '../../states/contacts'
 import { mail$ } from '../../states/mail'
+import { markUnifiedInboxRead } from '../../states/mailFlags'
 import { inboxUnread } from '../../states/mailFolders'
 import { settings$, setCalendarSideNavVisible, setUnifiedInboxSideNavVisible } from '../../states/settings'
 import { calendarPanelShowing, openCalendar, toggleCalendarPanel } from '../../states/calendar'
@@ -81,6 +83,7 @@ export function SideNav() {
   const menuBoard = boardMenu ? boards.find((board) => board.id === boardMenu.id) : null
   const [boardDialog, setBoardDialog] = useState<BoardDialogState | null>(null)
   const [unifiedMenu, setUnifiedMenu] = useState<{ x: number; y: number } | null>(null)
+  const [markingUnifiedRead, setMarkingUnifiedRead] = useState(false)
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number } | null>(null)
   // Bottom "more" menu holding the view switcher and theme settings.
   const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null)
@@ -88,13 +91,10 @@ export function SideNav() {
   // Starred is a folder of the unified view, reachable from the column's folder
   // switcher, so the rail button covers it too.
   const isUnifiedActive = !calendarOpen && !activeBoardId && selectedAccount === 'unified'
-  const unifiedUnread = showUnreadBadge
-    ? accounts.reduce(
-        (sum, account) =>
-          account.included_in_unified !== false ? sum + inboxUnread(foldersByAccount[account.id]) : sum,
-        0,
-      )
-    : 0
+  const unifiedUnread = accounts.reduce(
+    (sum, account) => (account.included_in_unified !== false ? sum + inboxUnread(foldersByAccount[account.id]) : sum),
+    0,
+  )
   const hiddenSideNavAccountIds = new Set(hiddenSideNavAccounts)
   const sideNavAccounts = accounts.filter((account) => !hiddenSideNavAccountIds.has(account.id))
   const hasBoards = boards.length > 0
@@ -224,7 +224,7 @@ export function SideNav() {
               >
                 <Mail size={19} />
               </button>
-              <UnreadCountBadge count={unifiedUnread} />
+              {showUnreadBadge && <UnreadCountBadge count={unifiedUnread} />}
             </div>
           </div>
         )}
@@ -400,6 +400,21 @@ export function SideNav() {
 
       {unifiedMenu && (
         <RailContextMenu x={unifiedMenu.x} y={unifiedMenu.y} onClose={() => setUnifiedMenu(null)}>
+          <RailMenuItem
+            className="disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={unifiedUnread === 0 || markingUnifiedRead}
+            icon={<CheckCheck size={13} className="text-secondary" />}
+            label={t('threads.actions.markAllAsRead')}
+            onClick={async () => {
+              setUnifiedMenu(null)
+              setMarkingUnifiedRead(true)
+              try {
+                await markUnifiedInboxRead()
+              } finally {
+                setMarkingUnifiedRead(false)
+              }
+            }}
+          />
           <RailMenuItem
             icon={<EyeOff size={13} className="text-secondary" />}
             label={t('sidenav.actions.hideFromSideNav')}
