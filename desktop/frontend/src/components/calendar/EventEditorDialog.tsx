@@ -1,7 +1,9 @@
-import { CalendarDays, Check, Copy, Mail, Trash2, X } from 'lucide-react'
+import { CalendarDays, Check, Copy, Download, Mail, Trash2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { dateValue, localInstant, parseDateValue, timeValue, utcDate, utcDateValue } from '../../lib/calendarGrid'
+import { invoke } from '../../lib/bridge'
+import { errorMessage } from '../../lib/errors'
 import { formatEventRange } from '../../lib/date'
 import { Dialog } from '../dialog/Dialog'
 import { NO_ALERT, alertLabel, alertOptions } from '../../lib/eventAlerts'
@@ -22,6 +24,7 @@ import {
   type EventInput,
   type SyncedCalendar,
 } from '../../states/calendar'
+import { showToast } from '../../states/ui'
 import { settings$ } from '../../states/settings'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
@@ -31,7 +34,7 @@ import { SelectInput, TextInput } from '../field/Field'
 import { alignRepeat, describeRepeat, isPlainRepeat, parseRepeat } from '../../lib/repeatRule'
 import { CustomRepeatDialog } from './CustomRepeatDialog'
 
-/** A synced event's own rule, which none of the editor's can say. */
+/** An event's own rule, which none of the editor's choices represents. */
 const SERVER_REPEAT = 'custom'
 /** The Repeat choice that opens the custom repeat editor. */
 const CUSTOMIZE = '\u0000customize'
@@ -121,7 +124,7 @@ function initialForm(editor: EventEditor): Form {
     startTime: timeValue(start),
     endDate: item.all_day ? utcDateValue(Math.max(item.start, item.end - 86_400)) : dateValue(end),
     endTime: timeValue(end),
-    // A synced event repeating by a rule the choices cannot say.
+    // An event repeating by a rule the choices cannot say.
     repeat: hasCustomRepeat(item) ? SERVER_REPEAT : item.repeat,
     ...alertFields(item.alerts),
     calendar: item.calendar ?? '',
@@ -172,7 +175,7 @@ function shiftDate(date: string, days: number): string {
 }
 
 function hasCustomRepeat(item: CalendarItem): boolean {
-  return !!item.calendar && item.recurring && !item.repeat
+  return item.source === 'event' && item.recurring && !item.repeat
 }
 
 function toInput(form: Form): EventInput {
@@ -361,6 +364,7 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
   // edit from a value a sync has since replaced.
   const [original] = useState(() => toInput(initialForm(editor)))
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const item = editor.mode === 'edit' ? editor.item : null
   const invite = item?.source === 'invite'
   const calendars = useValue(calendar$.calendars)
@@ -408,7 +412,10 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
   // last the way to make one.
   const repeatOptions = REPEATS.map(({ value, label: key }) => ({ value, label: t(key) }))
   if (item && hasCustomRepeat(item))
-    repeatOptions.push({ value: SERVER_REPEAT, label: t('calendar.repeat.serverRule') })
+    repeatOptions.push({
+      value: SERVER_REPEAT,
+      label: t(item.calendar ? 'calendar.repeat.serverRule' : 'calendar.repeat.custom'),
+    })
   // The event's own rule is offered as it opened only while its first day
   // has not moved; moved, the rule shown is it moved along.
   const ownRule = item?.repeat && seriesDate === item.series_date ? item.repeat : ''
@@ -444,6 +451,21 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
     if (!item) return
     close()
     await deleteEvent(item.id)
+  }
+
+  const exportFile = async (id: string) => {
+    setExporting(true)
+    try {
+      const result = await invoke<{ saved: boolean }>('calendar.exportIcs', { event_id: id })
+      if (result.saved) showToast(t('calendar.file.exported', { defaultValue: 'Calendar file saved.' }), 'success')
+    } catch (err) {
+      showToast(
+        errorMessage(err, t('calendar.file.failed', { defaultValue: 'Could not transfer calendar events.' })),
+        'error',
+      )
+    } finally {
+      setExporting(false)
+    }
   }
 
   const label = 'text-[0.6875rem] font-semibold text-secondary'
@@ -572,8 +594,9 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
                         <option value={synced.id}>{calendarLabel(synced, t('calendar.readOnly'))}</option>
                       ) : (
                         <>
-                          {/* A server's own repeat rule cannot live on this device. */}
-                          {form.repeat !== SERVER_REPEAT && <option value="">{t('calendar.onThisDevice')}</option>}
+                          {(!item?.calendar || form.repeat !== SERVER_REPEAT) && (
+                            <option value="">{t('calendar.onThisDevice')}</option>
+                          )}
                           {writableCalendars.map((calendar) => (
                             <option key={calendar.id} value={calendar.id}>
                               {calendarLabel(calendar, '')}
@@ -616,6 +639,19 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
               label={invite ? t('calendar.removeFromCalendar') : t('buttons.delete')}
               size="md"
               onClick={() => void remove()}
+            />
+          )}
+          {item && (
+            <IconButton
+              icon={Download}
+              label={
+                item.recurring
+                  ? t('calendar.file.exportSeries', { defaultValue: 'Export series (.ics)' })
+                  : t('calendar.file.exportEvent', { defaultValue: 'Export event (.ics)' })
+              }
+              size="md"
+              disabled={exporting || saving}
+              onClick={() => void exportFile(item.id)}
             />
           )}
           {item?.thread_id && (

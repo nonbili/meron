@@ -1,8 +1,16 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
+	"unicode/utf8"
+
+	wailsRuntime "meron/internal/desktopruntime"
 )
 
 // calendarInvoke forwards one calendar command to the core unchanged, like
@@ -68,4 +76,106 @@ func (a *App) connectGoogleDAV(payload map[string]any, provider, method string) 
 		"expires_in":    profile.ExpiresIn,
 		"scope":         profile.Scope,
 	})
+}
+
+const maxCalendarFileBytes = 8 * 1024 * 1024
+
+func calendarFileFilters() []wailsRuntime.FileFilter {
+	return []wailsRuntime.FileFilter{{DisplayName: "iCalendar (*.ics)", Pattern: "*.ics"}}
+}
+
+func (a *App) importCalendarFile(command string, payload map[string]any) (any, error) {
+	preview := command == "calendar.previewImport"
+	path, _ := payload["path"].(string)
+	if preview {
+		var err error
+		path, err = openFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+			Title: "Import calendar file", Filters: calendarFileFilters(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if path == "" {
+			return map[string]any{"cancelled": true}, nil
+		}
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("read calendar file metadata: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("choose a regular calendar file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open calendar file: %w", err)
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxCalendarFileBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read calendar file: %w", err)
+	}
+	if len(data) > maxCalendarFileBytes {
+		return nil, errors.New("calendar file exceeds 8 MiB")
+	}
+	if !utf8.Valid(data) {
+		return nil, errors.New("calendar file must use UTF-8")
+	}
+	digest := fmt.Sprintf("%x", sha256.Sum256(data))
+	expected, _ := payload["digest"].(string)
+	if !preview && expected != digest {
+		return nil, errors.New("calendar file changed since preview. Choose it again")
+	}
+	res, err := a.calendarInvoke(command, map[string]any{"ics": string(data)})
+	if err != nil {
+		return nil, err
+	}
+	if preview {
+		result, ok := res.(map[string]any)
+		if !ok {
+			return nil, errors.New("invalid calendar import preview")
+		}
+		result["path"] = path
+		result["filename"] = filepath.Base(path)
+		result["digest"] = digest
+	}
+	return res, nil
+}
+
+func (a *App) exportCalendarFile(payload map[string]any) (any, error) {
+	res, err := a.calendarInvoke("calendar.exportIcs", payload)
+	if err != nil {
+		return nil, err
+	}
+	result, _ := res.(map[string]any)
+	document, _ := result["ics"].(string)
+	if document == "" {
+		return nil, errors.New("nothing to export")
+	}
+
+	filename := "meron-calendar.ics"
+	if eventID, _ := payload["event_id"].(string); eventID != "" {
+		filename = "meron-event.ics"
+	}
+	dest, err := saveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+		Title: "Export calendar file", DefaultFilename: filename, CanCreateDirectories: true,
+		Filters: calendarFileFilters(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if dest == "" {
+		return map[string]any{"saved": false}, nil
+	}
+	data := []byte(document)
+	err = writeFileAtomic(dest, data, 0o600, 0o700)
+	if errors.Is(err, os.ErrPermission) {
+		// A sandboxed file chooser can grant write access only to the file.
+		err = os.WriteFile(dest, data, 0o600)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("write calendar file: %w", err)
+	}
+	return map[string]any{"saved": true}, nil
 }

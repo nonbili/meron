@@ -1321,9 +1321,11 @@ pub fn requeue_restored_event(
     let url = object_url(&calendar.url, &uid)?;
     // Back where it was, before its deletion there was sent: that object is
     // updated, at the version it had, rather than created over.
-    if let Some(left) =
-        store::object(conn, &calendar.id, &url)?.filter(|o| o.state == store::DELETED)
-    {
+    if let Some(left) = store::object(conn, &calendar.id, &url)? {
+        anyhow::ensure!(
+            left.state == store::DELETED,
+            "This calendar already contains an event with the same UID"
+        );
         return store::save_object(
             conn,
             &store::DavObject {

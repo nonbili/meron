@@ -120,6 +120,13 @@ describe('custom repeat', () => {
     calendar$.calendars.set([
       { id: 'cal', name: 'Work', color: '', writable: true, account_id: 'dav', account_name: 'Work account' },
     ])
+    render(<EventEditorDialog editor={{ mode: 'edit', item: { ...item, repeat: '' } }} />)
+    const local = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Calendar' })
+    expect(local.selectedOptions[0].textContent).toBe('On this device')
+    fireEvent.change(local, { target: { value: 'cal' } })
+    expect(within(local).getByRole('option', { name: 'On this device' })).toBeTruthy()
+    cleanup()
+
     render(<EventEditorDialog editor={{ mode: 'edit', item: { ...item, repeat: '', calendar: 'cal' } }} />)
     const server = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Repeat' })
     expect(server.selectedOptions[0].textContent).toBe('Set by the calendar server')

@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-use meron_core::calendar::events;
+use meron_core::calendar::{events, transfer};
 use meron_core::engine::Engine;
 use meron_core::protocol::Request;
 
@@ -29,6 +29,32 @@ pub(crate) async fn dispatch(
         "calendar.get" => {
             let event_id = req_str(p, "event_id")?;
             return events::event_payload(&engine.db.lock().unwrap(), &event_id);
+        }
+
+        "calendar.previewImport" | "calendar.importIcs" => {
+            let preview = req.method == "calendar.previewImport";
+            let ics = req_str(p, "ics")?;
+            let summary = transfer::import(&mut engine.db.lock().unwrap(), &ics, preview)?;
+            if preview || summary.imported == 0 {
+                return Ok(json!(summary));
+            }
+            json!(summary)
+        }
+
+        "calendar.exportIcs" => {
+            let ics = transfer::export(
+                &engine.db.lock().unwrap(),
+                p.get("event_id").and_then(Value::as_str),
+                p.get("calendar")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default(),
+            )?;
+            // The desktop host's JSON-lines reader accepts a 16 MiB line.
+            anyhow::ensure!(
+                serde_json::to_string(&ics)?.len() < 15 * 1024 * 1024,
+                "Calendar exceeds the export size limit"
+            );
+            return Ok(json!({ "ics": ics }));
         }
 
         "calendar.create" => events::create_event(

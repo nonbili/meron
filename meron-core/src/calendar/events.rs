@@ -12,7 +12,9 @@ mod tests;
 use anyhow::{Result, anyhow};
 use calcard::common::PartialDateTime;
 use calcard::common::timezone::Tz;
-use calcard::icalendar::{ICalendarComponentType, ICalendarProperty, ICalendarValue};
+use calcard::icalendar::{
+    ICalendarComponentType, ICalendarPeriod, ICalendarProperty, ICalendarValue,
+};
 use chrono::{Datelike, NaiveDate, TimeZone};
 use rusqlite::Connection;
 use serde_json::{Value, json};
@@ -28,7 +30,7 @@ const DAY: i64 = 86_400;
 /// past it: a daily event reaches more than fifty years.
 const MAX_OCCURRENCES: usize = 20_000;
 
-/// What the editor sends to keep a synced event's own repeat rule, one the
+/// What the editor sends to keep an event's own repeat rule, one the
 /// editor cannot say (see [`super::rrule`]).
 pub const CUSTOM_REPEAT: &str = "custom";
 
@@ -238,12 +240,15 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
         "" => None,
         id => Some(writable_calendar(conn, id)?),
     };
-    if !event.calendar.is_empty() {
-        writable_calendar(conn, &event.calendar)?;
+    let synced = !event.calendar.is_empty();
+    if synced || (event.invite_uid.is_empty() && !event.ics.is_empty()) {
+        if synced {
+            writable_calendar(conn, &event.calendar)?;
+        }
         let before = event.clone();
         let mut input = series_input(&event, &unedited_from_store(input, &before));
-        // A server's repeat the editor has no name for ("every Monday and
-        // Wednesday until June") comes back as `custom` to keep it.
+        // A repeat the editor cannot represent, such as a series with
+        // occurrence exceptions, comes back as `custom` to keep it.
         let keep_custom = before.recurring
             && before.rrule.is_empty()
             && input.repeat.trim().eq_ignore_ascii_case(CUSTOM_REPEAT);
@@ -273,7 +278,21 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
         event.ics = caldav::ics::patch(&before.ics, &before, &event);
         if !moving {
             let saved = store::save_event(conn, &event)?;
-            caldav::store::mark_changed(conn, &saved.id)?;
+            if synced {
+                caldav::store::mark_changed(conn, &saved.id)?;
+            }
+            return Ok(json!({ "event": event_json(&saved) }));
+        }
+        let tx = conn.unchecked_transaction()?;
+        let conn = &tx;
+        if !synced {
+            let calendar = destination
+                .as_ref()
+                .expect("moving from the local calendar");
+            event.calendar = calendar.id.clone();
+            caldav::requeue_restored_event(conn, calendar, &mut event)?;
+            let saved = store::save_event(conn, &event)?;
+            tx.commit()?;
             return Ok(json!({ "event": event_json(&saved) }));
         }
         // Moving: deleted from the calendar it leaves, created (with the same
@@ -316,6 +335,7 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
             }
         }
         let saved = store::save_event(conn, &event)?;
+        tx.commit()?;
         // The calendar it left has a deletion to send.
         return Ok(json!({ "event": event_json(&saved), "moved_from": before.calendar }));
     }
@@ -1062,9 +1082,13 @@ fn occurrences(event: &CalendarEvent, from: i64, to: i64) -> Vec<Occurrence> {
     } else {
         event.ics.clone()
     };
-    let Some(ical) = super::parse_ical(&caldav::ics::for_expansion(&ics)) else {
+    let Some(mut ical) = super::parse_ical(&caldav::ics::for_expansion(&ics)) else {
         return single();
     };
+    // calcard pairs overrides with their series by SEQUENCE. Imported files
+    // can give the two different revisions. Align the in-memory copy for
+    // expansion so the file's original revisions survive editing and export.
+    align_override_sequences(&mut ical);
     let expanded = ical.expand_dates(expansion_tz(&ical, event.all_day), MAX_OCCURRENCES);
     // calcard leaves out EXDATEs, and dates an override replaces, from the
     // RRULE's dates but not from RDATE's, and a THISANDFUTURE override's later
@@ -1483,8 +1507,16 @@ fn with_series_sequence(ics: &str) -> Result<String> {
     let Some(mut series) = super::parse_ical(ics) else {
         return Ok(ics.to_string());
     };
-    let Some(master) = master_index(&series) else {
-        return Ok(ics.to_string());
+    Ok(if align_override_sequences(&mut series) {
+        series.to_string()
+    } else {
+        ics.to_string()
+    })
+}
+
+fn align_override_sequences(series: &mut calcard::icalendar::ICalendar) -> bool {
+    let Some(master) = master_index(series) else {
+        return false;
     };
     let sequence = series.components[master]
         .property(&ICalendarProperty::Sequence)
@@ -1503,11 +1535,7 @@ fn with_series_sequence(ics: &str) -> Result<String> {
             changed = true;
         }
     }
-    Ok(if changed {
-        series.to_string()
-    } else {
-        ics.to_string()
-    })
+    changed
 }
 
 /// A newly answered `incoming` series, with the exceptions the user already
@@ -1585,24 +1613,45 @@ fn carry_exceptions(stored: &str, incoming: &str) -> Result<String> {
 /// A range query takes a repeating row only once it has started, and an
 /// organizer can move one occurrence before the series' first.
 fn settle_start(event: &mut CalendarEvent) {
-    if !event.recurring {
-        return;
+    if let Some(earliest) = early_occurrence_start(event) {
+        event.start_at = earliest;
     }
-    let Some(ical) = super::parse_ical(&event.ics) else {
-        return;
-    };
-    let earliest = ical
-        .components
+}
+
+/// A recurring object may add or move an occurrence before its master
+/// DTSTART. Keep the range-search bound separate from the editor's start.
+pub(crate) fn early_occurrence_start(event: &CalendarEvent) -> Option<i64> {
+    if !event.recurring || event.ics.is_empty() {
+        return None;
+    }
+    let ical = super::parse_ical(&event.ics)?;
+    let resolver = ical.build_tz_resolver().with_default(super::local_tz());
+    ical.components
         .iter()
         .filter(|component| component.component_type == ICalendarComponentType::VEvent)
-        .filter_map(|component| {
-            let entry = component.property(&ICalendarProperty::Dtstart)?;
-            value_instant(&ical, entry, entry.values.first()?)
+        .flat_map(|component| &component.entries)
+        .filter(|entry| {
+            matches!(
+                entry.name,
+                ICalendarProperty::Dtstart | ICalendarProperty::Rdate
+            )
         })
-        .min();
-    if let Some(earliest) = earliest {
-        event.start_at = event.start_at.min(earliest);
-    }
+        .flat_map(|entry| {
+            let zone = resolver.resolve_or_default(entry.tz_id());
+            entry.values.iter().filter_map(move |value| {
+                let date = match value {
+                    ICalendarValue::Period(
+                        ICalendarPeriod::Range { start, .. }
+                        | ICalendarPeriod::Duration { start, .. },
+                    ) => start,
+                    value => value.as_partial_date_time()?,
+                };
+                let zone = if date.has_time() { zone } else { Tz::UTC };
+                Some(date.to_date_time_with_tz(zone)?.timestamp())
+            })
+        })
+        .filter(|start| *start < event.start_at)
+        .min()
 }
 
 /// Copy into `series` the VTIMEZONEs `other` defines and it does not, so an

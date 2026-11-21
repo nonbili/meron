@@ -418,6 +418,10 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		"calendar.update", "calendar.delete", "calendar.restore", "invite.removeFromCalendar",
 		"invite.addToCalendar":
 		return a.calendarInvoke(command, payload)
+	case "calendar.previewImport", "calendar.importIcs":
+		return a.importCalendarFile(command, payload)
+	case "calendar.exportIcs":
+		return a.exportCalendarFile(payload)
 	case "backup.export":
 		return a.exportBackup(payload)
 	case "backup.import":

@@ -12,6 +12,7 @@ pub mod events;
 pub mod rrule;
 #[cfg(test)]
 mod tests;
+pub mod transfer;
 
 use std::collections::HashSet;
 

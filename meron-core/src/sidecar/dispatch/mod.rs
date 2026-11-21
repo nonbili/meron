@@ -159,6 +159,9 @@ pub(crate) async fn dispatch(
         | "calendar.update"
         | "calendar.delete"
         | "calendar.restore"
+        | "calendar.previewImport"
+        | "calendar.importIcs"
+        | "calendar.exportIcs"
         | "invite.removeFromCalendar"
         | "invite.addToCalendar" => calendar::dispatch(engine, req, out).await,
 

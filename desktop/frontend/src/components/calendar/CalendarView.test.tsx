@@ -66,3 +66,60 @@ it('jumps to a date from the mini calendar even without a synced calendar', asyn
     else delete (window as any).go
   }
 })
+
+it('imports and exports calendar files from the actions menu', async () => {
+  const title = 'Import calendar file'
+  const previous = calendar$.peek()
+  const previousGo = Object.getOwnPropertyDescriptor(window, 'go')
+  const calls: { method: string; payload: unknown }[] = []
+  const summary = { imported: 2, duplicates: 1, skipped: 0 }
+  const file = { path: '/tmp/fictional.ics', filename: 'fictional.ics', digest: 'preview-digest' }
+  Object.defineProperty(window, 'go', {
+    configurable: true,
+    value: {
+      main: {
+        App: {
+          Invoke: async (method: string, payload: unknown) => {
+            calls.push({ method, payload })
+            if (method === 'calendar.previewImport') return { ...summary, ...file }
+            if (method === 'calendar.importIcs') return summary
+            if (method === 'calendar.exportIcs') return { saved: true }
+            return {}
+          },
+        },
+      },
+    },
+  })
+  calendar$.set({ ...previous, calendars: [], editor: null })
+  try {
+    await act(async () => {
+      render(<CalendarView />)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar actions' }))
+    const menu = within(screen.getByRole('dialog', { name: 'Calendar actions' }))
+    await act(async () => fireEvent.click(menu.getByRole('button', { name: 'Import .ics…' })))
+    const dialog = within(screen.getByRole('dialog', { name: title }))
+    expect(dialog.getByText('fictional.ics')).toBeTruthy()
+    expect(dialog.getByText(/2 events to import into/)).toBeTruthy()
+    expect(calls.some(({ method }) => method === 'calendar.importIcs')).toBe(false)
+
+    await act(async () => fireEvent.click(dialog.getByRole('button', { name: 'Import' })))
+    expect(calls.find(({ method }) => method === 'calendar.importIcs')?.payload).toEqual({
+      path: file.path,
+      digest: file.digest,
+    })
+    expect(screen.queryByRole('dialog', { name: title })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar actions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Export calendar…' }))
+    const exportDialog = within(screen.getByRole('dialog', { name: 'Export calendar' }))
+    await act(async () => fireEvent.click(exportDialog.getByRole('button', { name: 'Export' })))
+    expect(calls.find(({ method }) => method === 'calendar.exportIcs')?.payload).toEqual({ calendar: '' })
+    expect(screen.queryByRole('dialog', { name: 'Export calendar' })).toBeNull()
+  } finally {
+    cleanup()
+    calendar$.set(previous)
+    if (previousGo) Object.defineProperty(window, 'go', previousGo)
+    else delete (window as any).go
+  }
+})

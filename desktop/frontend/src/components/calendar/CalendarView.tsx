@@ -28,6 +28,7 @@ import { IconButton } from '../button/IconButton'
 import { EventEditorDialog } from './EventEditorDialog'
 import { CalendarFilter, CalendarList } from './CalendarFilter'
 import { openSettingsAt } from '../../states/ui'
+import { CalendarFileMenu } from './CalendarFileMenu'
 import { CalendarSyncButton } from './CalendarSyncButton'
 import { MiniCalendar } from './MiniCalendar'
 
@@ -79,6 +80,7 @@ export function CalendarView() {
           <IconButton label={t('calendar.nextMonth')} icon={ChevronRight} size="sm" onClick={() => shiftMonth(1)} />
         </div>
         <CalendarSyncButton />
+        <CalendarFileMenu />
         {/* The pane beside the month lists the calendars on a wide window. */}
         <CalendarFilter className="min-[1100px]:hidden" />
         <Button

@@ -7,6 +7,8 @@
 //! properties it changed, in the series' master VEVENT, and leaves every
 //! other line as the server sent it.
 
+use calcard::common::timezone::Tz;
+
 use crate::calendar::events::{date_lines, rrule_ics, rule_tz};
 use crate::calendar::rrule::{self, Timing};
 use crate::store::CalendarEvent;
@@ -26,9 +28,20 @@ pub fn event_from_ics(ics: &str) -> Option<CalendarEvent> {
         .and_then(|(start, end)| top_level(&lines, start, end).find(|l| name_of(l) == "DTSTART"));
     // A repeat keeps its wall-clock time in the zone DTSTART names, when that
     // is one the editor can use again.
-    let tzid = dtstart
-        .and_then(|line| param_of(line, "TZID"))
-        .filter(|tzid| tzid.parse::<calcard::common::timezone::Tz>().is_ok())
+    let named_zone = dtstart.and_then(|line| param_of(line, "TZID"));
+    let editor_zone = named_zone.as_ref().and_then(|name| {
+        if name.parse::<Tz>().is_ok() {
+            return Some(name.clone());
+        }
+        let resolved = resolve_timezone_alias(ics, name)?;
+        if matches!(resolved, Tz::Tz(_)) {
+            resolved.name().map(|name| name.into_owned())
+        } else {
+            None
+        }
+    });
+    let own_zone = named_zone.is_some() && editor_zone.is_none();
+    let tzid = editor_zone
         .filter(|_| invite.recurring && !invite.all_day)
         .unwrap_or_default();
     let series = CalendarEvent {
@@ -44,11 +57,6 @@ pub fn event_from_ics(ics: &str) -> Option<CalendarEvent> {
     } else {
         Timing::Zoned(&tz)
     };
-    // A zone the object defines itself, by a name no zone database has, is
-    // one a rule made here could not be timed in again.
-    let own_zone = dtstart
-        .and_then(|line| param_of(line, "TZID"))
-        .is_some_and(|tzid| tzid.parse::<calcard::common::timezone::Tz>().is_err());
     let rrule = master
         .and_then(|(start, end)| top_level(&lines, start, end).find(|l| name_of(l) == "RRULE"))
         .filter(|_| !has_exceptions && !own_zone)
@@ -235,7 +243,11 @@ pub fn for_expansion(ics: &str) -> std::borrow::Cow<'_, str> {
     let Some(tz) = top_level(&lines, start, end)
         .find(|l| name_of(l) == "DTSTART")
         .and_then(|l| param_of(l, "TZID"))
-        .and_then(|tzid| tzid.parse::<calcard::common::timezone::Tz>().ok())
+        .and_then(|name| {
+            name.parse::<Tz>()
+                .ok()
+                .or_else(|| resolve_timezone_alias(ics, &name))
+        })
     else {
         return Cow::Borrowed(ics);
     };
@@ -286,6 +298,13 @@ pub fn for_expansion(ics: &str) -> std::borrow::Cow<'_, str> {
         fold_into(&mut folded, &line);
     }
     Cow::Owned(folded)
+}
+
+/// A VTIMEZONE can name the IANA zone it represents in X-LIC-LOCATION.
+fn resolve_timezone_alias(ics: &str, name: &str) -> Option<Tz> {
+    crate::calendar::parse_ical(ics)?
+        .build_tz_resolver()
+        .resolve(name)
 }
 
 /// DTSTART and DTEND as floating wall-clock times, read in this device's

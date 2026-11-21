@@ -247,7 +247,8 @@ pub fn invite_occurrence_events(
 pub fn events_between(conn: &Connection, from: i64, to: i64) -> Result<Vec<CalendarEvent>> {
     let sql = format!(
         "SELECT {EVENT_COLUMNS} FROM events
-         WHERE start_at < ?2 AND (recurring <> 0 OR end_at > ?1 OR (end_at <= start_at AND start_at >= ?1))
+         WHERE (start_at < ?2 AND (recurring <> 0 OR end_at > ?1 OR (end_at <= start_at AND start_at >= ?1)))
+            OR (start_at >= ?2 AND recurring <> 0 AND json_extract(json, '$.early_occurrence_start') < ?2)
          ORDER BY start_at, id"
     );
     let mut stmt = conn.prepare(&sql)?;
@@ -262,11 +263,12 @@ pub fn save_event(conn: &Connection, event: &CalendarEvent) -> Result<CalendarEv
     let invite_schedule_changed = self::event(conn, &event.id)?.is_some_and(|previous| {
         !crate::calendar::same_reminder_schedule(&previous.ics, &event.ics)
     });
+    let early_start = crate::calendar::events::early_occurrence_start(event);
     conn.execute(
         "INSERT INTO events (id, title, notes, location, start_at, end_at, all_day, recurring,
            rrule, tzid, account, thread_id, message_id, invite_uid, response, ics, created_at, updated_at,
            recurrence_id, json, alerts, calendar)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?17, ?18, json_object('reminder_after', ?17), ?20, ?21)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?17, ?18, json_object('reminder_after', ?17, 'early_occurrence_start', ?22), ?20, ?21)
          ON CONFLICT(id) DO UPDATE SET
            title = excluded.title, notes = excluded.notes, location = excluded.location,
            start_at = excluded.start_at, end_at = excluded.end_at, all_day = excluded.all_day,
@@ -276,11 +278,11 @@ pub fn save_event(conn: &Connection, event: &CalendarEvent) -> Result<CalendarEv
            response = excluded.response, ics = excluded.ics, updated_at = excluded.updated_at,
            recurrence_id = excluded.recurrence_id, alerts = excluded.alerts,
            calendar = excluded.calendar,
-           json = CASE WHEN events.start_at <> excluded.start_at OR events.all_day <> excluded.all_day
+           json = json_set(CASE WHEN events.start_at <> excluded.start_at OR events.all_day <> excluded.all_day
                          OR events.rrule <> excluded.rrule OR events.tzid <> excluded.tzid OR ?19
                          OR events.alerts IS NOT excluded.alerts
                   THEN json_set(events.json, '$.reminder_after', excluded.updated_at)
-                  ELSE events.json END",
+                  ELSE events.json END, '$.early_occurrence_start', ?22)",
         params![
             event.id,
             event.title,
@@ -306,6 +308,7 @@ pub fn save_event(conn: &Connection, event: &CalendarEvent) -> Result<CalendarEv
                 .as_ref()
                 .map(|alerts| serde_json::to_string(alerts).unwrap_or_default()),
             event.calendar,
+            early_start,
         ],
     )?;
     Ok(self::event(conn, &event.id)?.unwrap_or_else(|| event.clone()))
