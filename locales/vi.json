@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Đồng bộ hóa và thông báo",
   "settings.tasks.enable": "Bật Công việc",
   "settings.tasks.enableHint": "Giữ danh sách việc cần làm ngay cạnh hộp thư. Công việc chỉ nằm trên thiết bị này và được đưa vào bản sao lưu.",
+  "settings.tasks.removeGoogleConfirm": "Xóa {email}? Các việc cần làm của bạn sẽ vẫn nằm trong Google Tasks. Meron sẽ xóa các việc đã lưu trong bộ nhớ đệm và liên kết đến email của chúng trên thiết bị này.",
   "settings.toast.failedToUploadAvatar": "Không tải được hình đại diện lên",
   "settings.toast.logExported": "Đã xuất nhật ký",
   "settings.updates.autoCheck": "Tự động kiểm tra cập nhật",

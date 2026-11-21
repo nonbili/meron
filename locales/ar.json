@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "المزامنة والإشعارات",
   "settings.tasks.enable": "تفعيل المهام",
   "settings.tasks.enableHint": "احتفظ بمهامك إلى جانب بريدك. تبقى المهام على هذا الجهاز وتُضمَّن في النسخ الاحتياطية.",
+  "settings.tasks.removeGoogleConfirm": "هل تريد إزالة {email}؟ ستبقى المهام في Google Tasks. سيحذف Meron المهام المخزنة مؤقتًا وروابطها بالبريد على هذا الجهاز.",
   "settings.toast.failedToUploadAvatar": "فشل تحميل الصورة الرمزية",
   "settings.toast.logExported": "تم تصدير السجل",
   "settings.updates.autoCheck": "التحقق من التحديثات تلقائيًا",

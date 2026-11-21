@@ -15,6 +15,7 @@ pub mod eml;
 pub mod engine;
 pub mod ffi;
 mod google_grant;
+pub mod google_tasks;
 pub mod imap;
 pub mod linkify;
 pub mod log;

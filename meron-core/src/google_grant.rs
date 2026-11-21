@@ -1,5 +1,5 @@
 //! One Google authorization per Google account, shared by the services that
-//! sync with it (Calendar, Contacts). Installed apps get no incremental
+//! sync with it (Calendar, Contacts, Tasks). Installed apps get no incremental
 //! authorization, so a sign-in asks for every scope a service of that account
 //! uses (or is connecting) along with the new one, and replaces the grant only
 //! when all of them were allowed. A service whose scope the grant already
@@ -16,7 +16,9 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
 use crate::engine::{Engine, default_oauth_client};
-use crate::oauth::{self, GOOGLE_CALENDAR_SCOPE, GOOGLE_CONTACTS_SCOPE, Tokens};
+use crate::oauth::{
+    self, GOOGLE_CALENDAR_SCOPE, GOOGLE_CONTACTS_SCOPE, GOOGLE_TASKS_SCOPE, Tokens,
+};
 use crate::secrets::Secrets;
 
 #[derive(Clone, Default)]
@@ -34,9 +36,10 @@ pub(crate) struct Grant {
 pub(crate) type Grants = HashMap<String, Option<Grant>>;
 
 /// The scopes a grant may carry, with the service each one is for.
-const SERVICES: [(&str, &str); 2] = [
+const SERVICES: [(&str, &str); 3] = [
     (GOOGLE_CALENDAR_SCOPE, "Google Calendar"),
     (GOOGLE_CONTACTS_SCOPE, "Google Contacts"),
+    (GOOGLE_TASKS_SCOPE, "Google Tasks"),
 ];
 
 fn key(email: &str) -> String {
@@ -377,6 +380,7 @@ fn needed_scopes(
         [&email],
         |row| row.get(0),
     )?;
+    let tasks = crate::google_tasks::has_account(conn, &email)?;
     let connecting = connecting(engine)?.get(&email).cloned().unwrap_or_default();
     Ok(SERVICES
         .iter()
@@ -386,6 +390,7 @@ fn needed_scopes(
                 || connecting.contains(known)
                 || (*known == GOOGLE_CALENDAR_SCOPE && calendar)
                 || (*known == GOOGLE_CONTACTS_SCOPE && contacts)
+                || (*known == GOOGLE_TASKS_SCOPE && tasks)
         })
         .collect())
 }
@@ -702,6 +707,43 @@ mod tests {
         assert_eq!(
             stored(&engine, &host, email).as_deref(),
             Some("both-refresh")
+        );
+    }
+
+    #[test]
+    fn a_connected_tasks_account_keeps_its_grant_and_scope() {
+        let host = Host::default();
+        let engine = Engine::new(Box::new(host.clone())).unwrap();
+        let email = "tasks@example.test";
+        save_sign_in(
+            &engine,
+            email,
+            &Tokens {
+                access_token: "fixture-access".into(),
+                refresh_token: Some("fixture-refresh".into()),
+                scope: Some(GOOGLE_TASKS_SCOPE.into()),
+                expires_in: Some(3600),
+                id_token: None,
+            },
+            GOOGLE_TASKS_SCOPE,
+        )
+        .unwrap();
+        {
+            let conn = engine.db.lock().unwrap();
+            conn.execute(
+                "INSERT INTO google_task_accounts (email) VALUES (?1)",
+                [email],
+            )
+            .unwrap();
+            assert_eq!(
+                needed_scopes(&engine, &conn, email, GOOGLE_CALENDAR_SCOPE).unwrap(),
+                [GOOGLE_CALENDAR_SCOPE, GOOGLE_TASKS_SCOPE]
+            );
+            release(&engine, &conn, email).unwrap();
+        }
+        assert_eq!(
+            stored(&engine, &host, email).as_deref(),
+            Some("fixture-refresh")
         );
     }
 

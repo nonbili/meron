@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Synchronisation et notifications",
   "settings.tasks.enable": "Activer les tâches",
   "settings.tasks.enableHint": "Gardez vos tâches à côté de vos e-mails. Elles restent sur cet appareil et sont incluses dans les sauvegardes.",
+  "settings.tasks.removeGoogleConfirm": "Supprimer {email} ? Vos tâches resteront dans Google Tasks. Meron supprimera les tâches mises en cache et leurs liens vers les e-mails sur cet appareil.",
   "settings.toast.failedToUploadAvatar": "Échec du téléchargement de l'avatar",
   "settings.toast.logExported": "Journal exporté",
   "settings.updates.autoCheck": "Rechercher les mises à jour automatiquement",

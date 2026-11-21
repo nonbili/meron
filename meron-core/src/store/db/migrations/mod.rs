@@ -103,6 +103,7 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
     rust!(32, m0032_carddav_notes),
     sql!(33, "0033_google_grants"),
     sql!(34, "0034_openpgp_sign_plain"),
+    sql!(35, "0035_google_tasks"),
 ];
 
 /// The `user_version` [`run_migrations`] leaves behind.

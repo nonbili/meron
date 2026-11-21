@@ -6,8 +6,7 @@
 //! made — stored as an opaque blob and parsed once per platform — and it is not
 //! repeated.
 //!
-//! Everything is local. There is no server, no sync and no network call in this
-//! module; the only route a task takes off the device is the config backup.
+//! Task mutations and their sync queue entries share a database transaction.
 
 #[cfg(test)]
 mod tests;
@@ -18,6 +17,7 @@ use rusqlite::Connection;
 use serde_json::{Value, json};
 
 use crate::store::{self, Task, TaskList};
+use crate::{caldav::todo, google_tasks};
 
 /// Title given to the list created on first use, when the user has none. Kept
 /// in English here and translated by neither client: it is a real row the user
@@ -81,7 +81,10 @@ fn task_json(task: &Task) -> Value {
 /// user to create a list before they can write a task is a worse first run than
 /// handing them one to rename.
 pub fn ensure_default_list(conn: &Connection) -> Result<String> {
-    if let Some(first) = store::task_lists(conn)?.into_iter().next() {
+    if let Some(first) = store::task_lists(conn)?
+        .into_iter()
+        .find(|list| is_local_list(&list.id))
+    {
         return Ok(first.id);
     }
     let list = store::insert_task_list(conn, &new_id("tasklist"), DEFAULT_LIST_TITLE)?;
@@ -92,8 +95,21 @@ pub fn ensure_default_list(conn: &Connection) -> Result<String> {
 pub fn lists_payload(conn: &Connection) -> Result<Value> {
     let default_id = ensure_default_list(conn)?;
     let lists = store::task_lists(conn)?;
+    let lists: Result<Vec<Value>> = lists
+        .iter()
+        .map(|list| {
+            let mut value = list_json(list);
+            if todo::calendar_id(&list.id).is_some() {
+                value["provider"] = json!("caldav");
+                value["read_only"] = json!(!todo::writable(conn, &list.id)?);
+            } else if google_tasks::is_list(&list.id) {
+                value["provider"] = json!("google");
+            }
+            Ok(value)
+        })
+        .collect();
     Ok(json!({
-        "lists": lists.iter().map(list_json).collect::<Vec<_>>(),
+        "lists": lists?,
         "default_list_id": default_id,
     }))
 }
@@ -121,6 +137,7 @@ pub fn create_list(conn: &Connection, title: &str) -> Result<Value> {
 }
 
 pub fn rename_list(conn: &Connection, list_id: &str, title: &str) -> Result<Value> {
+    require_local_list(list_id)?;
     let title = fallback_title(title, DEFAULT_LIST_TITLE);
     store::rename_task_list(conn, list_id, &title)?;
     Ok(json!({ "ok": true }))
@@ -133,6 +150,7 @@ pub fn rename_list(conn: &Connection, list_id: &str, title: &str) -> Result<Valu
 /// needs enough to put it back, and gets the rows verbatim rather than a
 /// summary it would have to reconstruct from.
 pub fn delete_list(conn: &mut Connection, list_id: &str) -> Result<Value> {
+    require_local_list(list_id)?;
     let Some(list) = store::task_list(conn, list_id)? else {
         return Ok(json!({ "ok": true, "restore": Value::Null }));
     };
@@ -171,6 +189,7 @@ pub fn create_task(
     } else {
         list_id.to_string()
     };
+    require_writable(conn, &list_id)?;
     let title = fallback_title(title, UNTITLED_TASK);
     let task = store::insert_task(
         conn,
@@ -194,6 +213,13 @@ pub fn update_task(
     due_at: Option<i64>,
     list_id: Option<&str>,
 ) -> Result<Value> {
+    let old = store::task(conn, task_id)?.ok_or_else(|| anyhow!("unknown task: {task_id}"))?;
+    require_writable(conn, &old.list_id)?;
+    let list_id = list_id.filter(|id| *id != old.list_id);
+    if let Some(id) = list_id {
+        require_local_list(&old.list_id)?;
+        require_local_list(id)?;
+    }
     // An edit that blanks the title would leave an unclickable empty row, so
     // the blank is dropped rather than saved.
     let title = title.map(str::trim).filter(|value| !value.is_empty());
@@ -203,17 +229,38 @@ pub fn update_task(
 }
 
 pub fn set_done(conn: &Connection, task_id: &str, done: bool) -> Result<Value> {
-    store::set_task_done(conn, task_id, done)?;
-    let task = store::task(conn, task_id)?.ok_or_else(|| anyhow!("unknown task: {task_id}"))?;
-    Ok(json!({ "task": task_json(&task) }))
+    let tx = conn.unchecked_transaction()?;
+    let task = store::task(&tx, task_id)?.ok_or_else(|| anyhow!("unknown task: {task_id}"))?;
+    require_writable(&tx, &task.list_id)?;
+    if (task.completed_at > 0) == done {
+        return Ok(json!({ "task": task_json(&task) }));
+    }
+    store::set_task_done(&tx, task_id, done)?;
+    queue(&tx, task_id, &task.list_id, None)?;
+    let updated = store::task(&tx, task_id)?.ok_or_else(|| anyhow!("unknown task: {task_id}"))?;
+    tx.commit()?;
+    Ok(json!({ "task": task_json(&updated) }))
+}
+
+fn task_for_undo(conn: &Connection, task: &Task) -> Result<Value> {
+    let mut value = task_json(task);
+    if todo::calendar_id(&task.list_id).is_some() {
+        value["caldav_ics"] = json!(todo::original(conn, &task.id)?);
+    }
+    Ok(value)
 }
 
 pub fn delete_task(conn: &Connection, task_id: &str) -> Result<Value> {
-    let Some(task) = store::task(conn, task_id)? else {
+    let tx = conn.unchecked_transaction()?;
+    let Some(task) = store::task(&tx, task_id)? else {
         return Ok(json!({ "ok": true, "restore": Value::Null }));
     };
-    store::delete_task(conn, task_id)?;
-    Ok(json!({ "ok": true, "restore": { "tasks": [task_json(&task)] } }))
+    require_writable(&tx, &task.list_id)?;
+    let snapshot = task_for_undo(&tx, &task)?;
+    queue_delete(&tx, &task)?;
+    store::delete_task(&tx, task_id)?;
+    tx.commit()?;
+    Ok(json!({ "ok": true, "restore": { "tasks": [snapshot] } }))
 }
 
 pub fn reorder_tasks(
@@ -226,16 +273,19 @@ pub fn reorder_tasks(
 }
 
 pub fn clear_completed(conn: &Connection, list_id: &str) -> Result<Value> {
-    let cleared: Vec<Task> = store::tasks_for_list(conn, list_id, true)?
+    let tx = conn.unchecked_transaction()?;
+    require_writable(&tx, list_id)?;
+    let mut snapshots = Vec::new();
+    for task in store::tasks_for_list(&tx, list_id, true)?
         .into_iter()
         .filter(|task| task.completed_at > 0)
-        .collect();
-    let removed = store::clear_completed(conn, list_id)?;
-    Ok(json!({
-        "ok": true,
-        "removed": removed,
-        "restore": { "tasks": cleared.iter().map(task_json).collect::<Vec<_>>() },
-    }))
+    {
+        snapshots.push(task_for_undo(&tx, &task)?);
+        queue_delete(&tx, &task)?;
+    }
+    let removed = store::clear_completed(&tx, list_id)?;
+    tx.commit()?;
+    Ok(json!({ "ok": true, "removed": removed, "restore": { "tasks": snapshots } }))
 }
 
 /// Undo a delete by putting back exactly what it returned.
@@ -244,10 +294,12 @@ pub fn clear_completed(conn: &Connection, list_id: &str) -> Result<Value> {
 /// rather than learning the shape of a task. Restoring twice is a no-op, not an
 /// error: two undos of one delete is a double-click, not a conflict.
 pub fn restore(conn: &Connection, payload: &Value) -> Result<Value> {
+    let tx = conn.unchecked_transaction()?;
     if let Some(list) = payload.get("list").filter(|value| value.is_object()) {
         let list: TaskList = serde_json::from_value(list.clone())?;
         if !list.id.is_empty() {
-            store::restore_task_list(conn, &list)?;
+            require_local_list(&list.id)?;
+            store::restore_task_list(&tx, &list)?;
         }
     }
     let mut restored = 0;
@@ -259,11 +311,51 @@ pub fn restore(conn: &Connection, payload: &Value) -> Result<Value> {
             if task.id.is_empty() || task.list_id.is_empty() {
                 continue;
             }
-            store::restore_task(conn, &task)?;
+            if store::task(&tx, &task.id)?.is_none() {
+                require_writable(&tx, &task.list_id)?;
+                store::restore_task(&tx, &task)?;
+                queue(
+                    &tx,
+                    &task.id,
+                    &task.list_id,
+                    value.get("caldav_ics").and_then(Value::as_str),
+                )?;
+            }
             restored += 1;
         }
     }
+    tx.commit()?;
     Ok(json!({ "ok": true, "restored": restored }))
+}
+
+pub(crate) fn is_local_list(id: &str) -> bool {
+    todo::calendar_id(id).is_none() && !google_tasks::is_list(id)
+}
+
+fn require_writable(conn: &Connection, id: &str) -> Result<()> {
+    todo::require_writable(conn, id)?;
+    google_tasks::require_writable(conn, id)
+}
+
+fn queue(conn: &Connection, id: &str, list: &str, caldav_ics: Option<&str>) -> Result<()> {
+    if google_tasks::is_list(list) {
+        google_tasks::queue(conn, id, list)
+    } else {
+        todo::queue(conn, id, caldav_ics)
+    }
+}
+
+fn queue_delete(conn: &Connection, task: &Task) -> Result<()> {
+    todo::queue_delete(conn, task)?;
+    google_tasks::queue_delete(conn, &task.id, &task.list_id)
+}
+
+fn require_local_list(id: &str) -> Result<()> {
+    anyhow::ensure!(
+        is_local_list(id),
+        "This action is available for local task lists"
+    );
+    Ok(())
 }
 
 const UNTITLED_TASK: &str = "Untitled";
@@ -299,7 +391,17 @@ pub fn mutate_with_due_time(
     mutation: impl FnOnce(&Connection) -> Result<Value>,
 ) -> Result<Value> {
     let tx = conn.unchecked_transaction()?;
-    let result = apply_due_time(&tx, params, mutation(&tx)?)?;
+    let mut result = apply_due_time(&tx, params, mutation(&tx)?)?;
+    if let (Some(id), Some(list)) = (
+        result["task"]["id"].as_str(),
+        result["task"]["list_id"].as_str(),
+    ) {
+        let date_only = google_tasks::use_date_only(&tx, id)?;
+        queue(&tx, id, list, None)?;
+        if date_only && let Some(task) = store::task(&tx, id)? {
+            result["task"] = task_json(&task);
+        }
+    }
     tx.commit()?;
     Ok(result)
 }

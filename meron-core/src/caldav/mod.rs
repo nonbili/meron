@@ -17,6 +17,7 @@ pub mod store;
 pub mod sync;
 #[cfg(test)]
 mod tests;
+pub mod todo;
 pub mod xml;
 
 use std::fmt;

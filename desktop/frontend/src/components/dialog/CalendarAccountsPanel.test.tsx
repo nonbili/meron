@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
-import { caldav$, type CalendarAccount } from '../../states/caldav'
-import { ui$ } from '../../states/ui'
+import { caldav$, setCalendarTasksEnabled, type CalendarAccount } from '../../states/caldav'
+import { settleConfirm, ui$ } from '../../states/ui'
 import type { Account, SystemCheck } from '../../types'
 import { CalendarAccountsPanel } from './CalendarAccountsPanel'
 
@@ -70,6 +70,7 @@ describe('finding calendars for existing mail accounts', () => {
         App: {
           Invoke: async (method: string, payload: unknown) => {
             calls.push({ method, payload })
+            if (method === 'googleTasks.accounts') return { accounts: [] }
             if (method === 'caldav.discoverServer') return { server_url: server }
             if (method === 'caldav.sync' && refreshedAccounts) calendarAccounts = refreshedAccounts
             if (method === 'caldav.connectGoogle' && connectedAccount) {
@@ -105,6 +106,47 @@ describe('finding calendars for existing mail accounts', () => {
   async function find() {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Find calendars for a mail account' })))
   }
+
+  it('connects Google Tasks independently with the supplied account', async () => {
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (method: string, payload: unknown) => {
+      if (method === 'googleTasks.connect') {
+        calls.push({ method, payload })
+        return { accounts: [{ email: google.email, last_error: '', last_sync_at: 0 }] }
+      }
+      return invoke(method, payload)
+    }
+    render(<CalendarAccountsPanel />)
+    const section = within(screen.getByRole('heading', { name: 'Google Tasks' }).closest('section')!)
+    fireEvent.change(section.getByRole('textbox', { name: 'Email Address' }), { target: { value: google.email } })
+    await act(async () =>
+      fireEvent.submit(section.getByRole('button', { name: 'Sign in with Google' }).closest('form')!),
+    )
+    expect(calls.filter(({ method }) => method === 'googleTasks.connect')).toEqual([
+      { method: 'googleTasks.connect', payload: { login_hint: google.email } },
+    ])
+    expect(section.getByText(google.email)).toBeTruthy()
+    expect(calls.some(({ method }) => method === 'caldav.connectGoogle')).toBe(false)
+  })
+
+  it('asks before discarding unsent CalDAV tasks when switching off a list', async () => {
+    const invoke = (window as any).go.main.App.Invoke
+    ;(window as any).go.main.App.Invoke = async (method: string, payload: { discard_unsent?: boolean }) => {
+      if (method === 'caldav.setTasksEnabled') {
+        calls.push({ method, payload })
+        return { accounts: [], unsent: payload.discard_unsent ? 0 : 2 }
+      }
+      return invoke(method, payload)
+    }
+    const disabling = setCalendarTasksEnabled('task-list', false)
+    await waitFor(() => expect(ui$.confirm.peek()?.message).toContain('2 changes'))
+    settleConfirm(true)
+    await disabling
+    expect(calls.filter(({ method }) => method === 'caldav.setTasksEnabled').map(({ payload }) => payload)).toEqual([
+      { calendar_id: 'task-list', enabled: false },
+      { calendar_id: 'task-list', enabled: false, discard_unsent: true },
+    ])
+  })
 
   it('looks up only the selected mailbox and prefills the server and username', async () => {
     render(<CalendarAccountsPanel />)

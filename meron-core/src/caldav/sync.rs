@@ -21,7 +21,7 @@ use rusqlite::Connection;
 use super::store::{self, CHANGED, CREATED, DELETED, DavCalendar, DavObject};
 use super::{
     AuthFailed, Calendar, Client, Entry, PreconditionFailed, RateLimited, SyncTokenInvalid,
-    UidConflict, Written, ics,
+    UidConflict, Written, ics, todo,
 };
 use crate::store as db;
 
@@ -199,7 +199,19 @@ fn sync_calendars(
             }
         }
         let before = store::event_count(conn, account_id)?;
+        let task_lists = todo::count(conn, account_id)?;
+        let permissions: HashMap<_, _> = store::calendars(conn, account_id)?
+            .into_iter()
+            .filter(|c| c.syncs_tasks())
+            .map(|c| (c.id, c.read_only))
+            .collect();
         let calendars = store::reconcile_calendars(conn, account_id, &listed)?;
+        report.pulled += task_lists.saturating_sub(todo::count(conn, account_id)?);
+        for calendar in calendars.iter().filter(|c| c.syncs_tasks()) {
+            let changed = todo::ensure_list(conn, calendar)?
+                || permissions.get(&calendar.id) != Some(&calendar.read_only);
+            report.pulled += usize::from(changed);
+        }
         // A calendar gone from the server takes its events with it.
         report.pulled += before.saturating_sub(store::event_count(conn, account_id)?);
         Ok(Some(calendars))
@@ -209,7 +221,7 @@ fn sync_calendars(
     };
     let synced: Vec<_> = calendars
         .iter()
-        .filter(|c| c.enabled && c.supports("VEVENT"))
+        .filter(|c| c.syncs_events() || c.syncs_tasks())
         .map(|c| Ok((c, client.for_calendar(&c.url)?)))
         .collect::<Result<_>>()?;
 
@@ -408,9 +420,12 @@ fn sync_calendar(
     removed.extend(fetched.gone);
 
     report.pulled += db.with(|conn| {
-        // Turned off or removed while the server was being asked: what came
-        // back is no longer wanted here.
-        if !store::calendar(conn, &calendar.id)?.is_some_and(|c| c.enabled) {
+        // A visibility change invalidates the listing chosen at the start of
+        // the pull. The next sync must read using the new selection.
+        if !store::calendar(conn, &calendar.id)?.is_some_and(|current| {
+            current.syncs_events() == calendar.syncs_events()
+                && current.syncs_tasks() == calendar.syncs_tasks()
+        }) {
             return Ok(0);
         }
         let mut pulled = 0;
@@ -427,6 +442,9 @@ fn sync_calendar(
         } else {
             remote_ctag
         };
+        if listed && calendar.syncs_tasks() {
+            todo::clear_local_metadata(conn, &calendar.id)?;
+        }
         store::set_synced(conn, &calendar.id, saved_ctag, &token, listed)?;
         Ok(pulled)
     })?;
@@ -451,6 +469,12 @@ fn push(
     let pending = db.with(|conn| store::pending(conn, &calendar.id))?;
     let mut pushed = Pushed::default();
     for object in pending {
+        if todo::is_task(&object.local_id) && calendar.read_only {
+            pushed.error.get_or_insert_with(|| {
+                anyhow!("This calendar is read-only; pending task edits were kept")
+            });
+            continue;
+        }
         let result = match (pass, object.state == DELETED) {
             (Pass::Deletions, true) => push_deletion(db, client, calendar, &object, uid_conflicts),
             (Pass::Writes, false) => push_write(db, client, calendar, &object, uid_conflicts),
@@ -565,19 +589,19 @@ fn push_write(
 ) -> Result<Sent> {
     // The queue row and its event as they are now, not as `pending` saw
     // them: the user may have deleted or moved the event since.
-    let (row, event) = db.with(|conn| {
+    let (row, content) = db.with(|conn| {
         let row = store::object(conn, &object.calendar, &object.url)?
             .filter(|r| r.state == CREATED || r.state == CHANGED);
-        let event = match &row {
-            Some(row) => db::event(conn, &row.local_id)?,
+        let content = match &row {
+            Some(row) => outgoing(conn, &row.local_id)?,
             None => None,
         };
-        Ok((row, event))
+        Ok((row, content))
     })?;
     let Some(row) = row else {
         return Ok(Sent::Waiting);
     };
-    let Some(event) = event.filter(|e| !e.ics.is_empty()) else {
+    let Some(content) = content.filter(|ics| !ics.is_empty()) else {
         // The event is gone without a deletion recorded; nothing to send.
         db.with(|conn| store::delete_object(conn, &row.calendar, &row.url))?;
         return Ok(Sent::Waiting);
@@ -590,7 +614,7 @@ fn push_write(
         match client.get(&row.url)? {
             Some(current) => etag = current.etag,
             None if client.google => {
-                take_server_copy(db, client, calendar, &row)?;
+                take_server_copy(db, client, calendar, &row, &content)?;
                 return Ok(Sent::Conflict);
             }
             None => create = true,
@@ -602,7 +626,7 @@ fn push_write(
             "Google Calendar did not return an event version for editing"
         ));
     }
-    match client.put(&row.url, &event.ics, if create { None } else { etag }) {
+    match client.put(&row.url, &content, if create { None } else { etag }) {
         Ok(written) => {
             db.with(|conn| {
                 if client.google {
@@ -610,13 +634,13 @@ fn push_write(
                     // rewritten copy on the next sync, even at the PUT's etag.
                     store::invalidate_ctag(conn, &calendar.id)?;
                 }
-                complete_write(conn, &row, &event.ics, written)
+                complete_write(conn, &row, &content, written)
             })?;
             Ok(Sent::Done)
         }
         // Server wins: its copy replaces the edit here, now.
         Err(err) if err.is::<PreconditionFailed>() => {
-            take_server_copy(db, client, calendar, &row)?;
+            take_server_copy(db, client, calendar, &row, &content)?;
             Ok(Sent::Conflict)
         }
         Err(err) if create && err.is::<UidConflict>() => {
@@ -648,7 +672,9 @@ fn complete_write(conn: &Connection, sent: &DavObject, ics: &str, written: Writt
         Some(current) if current.state != sent.state || current.local_id != sent.local_id => {
             current
         }
-        Some(current) if db::event(conn, &current.local_id)?.is_some_and(|e| e.ics != ics) => {
+        Some(current)
+            if outgoing(conn, &current.local_id)?.is_some_and(|content| content != ics) =>
+        {
             DavObject {
                 state: CHANGED.into(),
                 ..current
@@ -677,12 +703,12 @@ fn complete_write(conn: &Connection, sent: &DavObject, ics: &str, written: Writt
             ));
         }
         if !previous.local_id.is_empty() && previous.local_id != saved.local_id {
-            if let Some(event) = db::event(&tx, &previous.local_id)?
-                && ics::uid_of(&event.ics) != ics::uid_of(ics)
+            if let Some(content) = outgoing(&tx, &previous.local_id)?
+                && ics::uid_of(&content) != ics::uid_of(ics)
             {
                 return Err(anyhow!("calendar event URL changed to a different event"));
             }
-            db::delete_event(&tx, &previous.local_id)?;
+            remove_local(&tx, &previous.local_id)?;
         }
     }
     store::delete_object(&tx, &saved.calendar, &saved.url)?;
@@ -705,13 +731,17 @@ fn take_server_copy(
     client: &Client,
     calendar: &DavCalendar,
     sent: &DavObject,
+    sent_ics: &str,
 ) -> Result<()> {
     let server = client.get(&sent.url)?;
     db.with(|conn| {
         let Some(current) = store::object(conn, &sent.calendar, &sent.url)? else {
             return Ok(());
         };
-        if current.state != sent.state || current.local_id != sent.local_id {
+        if current.state != sent.state
+            || current.local_id != sent.local_id
+            || outgoing(conn, &current.local_id)?.is_some_and(|content| content != sent_ics)
+        {
             return Ok(());
         }
         store::save_object(
@@ -741,9 +771,22 @@ fn apply_remote(conn: &Connection, calendar: &DavCalendar, object: &super::Objec
         .as_ref()
         .map(|k| k.local_id.clone())
         .unwrap_or_default();
-    let Some(mut event) = ics::event_from_ics(&object.ics) else {
-        // Not an event: remember it so it is not fetched again.
-        let removed = !local_id.is_empty() && db::delete_event(conn, &local_id)?;
+    if calendar.syncs_tasks()
+        && let Some(task) = ics::task_from_ics(&object.ics)
+    {
+        let changed = todo::apply(conn, calendar, object, task, &local_id)?;
+        if !local_id.is_empty() && !todo::is_task(&local_id) {
+            db::delete_event(conn, &local_id)?;
+        }
+        return Ok(changed);
+    }
+    let Some(mut event) = calendar
+        .syncs_events()
+        .then(|| ics::event_from_ics(&object.ics))
+        .flatten()
+    else {
+        // Remember unused objects so they are not fetched again.
+        let removed = remove_local(conn, &local_id)?;
         store::save_object(
             conn,
             &DavObject {
@@ -755,7 +798,7 @@ fn apply_remote(conn: &Connection, calendar: &DavCalendar, object: &super::Objec
         )?;
         return Ok(removed);
     };
-    let existing = if local_id.is_empty() {
+    let existing = if local_id.is_empty() || todo::is_task(&local_id) {
         None
     } else {
         db::event(conn, &local_id)?
@@ -767,6 +810,9 @@ fn apply_remote(conn: &Connection, calendar: &DavCalendar, object: &super::Objec
     event.calendar = calendar.id.clone();
     // Alerts are this device's; the server's copy does not carry them.
     event.alerts = existing.as_ref().and_then(|e| e.alerts.clone());
+    if todo::is_task(&local_id) {
+        todo::remove(conn, &local_id)?;
+    }
     let unchanged = existing
         .as_ref()
         .is_some_and(|e| e.ics == event.ics && e.calendar == event.calendar);
@@ -796,5 +842,23 @@ fn apply_removal(conn: &Connection, calendar: &DavCalendar, url: &str) -> Result
         return Ok(false);
     }
     store::delete_object(conn, &calendar.id, url)?;
-    Ok(!known.local_id.is_empty() && db::delete_event(conn, &known.local_id)?)
+    remove_local(conn, &known.local_id)
+}
+
+fn outgoing(conn: &Connection, id: &str) -> Result<Option<String>> {
+    if todo::is_task(id) {
+        todo::outgoing(conn, id)
+    } else {
+        Ok(db::event(conn, id)?.map(|event| event.ics))
+    }
+}
+
+fn remove_local(conn: &Connection, id: &str) -> Result<bool> {
+    if id.is_empty() {
+        Ok(false)
+    } else if todo::is_task(id) {
+        todo::remove(conn, id)
+    } else {
+        db::delete_event(conn, id)
+    }
 }

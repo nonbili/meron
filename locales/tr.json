@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Senkronizasyon ve bildirimler",
   "settings.tasks.enable": "Görevleri etkinleştir",
   "settings.tasks.enableHint": "Yapılacaklarını postanın yanında tut. Görevler bu cihazda kalır ve yedeklere dahil edilir.",
+  "settings.tasks.removeGoogleConfirm": "{email} kaldırılsın mı? Görevleriniz Google Tasks’ta kalacak. Meron, önbellekteki görevleri ve e-posta bağlantılarını bu cihazdan silecek.",
   "settings.toast.failedToUploadAvatar": "Avatar yüklenemedi",
   "settings.toast.logExported": "Günlük dışa aktarıldı",
   "settings.updates.autoCheck": "Güncellemeleri otomatik denetle",

@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Synchronisierung und Benachrichtigungen",
   "settings.tasks.enable": "Aufgaben aktivieren",
   "settings.tasks.enableHint": "Behalte To-dos neben deinen E-Mails. Aufgaben bleiben auf diesem Gerät und sind in Backups enthalten.",
+  "settings.tasks.removeGoogleConfirm": "Konto {email} entfernen? Die Aufgaben bleiben in Google Tasks. Meron löscht die zwischengespeicherten Aufgaben und ihre Verknüpfungen mit E-Mails auf diesem Gerät.",
   "settings.toast.failedToUploadAvatar": "Avatar konnte nicht hochgeladen werden",
   "settings.toast.logExported": "Protokoll exportiert",
   "settings.updates.autoCheck": "Automatisch nach Updates suchen",

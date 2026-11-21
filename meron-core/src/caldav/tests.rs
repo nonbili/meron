@@ -1401,3 +1401,40 @@ fn a_blank_password_reuses_only_a_password_mail_account_on_the_same_login() {
     .unwrap_err();
     assert!(format!("{err:#}").contains("no saved password"));
 }
+
+#[test]
+fn losing_vtodo_support_only_resets_the_event_listing_once() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    crate::store::run_migrations(&conn).unwrap();
+    store::save_account(
+        &conn,
+        &store::DavAccount {
+            id: "fixture".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let mut remote = Calendar {
+        url: "https://cal.example.test/fixture/".into(),
+        components: vec!["VEVENT".into(), "VTODO".into()],
+        ..Default::default()
+    };
+    let calendar = store::reconcile_calendars(&conn, "fixture", std::slice::from_ref(&remote))
+        .unwrap()
+        .remove(0);
+    store::set_tasks_enabled(&conn, &calendar, true).unwrap();
+
+    remote.components.pop();
+    let reduced = store::reconcile_calendars(&conn, "fixture", std::slice::from_ref(&remote))
+        .unwrap()
+        .remove(0);
+    assert!(!reduced.tasks_enabled);
+    assert!(reduced.syncs_events());
+
+    store::set_synced(&conn, &calendar.id, "new-ctag", "new-token", true).unwrap();
+    let next = store::reconcile_calendars(&conn, "fixture", &[remote])
+        .unwrap()
+        .remove(0);
+    assert_eq!(next.ctag, "new-ctag");
+    assert_eq!(next.sync_token, "new-token");
+}

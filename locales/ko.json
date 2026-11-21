@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "동기화 및 알림",
   "settings.tasks.enable": "작업 사용",
   "settings.tasks.enableHint": "할 일을 메일과 함께 관리하세요. 작업은 이 기기에 저장되며 백업에 포함됩니다.",
+  "settings.tasks.removeGoogleConfirm": "{email} 계정을 삭제할까요? 할 일은 Google Tasks에 남습니다. Meron은 이 기기에 저장된 할 일과 메일 링크를 삭제합니다.",
   "settings.toast.failedToUploadAvatar": "아바타를 업로드하지 못했습니다.",
   "settings.toast.logExported": "로그를 내보냈습니다.",
   "settings.updates.autoCheck": "자동으로 업데이트 확인",

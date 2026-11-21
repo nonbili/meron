@@ -42,6 +42,9 @@ export function TaskEditor({
   // WebKitGTK's empty time field shows a made-up time and reports no edits, so
   // the field only appears once a time is set, and keeps a draft while typing:
   // a complete time saves at once, a half-cleared one reverts on blur.
+  const provider = lists.find((list) => list.id === task.list_id)?.provider
+  const dateOnly = provider === 'google'
+  const movableLists = provider ? [] : lists.filter((list) => !list.provider)
   const savedDueTime = taskDueTime(task.due_at, task.due_has_time)
   const [dueTime, setDueTime] = useState(savedDueTime)
   // The last time sent, so going back to the stored value mid-save still saves.
@@ -186,7 +189,7 @@ export function TaskEditor({
         className="max-h-32 w-full resize-none overflow-y-auto bg-transparent text-xs leading-4 text-secondary outline-none"
       />
 
-      {lists.length > 1 ? (
+      {movableLists.length > 1 ? (
         <label className="flex items-center gap-2 text-xs text-secondary">
           <span className="shrink-0">{t('tasks.moveToList')}</span>
           <select
@@ -200,7 +203,7 @@ export function TaskEditor({
             }}
             className="min-w-0 flex-1 rounded-lg bg-app px-2 py-1 text-xs text-primary outline-none ring-1 ring-border focus:ring-accent"
           >
-            {lists.map((list) => (
+            {movableLists.map((list) => (
               <option key={list.id} value={list.id}>
                 {list.title}
               </option>
@@ -239,7 +242,7 @@ export function TaskEditor({
                 onBlur={() => setDueTime(savedDueTime)}
                 className="min-w-0 bg-transparent py-1.5 text-xs text-primary outline-none"
               />
-            ) : task.due_at > 0 ? (
+            ) : !dateOnly && task.due_at > 0 ? (
               <IconButton label={t('tasks.dueTime')} icon={Clock} size="sm" onClick={() => saveDueTime('09:00')} />
             ) : null}
             {/* With a time set, the first clear drops just the time. */}

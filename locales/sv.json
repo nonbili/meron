@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Synkronisera och aviseringar",
   "settings.tasks.enable": "Aktivera uppgifter",
   "settings.tasks.enableHint": "Håll dina att göra-punkter bredvid posten. Uppgifter stannar på den här enheten och följer med i säkerhetskopior.",
+  "settings.tasks.removeGoogleConfirm": "Ta bort {email}? Dina uppgifter finns kvar i Google Tasks. Meron tar bort cachade uppgifter och deras länkar till e-post från den här enheten.",
   "settings.toast.failedToUploadAvatar": "Det gick inte att ladda upp avatar",
   "settings.toast.logExported": "Loggen exporterad",
   "settings.updates.autoCheck": "Sök efter uppdateringar automatiskt",

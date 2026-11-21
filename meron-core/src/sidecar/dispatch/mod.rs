@@ -8,6 +8,7 @@ mod calendar;
 mod compose;
 mod feeds;
 mod folders;
+pub(crate) mod google_tasks;
 pub(crate) mod messages;
 mod oauth;
 mod openpgp;
@@ -91,6 +92,7 @@ pub(crate) async fn dispatch(
 
         m if m.starts_with("pgp.") => openpgp::dispatch(engine, req, out).await,
 
+        m if m.starts_with("googleTasks.") => google_tasks::dispatch(engine, req, out).await,
         m if m.starts_with("caldav.") => caldav::dispatch(engine, req, out).await,
         m if m.starts_with("carddav.") => {
             let engine = engine.clone();

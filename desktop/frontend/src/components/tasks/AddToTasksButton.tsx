@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { Check, ListPlus } from 'lucide-react'
+import { errorMessage } from '../../lib/errors'
 import { useTranslation } from '../../lib/i18n'
-import { addTaskFromMessage, loadTaskLists, warnIfThreadInTasks, type TaskList } from '../../states/tasks'
-import { ui$ } from '../../states/ui'
+import {
+  addTaskFromMessage,
+  loadTaskLists,
+  taskListLabel,
+  warnIfThreadInTasks,
+  type TaskList,
+} from '../../states/tasks'
+import { showToast, ui$ } from '../../states/ui'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
@@ -25,7 +32,11 @@ export function AddToTasksButton({ title, account, threadId }: { title: string; 
 
   async function add(listId: string) {
     setMenu(null)
-    await addTaskFromMessage({ title, account, threadId, listId, checked: true })
+    try {
+      await addTaskFromMessage({ title, account, threadId, listId, checked: true })
+    } catch (error) {
+      showToast(errorMessage(error, t('tasks.addFromMessage')), 'error')
+    }
   }
 
   async function press(button: HTMLButtonElement) {
@@ -34,7 +45,8 @@ export function AddToTasksButton({ title, account, threadId }: { title: string; 
     try {
       // Before the list picker, so a thread already filed isn't sent through it.
       if (await warnIfThreadInTasks(threadId)) return
-      const { lists } = await loadTaskLists().catch(() => ({ lists: [] as TaskList[] }))
+      const result = await loadTaskLists().catch(() => ({ lists: [] as TaskList[] }))
+      const lists = result.lists.filter((list) => !list.read_only)
       if (shownThread.current !== threadId || !lists.length) return
       if (lists.length === 1) return await add(lists[0].id)
       const rect = button.getBoundingClientRect()
@@ -64,7 +76,7 @@ export function AddToTasksButton({ title, account, threadId }: { title: string; 
           {menu.lists.map((list) => (
             <MenuItem
               key={list.id}
-              label={list.title}
+              label={taskListLabel(list)}
               trailing={list.id === selectedList ? <Check size={13} /> : undefined}
               onClick={() => void add(list.id)}
             />

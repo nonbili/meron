@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Sünkroonimine ja märguanded",
   "settings.tasks.enable": "Luba ülesanded",
   "settings.tasks.enableHint": "Hoia tegemist vajavad asjad kirjade kõrval. Ülesanded jäävad sellesse seadmesse ja lisatakse varukoopiatesse.",
+  "settings.tasks.removeGoogleConfirm": "Kas eemaldada {email}? Sinu ülesanded jäävad Google Tasksi. Meron kustutab sellelt seadmelt vahemällu salvestatud ülesanded ja nende seosed meilidega.",
   "settings.toast.failedToUploadAvatar": "Avatari üleslaadimine ebaõnnestus",
   "settings.toast.logExported": "Logi eksporditud",
   "settings.updates.autoCheck": "Kontrolli uuendusi automaatselt",

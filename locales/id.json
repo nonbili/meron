@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Sinkronisasi & notifikasi",
   "settings.tasks.enable": "Aktifkan Tugas",
   "settings.tasks.enableHint": "Simpan daftar tugas bersama email Anda. Tugas tetap ada di perangkat ini dan disertakan dalam cadangan.",
+  "settings.tasks.removeGoogleConfirm": "Hapus {email}? Tugas Anda akan tetap ada di Google Tasks. Meron akan menghapus tugas yang tersimpan di cache beserta tautannya ke email di perangkat ini.",
   "settings.toast.failedToUploadAvatar": "Gagal mengunggah avatar",
   "settings.toast.logExported": "Log diekspor",
   "settings.updates.autoCheck": "Periksa pembaruan secara otomatis",

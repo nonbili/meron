@@ -470,8 +470,12 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.oauthPollProfile("outlook"), nil
 	case "caldav.connectGoogle":
 		return a.connectGoogleCalendar(payload)
+	case "googleTasks.connect":
+		return a.connectGoogleService(payload, "google_tasks", "googleTasks.add")
+	case "googleTasks.accounts", "googleTasks.sync", "googleTasks.remove":
+		return a.calendarInvoke(command, payload)
 	case "carddav.connectGoogle":
-		return a.connectGoogleDAV(payload, "google_contacts", "carddav.addGoogle")
+		return a.connectGoogleService(payload, "google_contacts", "carddav.addGoogle")
 	case "mail.sync":
 		return a.mailSync(payload)
 	case "watch.start", "watch.stop":

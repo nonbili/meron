@@ -189,7 +189,7 @@ func (a *App) oauthPollProfile(provider string) any {
 // startOAuth opens the browser and binds PKCE state to this attempt's
 // listener. Calendar consent and mailbox sign-in can run independently.
 // scopes are the Google services sharing the account's grant (see
-// connectGoogleDAV); nil for a mailbox sign-in.
+// connectGoogleService); nil for a mailbox sign-in.
 func (a *App) startOAuth(provider, state, loginHint string, scopes []any, complete func(*ExchangedProfile, error)) (any, error) {
 	verifier := randomBase64URL(32)
 	challengeBytes := sha256.Sum256([]byte(verifier))

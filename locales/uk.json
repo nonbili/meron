@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Сповіщення про синхронізацію",
   "settings.tasks.enable": "Увімкнути список завдань",
   "settings.tasks.enableHint": "Керування завданнями, пов'язаними з листами",
+  "settings.tasks.removeGoogleConfirm": "Видалити {email}? Ваші завдання залишаться в Google Tasks. Meron видалить із цього пристрою збережені завдання та їхні зв’язки з листами.",
   "settings.toast.failedToUploadAvatar": "Не вдалося завантажити аватар",
   "settings.toast.logExported": "Журнал подій експортовано",
   "settings.updates.autoCheck": "Автоматично перевіряти оновлення",

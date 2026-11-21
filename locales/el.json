@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Συγχρονισμός και ειδοποιήσεις",
   "settings.tasks.enable": "Ενεργοποίηση Εργασιών",
   "settings.tasks.enableHint": "Κρατήστε τις εκκρεμότητές σας δίπλα στα email. Οι εργασίες μένουν σε αυτή τη συσκευή και περιλαμβάνονται στα αντίγραφα ασφαλείας.",
+  "settings.tasks.removeGoogleConfirm": "Να αφαιρεθεί το {email}; Οι εργασίες παραμένουν στο Google Tasks. Το Meron θα διαγράψει τις αποθηκευμένες εργασίες και τις συνδέσεις τους με email από αυτή τη συσκευή.",
   "settings.toast.failedToUploadAvatar": "Η μεταφόρτωση του avatar απέτυχε",
   "settings.toast.logExported": "Εξαγωγή αρχείου καταγραφής",
   "settings.updates.autoCheck": "Αυτόματος έλεγχος για ενημερώσεις",

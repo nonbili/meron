@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "同期と通知",
   "settings.tasks.enable": "タスクを有効にする",
   "settings.tasks.enableHint": "メールと一緒にやることを管理できます。タスクはこの端末に保存され、バックアップにも含まれます。",
+  "settings.tasks.removeGoogleConfirm": "{email} を削除しますか？タスクは Google Tasks に残ります。Meron はこの端末に保存したタスクとメールへのリンクを削除します。",
   "settings.toast.failedToUploadAvatar": "アバターのアップロードに失敗しました",
   "settings.toast.logExported": "エクスポートされたログ",
   "settings.updates.autoCheck": "自動的にアップデートを確認",

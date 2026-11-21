@@ -182,6 +182,10 @@ async fn main() {
 
     tokio::spawn(poll_notify_folders(engine.clone(), out.clone()));
     tokio::spawn(sidecar::dispatch::caldav::poll(engine.clone(), out.clone()));
+    tokio::spawn(sidecar::dispatch::google_tasks::poll(
+        engine.clone(),
+        out.clone(),
+    ));
 
     emit(&out, "ready", ready_event()).await;
 

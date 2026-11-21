@@ -424,6 +424,10 @@ fn param_of(line: &str, param: &str) -> Option<String> {
 /// RECURRENCE-ID, or the first when every one has (an object holding only
 /// overrides).
 fn master_event(lines: &[String]) -> Option<(usize, usize)> {
+    master_component(lines, "VEVENT")
+}
+
+fn master_component(lines: &[String], component: &str) -> Option<(usize, usize)> {
     let mut events = Vec::new();
     let mut stack: Vec<(String, usize)> = Vec::new();
     for (index, line) in lines.iter().enumerate() {
@@ -432,7 +436,7 @@ fn master_event(lines: &[String]) -> Option<(usize, usize)> {
             stack.push((value_of(line).trim().to_ascii_uppercase(), index));
         } else if name == "END" {
             if let Some((kind, begin)) = stack.pop() {
-                if kind == "VEVENT" && stack.len() == 1 {
+                if kind == component && stack.len() == 1 {
                     events.push((begin, index));
                 }
             }
@@ -495,6 +499,177 @@ fn unescape(text: &str) -> String {
         }
     }
     out
+}
+
+pub(super) fn task_from_ics(ics: &str) -> Option<crate::store::Task> {
+    use calcard::icalendar::{ICalendarComponentType, ICalendarProperty as Prop, ICalendarStatus};
+    if ics.len() > crate::calendar::MAX_ICS_BYTES {
+        return None;
+    }
+    let calendar = crate::calendar::parse_ical(ics)?;
+    let mut todos = calendar
+        .components
+        .iter()
+        .filter(|c| c.component_type == ICalendarComponentType::VTodo);
+    let first = todos.next()?;
+    let todo = std::iter::once(first)
+        .chain(todos)
+        .find(|c| c.property(&Prop::RecurrenceId).is_none())
+        .unwrap_or(first);
+    let resolver = calendar
+        .build_tz_resolver()
+        .with_default(crate::calendar::local_tz());
+    let instant = |name| {
+        let entry = todo.property(&name)?;
+        let value = entry.values.first()?.as_partial_date_time()?;
+        let zone = resolver.resolve_or_default(entry.tz_id());
+        Some((
+            value.to_date_time_with_tz(zone)?.timestamp(),
+            value.has_time(),
+        ))
+    };
+    let text = |name| {
+        todo.property(&name)
+            .and_then(|e| e.values.first()?.as_text())
+            .unwrap_or_default()
+            .to_string()
+    };
+    let (due_at, due_has_time) = instant(Prop::Due)
+        .or_else(|| {
+            let (start, has_time) = instant(Prop::Dtstart)?;
+            let entry = todo.property(&Prop::Duration)?;
+            let calcard::icalendar::ICalendarValue::Duration(duration) = entry.values.first()?
+            else {
+                return None;
+            };
+            Some((start.checked_add(duration.as_seconds())?, has_time))
+        })
+        .unwrap_or_default();
+    let completed_at = instant(Prop::Completed)
+        .map(|(at, _)| at)
+        .or_else(|| {
+            (todo.status() == Some(&ICalendarStatus::Completed)).then(|| {
+                instant(Prop::LastModified)
+                    .or_else(|| instant(Prop::Dtstamp))
+                    .map_or(1, |(at, _)| at.max(1))
+            })
+        })
+        .unwrap_or_default();
+    let title = text(Prop::Summary);
+    Some(crate::store::Task {
+        title: if title.trim().is_empty() {
+            "Untitled".to_string()
+        } else {
+            title
+        },
+        notes: text(Prop::Description),
+        due_at,
+        due_has_time,
+        completed_at,
+        ..Default::default()
+    })
+}
+
+pub(super) fn task_ics(base: &str, task: &crate::store::Task) -> String {
+    let before = task_from_ics(base);
+    let skeleton;
+    let base = if before.is_some() {
+        base
+    } else {
+        skeleton = format!(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Meron//Meron//EN\r\nBEGIN:VTODO\r\nUID:{}\r\nEND:VTODO\r\nEND:VCALENDAR\r\n",
+            escape(&task.id)
+        );
+        &skeleton
+    };
+    let lines = unfold(base);
+    let Some((start, end)) = master_component(&lines, "VTODO") else {
+        return base.to_string();
+    };
+    let mut replace = vec!["DTSTAMP", "LAST-MODIFIED"];
+    let stamp = utc_stamp(task.updated_at).unwrap_or_default();
+    let mut add = vec![format!("DTSTAMP:{stamp}"), format!("LAST-MODIFIED:{stamp}")];
+    if before.as_ref().is_none_or(|b| b.title != task.title) {
+        replace.push("SUMMARY");
+        add.push(format!("SUMMARY:{}", escape(&task.title)));
+    }
+    if before.as_ref().is_none_or(|b| b.notes != task.notes) {
+        replace.push("DESCRIPTION");
+        if !task.notes.is_empty() {
+            add.push(format!("DESCRIPTION:{}", escape(&task.notes)));
+        }
+    }
+    if before
+        .as_ref()
+        .is_none_or(|b| (b.due_at, b.due_has_time) != (task.due_at, task.due_has_time))
+    {
+        replace.extend(["DUE", "DURATION"]);
+        if task.due_at > 0 {
+            let start_line = top_level(&lines, start, end).find(|l| name_of(l) == "DTSTART");
+            // RFC 5545 requires DTSTART and DUE to share value types. If this
+            // edit changes the type, keep the start's local day or time of day.
+            if let Some(line) = start_line {
+                let value = value_of(line);
+                if task.due_has_time && value.len() == 8 {
+                    replace.push("DTSTART");
+                    add.push(format!("DTSTART:{value}T000000"));
+                } else if !task.due_has_time && value.len() > 8 {
+                    replace.push("DTSTART");
+                    add.push(format!(
+                        "DTSTART;VALUE=DATE:{}",
+                        value.get(..8).unwrap_or_default()
+                    ));
+                }
+            }
+            if task.due_has_time {
+                if let Some(due) = utc_stamp(task.due_at) {
+                    add.push(format!("DUE:{due}"));
+                }
+            } else if let Some(due) = chrono::DateTime::from_timestamp(task.due_at, 0) {
+                add.push(format!(
+                    "DUE;VALUE=DATE:{}",
+                    due.with_timezone(&chrono::Local).format("%Y%m%d")
+                ));
+            }
+        }
+    }
+    if before.as_ref().map_or(0, |b| b.completed_at) != task.completed_at {
+        replace.extend(["STATUS", "COMPLETED", "PERCENT-COMPLETE"]);
+        if let Some(completed) = (task.completed_at > 0)
+            .then(|| utc_stamp(task.completed_at))
+            .flatten()
+        {
+            add.push("STATUS:COMPLETED".into());
+            add.push("PERCENT-COMPLETE:100".into());
+            add.push(format!("COMPLETED:{completed}"));
+        } else {
+            add.push("STATUS:NEEDS-ACTION".into());
+        }
+    }
+    let own: std::collections::HashSet<_> = top_level(&lines, start, end)
+        .filter(|line| replace.contains(&name_of(line).as_str()))
+        .map(|line| line.as_ptr())
+        .collect();
+    let mut out = String::new();
+    for (index, line) in lines.iter().enumerate() {
+        if index == end {
+            for property in &add {
+                fold_into(&mut out, property);
+            }
+        }
+        if !own.contains(&line.as_ptr()) {
+            fold_into(&mut out, line);
+        }
+    }
+    out
+}
+
+fn utc_stamp(at: i64) -> Option<String> {
+    Some(
+        chrono::DateTime::from_timestamp(at, 0)?
+            .format("%Y%m%dT%H%M%SZ")
+            .to_string(),
+    )
 }
 
 #[cfg(test)]

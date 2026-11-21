@@ -24,11 +24,11 @@ func (a *App) calendarInvoke(command string, payload map[string]any) (any, error
 
 // connectGoogleCalendar keeps the calendar grant out of the webview.
 func (a *App) connectGoogleCalendar(payload map[string]any) (any, error) {
-	return a.connectGoogleDAV(payload, "google_calendar", "caldav.addGoogle")
+	return a.connectGoogleService(payload, "google_calendar", "caldav.addGoogle")
 }
 
-// connectGoogleDAV keeps DAV credentials out of the webview.
-func (a *App) connectGoogleDAV(payload map[string]any, provider, method string) (any, error) {
+// connectGoogleService keeps Google service credentials out of the webview.
+func (a *App) connectGoogleService(payload map[string]any, provider, method string) (any, error) {
 	if !gmailOAuthConfigured() {
 		return nil, errors.New("Google sign-in is not configured")
 	}

@@ -75,7 +75,9 @@ pub fn default_oauth_client(provider: &str) -> crate::oauth::Client {
         _ => crate::oauth::Client {
             provider: if matches!(
                 provider,
-                crate::oauth::GOOGLE_CALENDAR_PROVIDER | crate::oauth::GOOGLE_CONTACTS_PROVIDER
+                crate::oauth::GOOGLE_CALENDAR_PROVIDER
+                    | crate::oauth::GOOGLE_CONTACTS_PROVIDER
+                    | crate::oauth::GOOGLE_TASKS_PROVIDER
             ) {
                 provider.to_string()
             } else {
@@ -180,7 +182,8 @@ pub struct Engine {
     pub dav_syncing: std::sync::Mutex<HashSet<String>>,
     pub(crate) carddav_operation: std::sync::Mutex<()>,
     pub(crate) carddav_secrets: std::sync::Mutex<HashMap<String, secrets::Secrets>>,
-    /// Google grants shared by Calendar and Contacts, cached for this run.
+    pub(crate) google_tasks_operation: std::sync::Mutex<()>,
+    /// Google grants shared by Calendar, Contacts and Tasks, cached for this run.
     pub(crate) google_grants: std::sync::Mutex<crate::google_grant::Grants>,
     /// Google connects in flight, by grant: their grant is not released.
     pub(crate) google_connecting: std::sync::Mutex<HashMap<String, Vec<&'static str>>>,
@@ -478,6 +481,7 @@ impl Engine {
             carddav_operation: std::sync::Mutex::new(()),
             carddav_secrets: std::sync::Mutex::new(HashMap::new()),
             google_grants: std::sync::Mutex::new(HashMap::new()),
+            google_tasks_operation: std::sync::Mutex::new(()),
             google_connecting: std::sync::Mutex::new(HashMap::new()),
         }
     }

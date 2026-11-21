@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Synchronisatie en meldingen",
   "settings.tasks.enable": "Taken inschakelen",
   "settings.tasks.enableHint": "Houd taken bij naast je e-mail. Taken blijven op dit apparaat staan en worden meegenomen in back-ups.",
+  "settings.tasks.removeGoogleConfirm": "{email} verwijderen? Je taken blijven in Google Tasks. Meron verwijdert de opgeslagen taken en hun koppelingen met e-mail van dit apparaat.",
   "settings.toast.failedToUploadAvatar": "Uploaden van avatar mislukt",
   "settings.toast.logExported": "Logboek geëxporteerd",
   "settings.updates.autoCheck": "Automatisch op updates controleren",

@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Sincronização e notificações",
   "settings.tasks.enable": "Ativar Tarefas",
   "settings.tasks.enableHint": "Mantenha as suas tarefas junto ao correio. Ficam neste dispositivo e são incluídas nas cópias de segurança.",
+  "settings.tasks.removeGoogleConfirm": "Remover {email}? As suas tarefas permanecerão no Google Tasks. O Meron eliminará deste dispositivo as tarefas em cache e as respetivas ligações ao correio.",
   "settings.toast.failedToUploadAvatar": "Falha ao enviar avatar",
   "settings.toast.logExported": "Registo exportado",
   "settings.updates.autoCheck": "Procurar atualizações automaticamente",

@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Sync & notifications",
   "settings.tasks.enable": "Enable Tasks",
   "settings.tasks.enableHint": "Keep to-dos alongside your mail. Tasks stay on this device and are included in backups.",
+  "settings.tasks.removeGoogleConfirm": "Remove {email}? Your tasks will stay in Google Tasks. Meron will delete cached tasks and their links to mail on this device.",
   "settings.toast.failedToUploadAvatar": "Failed to upload avatar",
   "settings.toast.logExported": "Log exported",
   "settings.updates.autoCheck": "Check for updates automatically",

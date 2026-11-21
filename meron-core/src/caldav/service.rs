@@ -99,6 +99,12 @@ pub fn dispatch(engine: &Engine, method: &str, params: &Value) -> Result<Value> 
             flag("enabled").unwrap_or(true),
             flag("discard_unsent").unwrap_or(false),
         ),
+        "caldav.setTasksEnabled" => set_tasks_enabled(
+            engine,
+            required("calendar_id")?,
+            flag("enabled").unwrap_or(true),
+            flag("discard_unsent").unwrap_or(false),
+        ),
         "caldav.createCalendar" => create_calendar(
             engine,
             required("account_id")?,
@@ -388,15 +394,15 @@ pub fn set_password(engine: &Engine, account_id: &str, password: &str) -> Result
 /// Returns how many are left unsent.
 /// The caller checks again, under the lock it then deletes with, so an edit
 /// made meanwhile is not lost either.
-fn flush_unsent(engine: &Engine, account_id: &str, calendar_id: Option<&str>, discard: bool) {
-    let unsent = || -> Result<i64> { store::unsent(&*lock(engine)?, account_id, calendar_id) };
+fn flush_unsent(engine: &Engine, account_id: &str, discard: bool) {
+    let unsent = || -> Result<i64> { store::unsent(&*lock(engine)?, account_id, None) };
     if !discard && unsent().is_ok_and(|n| n > 0) {
         let _ = sync(engine, Some(account_id), false);
     }
 }
 
 pub fn remove_account(engine: &Engine, account_id: &str, discard_unsent: bool) -> Result<Value> {
-    flush_unsent(engine, account_id, None, discard_unsent);
+    flush_unsent(engine, account_id, discard_unsent);
     // No sync of the account may be halfway through: what it brought back
     // would land on an account that is gone.
     let _sync = SyncGuard::claim(engine, account_id)
@@ -424,28 +430,66 @@ pub fn set_calendar_enabled(
     enabled: bool,
     discard_unsent: bool,
 ) -> Result<Value> {
-    let calendar = store::calendar(&*lock(engine)?, calendar_id)?
-        .ok_or_else(|| anyhow!("no such calendar: {calendar_id}"))?;
-    if enabled {
-        // A sync already running listed its calendars before this one was
-        // on and leaves it alone, so there is nothing to wait for.
+    let calendar = {
         let conn = lock(engine)?;
-        store::set_enabled(&conn, calendar_id, true)?;
-        return Ok(json!({ "accounts": accounts_payload(&conn)? }));
+        let calendar = store::calendar(&conn, calendar_id)?
+            .ok_or_else(|| anyhow!("no such calendar: {calendar_id}"))?;
+        if enabled || !calendar.enabled {
+            if enabled && !calendar.enabled {
+                store::set_enabled(&conn, calendar_id, true)?;
+            }
+            return Ok(json!({ "accounts": accounts_payload(&conn)? }));
+        }
+        calendar
+    };
+    if !discard_unsent && store::unsent_events(&*lock(engine)?, calendar_id)? > 0 {
+        let _ = sync(engine, Some(&calendar.account), false);
     }
-    flush_unsent(engine, &calendar.account, Some(calendar_id), discard_unsent);
-    // Nor halfway through for a calendar being turned off: an upload that
-    // finished after would be taken for a deletion to send.
-    let _sync = SyncGuard::claim(engine, &calendar.account)
+    let _sync = SyncGuard::claim_within(engine, &calendar.account, MUTATION_WAIT)
         .ok_or_else(|| anyhow!("a sync of this account is still running; try again"))?;
     let conn = lock(engine)?;
-    if !enabled && !discard_unsent {
-        let unsent = store::unsent(&conn, &calendar.account, Some(calendar_id))?;
+    if !discard_unsent {
+        let unsent = store::unsent_events(&conn, calendar_id)?;
         if unsent > 0 {
             return Ok(json!({ "unsent": unsent, "accounts": accounts_payload(&conn)? }));
         }
     }
-    store::set_enabled(&conn, calendar_id, enabled)?;
+    store::set_enabled(&conn, calendar_id, false)?;
+    Ok(json!({ "accounts": accounts_payload(&conn)? }))
+}
+
+pub fn set_tasks_enabled(
+    engine: &Engine,
+    id: &str,
+    enabled: bool,
+    discard_unsent: bool,
+) -> Result<Value> {
+    let calendar =
+        store::calendar(&*lock(engine)?, id)?.ok_or_else(|| anyhow!("no such calendar: {id}"))?;
+    if !enabled
+        && !discard_unsent
+        && !calendar.read_only
+        && super::todo::pending(&*lock(engine)?, id)? > 0
+    {
+        let _ = sync(engine, Some(&calendar.account), false);
+    }
+    let _sync = SyncGuard::claim_within(engine, &calendar.account, MUTATION_WAIT)
+        .ok_or_else(|| anyhow!("a sync of this account is still running; try again"))?;
+    let conn = lock(engine)?;
+    let calendar = store::calendar(&conn, id)?.ok_or_else(|| anyhow!("no such calendar: {id}"))?;
+    anyhow::ensure!(
+        !enabled || calendar.supports("VTODO"),
+        "This calendar does not support tasks"
+    );
+    if enabled != calendar.tasks_enabled {
+        if !enabled && !discard_unsent {
+            let unsent = super::todo::pending(&conn, id)?;
+            if unsent > 0 {
+                return Ok(json!({ "unsent": unsent, "accounts": accounts_payload(&conn)? }));
+            }
+        }
+        store::set_tasks_enabled(&conn, &calendar, enabled)?;
+    }
     Ok(json!({ "accounts": accounts_payload(&conn)? }))
 }
 
@@ -611,6 +655,11 @@ pub fn update_calendar(
         store::set_local_color(&conn, calendar_id, color.unwrap_or_default())?;
     } else {
         store::set_calendar_props(&conn, calendar_id, name, color)?;
+        if let Some(calendar) =
+            store::calendar(&conn, calendar_id)?.filter(DavCalendar::syncs_tasks)
+        {
+            super::todo::ensure_list(&conn, &calendar)?;
+        }
     }
     Ok(json!({ "accounts": accounts_payload(&conn)?, "local": refused }))
 }
@@ -781,6 +830,7 @@ pub fn accounts_payload(conn: &rusqlite::Connection) -> Result<Value> {
                     "enabled": calendar.enabled,
                     "events": calendar.supports("VEVENT"),
                     "tasks": calendar.supports("VTODO"),
+                    "tasks_enabled": calendar.tasks_enabled,
                 })
             })
             .collect();

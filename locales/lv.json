@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "Sinhronizācija un paziņojumi",
   "settings.tasks.enable": "Iespējot uzdevumus",
   "settings.tasks.enableHint": "Glabā darāmos darbus līdzās pastam. Uzdevumi paliek šajā ierīcē un tiek iekļauti dublējumos.",
+  "settings.tasks.removeGoogleConfirm": "Vai noņemt {email}? Jūsu uzdevumi paliks pakalpojumā Google Tasks. Meron no šīs ierīces izdzēsīs kešatmiņā saglabātos uzdevumus un to saites uz e-pastu.",
   "settings.toast.failedToUploadAvatar": "Neizdevās augšupielādēt iemiesojumu",
   "settings.toast.logExported": "Žurnāls eksportēts",
   "settings.updates.autoCheck": "Automātiski meklēt atjauninājumus",

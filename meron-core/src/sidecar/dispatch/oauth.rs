@@ -35,7 +35,8 @@ fn client(p: &Value) -> Result<oauth::Client, String> {
         provider @ ("gmail"
         | "outlook"
         | oauth::GOOGLE_CALENDAR_PROVIDER
-        | oauth::GOOGLE_CONTACTS_PROVIDER) => Ok(default_oauth_client(provider)),
+        | oauth::GOOGLE_CONTACTS_PROVIDER
+        | oauth::GOOGLE_TASKS_PROVIDER) => Ok(default_oauth_client(provider)),
         _ => Err("unsupported oauth provider".to_string()),
     }
 }

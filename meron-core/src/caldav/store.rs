@@ -67,6 +67,7 @@ pub struct DavCalendar {
     pub sync_token: String,
     pub read_only: bool,
     pub enabled: bool,
+    pub tasks_enabled: bool,
     /// When every object was last listed and compared, rather than only
     /// the changes a sync token reported.
     pub listed_at: i64,
@@ -76,6 +77,14 @@ pub struct DavCalendar {
 }
 
 impl DavCalendar {
+    pub fn syncs_tasks(&self) -> bool {
+        self.tasks_enabled && self.supports("VTODO")
+    }
+
+    pub fn syncs_events(&self) -> bool {
+        self.enabled && self.supports("VEVENT")
+    }
+
     /// The colour its events are drawn in, as far as the server and the
     /// user have said; empty leaves it to the apps.
     pub fn shown_color(&self) -> &str {
@@ -221,7 +230,8 @@ pub fn delete_account(conn: &Connection, id: &str) -> Result<()> {
 
 const CALENDAR_COLUMNS: &str = "id, account, url, name, color, components, ctag, sync_token,
     read_only, enabled, COALESCE(json_extract(json, '$.listed_at'), 0),
-    COALESCE(json_extract(json, '$.local_color'), '')";
+    COALESCE(json_extract(json, '$.local_color'), ''),
+    COALESCE(json_extract(json, '$.tasks_enabled'), 0)";
 
 fn read_calendar(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavCalendar> {
     let components: String = row.get(5)?;
@@ -242,6 +252,7 @@ fn read_calendar(row: &rusqlite::Row<'_>) -> rusqlite::Result<DavCalendar> {
         enabled: row.get::<_, i64>(9)? != 0,
         listed_at: row.get(10)?,
         local_color: row.get(11)?,
+        tasks_enabled: row.get(12)?,
     })
 }
 
@@ -305,7 +316,13 @@ pub fn reconcile_calendars(
     for known in calendars(conn, account)? {
         if !listed.iter().any(|c| c.url == known.url) {
             keep_unsent_here(conn, &known.id)?;
+            super::todo::forget(conn, &known.id, true)?;
             delete_calendar(conn, &known.id)?;
+        }
+    }
+    for calendar in calendars(conn, account)? {
+        if !calendar.syncs_tasks() && calendar.tasks_enabled {
+            set_tasks_state(conn, &calendar, false, true)?;
         }
     }
     calendars(conn, account)
@@ -391,13 +408,51 @@ pub fn set_local_color(conn: &Connection, id: &str, color: &str) -> Result<()> {
 /// Turn a calendar off or on. Off drops its events from this device and
 /// forgets its sync state, so turning it on again starts afresh.
 pub fn set_enabled(conn: &Connection, id: &str, enabled: bool) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
     if !enabled {
-        forget_contents(conn, id)?;
+        forget_events(&tx, id)?;
+    } else {
+        tx.execute(
+            "DELETE FROM dav_objects WHERE calendar = ?1 AND local_id = '' AND state = ''",
+            [id],
+        )?;
+        reset_listing(&tx, id)?;
     }
-    conn.execute(
+    tx.execute(
         "UPDATE dav_calendars SET enabled = ?2 WHERE id = ?1",
         params![id, enabled as i64],
     )?;
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn set_tasks_enabled(conn: &Connection, calendar: &DavCalendar, enabled: bool) -> Result<()> {
+    set_tasks_state(conn, calendar, enabled, false)
+}
+
+fn set_tasks_state(
+    conn: &Connection,
+    calendar: &DavCalendar,
+    enabled: bool,
+    keep_unsent: bool,
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "UPDATE dav_calendars SET json = json_set(json, '$.tasks_enabled', ?2) WHERE id = ?1",
+        params![calendar.id, enabled],
+    )?;
+    if enabled {
+        super::todo::ensure_list(&tx, calendar)?;
+        tx.execute(
+            "DELETE FROM dav_objects WHERE calendar = ?1 AND local_id = '' AND state = ''",
+            [&calendar.id],
+        )?;
+    } else {
+        super::todo::stash_local_metadata(&tx, &calendar.id)?;
+        super::todo::forget(&tx, &calendar.id, keep_unsent)?;
+    }
+    reset_listing(&tx, &calendar.id)?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -439,7 +494,7 @@ fn keep_unsent_here(conn: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn forget_contents(conn: &Connection, id: &str) -> Result<()> {
+fn forget_events(conn: &Connection, id: &str) -> Result<()> {
     // Moves into this calendar that never got here are called off: the
     // calendars they left keep the event, and list everything again on
     // their next sync to show it once more.
@@ -456,16 +511,24 @@ fn forget_contents(conn: &Connection, id: &str) -> Result<()> {
         params![id, CREATED],
     )?;
     conn.execute("DELETE FROM events WHERE calendar = ?1", params![id])?;
-    conn.execute("DELETE FROM dav_objects WHERE calendar = ?1", params![id])?;
     conn.execute(
-        "UPDATE dav_calendars SET ctag = '', sync_token = '' WHERE id = ?1",
+        "DELETE FROM dav_objects WHERE calendar = ?1 AND local_id NOT GLOB 'task-*'",
+        [id],
+    )?;
+    reset_listing(conn, id)
+}
+
+fn reset_listing(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE dav_calendars SET ctag = '', sync_token = '', json = json_remove(json, '$.listed_at') WHERE id = ?1",
         params![id],
     )?;
     Ok(())
 }
 
 pub fn delete_calendar(conn: &Connection, id: &str) -> Result<()> {
-    forget_contents(conn, id)?;
+    super::todo::forget(conn, id, false)?;
+    forget_events(conn, id)?;
     conn.execute("DELETE FROM dav_calendars WHERE id = ?1", params![id])?;
     Ok(())
 }
@@ -610,6 +673,15 @@ pub fn unsent(conn: &Connection, account: &str, calendar: Option<&str>) -> Resul
         "SELECT count(*) FROM dav_objects o JOIN dav_calendars c ON c.id = o.calendar
          WHERE c.account = ?1 AND (?2 IS NULL OR c.id = ?2) AND o.state <> ''",
         params![account, calendar],
+        |row| row.get(0),
+    )?)
+}
+
+pub fn unsent_events(conn: &Connection, calendar: &str) -> Result<i64> {
+    Ok(conn.query_row(
+        "SELECT count(*) FROM dav_objects WHERE calendar = ?1 AND state <> ''
+         AND local_id NOT GLOB 'task-*'",
+        [calendar],
         |row| row.get(0),
     )?)
 }

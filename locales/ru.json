@@ -1401,6 +1401,7 @@
   "settings.syncNotifications": "Синхронизация и уведомления",
   "settings.tasks.enable": "Включить задачи",
   "settings.tasks.enableHint": "Ведите список дел рядом с почтой. Задачи хранятся на этом устройстве и включаются в резервные копии.",
+  "settings.tasks.removeGoogleConfirm": "Удалить {email}? Ваши задачи останутся в Google Tasks. Meron удалит с этого устройства сохранённые задачи и их связи с письмами.",
   "settings.toast.failedToUploadAvatar": "Не удалось загрузить аватар",
   "settings.toast.logExported": "Журнал экспортирован",
   "settings.updates.autoCheck": "Автоматически проверять обновления",

@@ -1,9 +1,7 @@
 //! Task lists and their items — the storage half of the optional Tasks feature.
 //!
-//! Local-only: nothing here talks to a server, so a row's only routes off the
-//! device are the config backup and the user retyping it. Ordering is an
-//! explicit `sort_order` rewritten in one transaction rather than a float
-//! midpoint, because a list is small and a rewrite can never drift.
+//! Ordering uses an explicit `sort_order` rewritten in one transaction.
+//! Task providers manage server mappings separately from these rows.
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};

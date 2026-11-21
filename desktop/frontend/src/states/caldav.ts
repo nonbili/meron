@@ -18,6 +18,7 @@ export type CalendarAccountCalendar = {
   events: boolean
   /** Holds to-dos (VTODO). */
   tasks: boolean
+  tasks_enabled?: boolean
 }
 
 /** A CalDAV account (see meron-core/src/caldav/service.rs). */
@@ -178,6 +179,10 @@ function markEnabled(calendarId: string, enabled: boolean) {
       ),
     })),
   )
+}
+
+export async function setCalendarTasksEnabled(calendarId: string, enabled: boolean) {
+  await dropping('caldav.setTasksEnabled', { calendar_id: calendarId, enabled })
 }
 
 export async function setCalendarEnabled(calendarId: string, enabled: boolean) {

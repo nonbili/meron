@@ -15,6 +15,7 @@ interface TaskRowProps {
   task: Task
   /** Completed rows are not draggable: their order is by when they were ticked. */
   sortable: boolean
+  readOnly?: boolean
   /** Whether this row's editor replaces the title and notes. */
   expanded: boolean
   onToggle: (done: boolean) => void
@@ -28,6 +29,7 @@ interface TaskRowProps {
 export function TaskRow({
   task,
   sortable,
+  readOnly = false,
   expanded,
   onToggle,
   onOpen,
@@ -79,7 +81,12 @@ export function TaskRow({
         {/* Keep controls out of the row's drag gesture. The mouse sensor's
           distance threshold preserves title clicks and suppresses clicks after a drag. */}
         <span className="flex h-6 shrink-0 items-center" data-no-drag>
-          <Checkbox checked={task.done} onChange={(event) => onToggle(event.target.checked)} aria-label={task.title} />
+          <Checkbox
+            disabled={readOnly}
+            checked={task.done}
+            onChange={(event) => onToggle(event.target.checked)}
+            aria-label={task.title}
+          />
         </span>
 
         {expanded ? (
@@ -90,6 +97,7 @@ export function TaskRow({
           <div className="min-w-0 flex-1">
             <button
               type="button"
+              disabled={readOnly}
               onClick={() => {
                 setFocusDueDate(false)
                 onOpen()
@@ -110,6 +118,7 @@ export function TaskRow({
             {task.notes ? (
               <div
                 onClick={() => {
+                  if (readOnly) return
                   setFocusDueDate(false)
                   onOpen()
                 }}
@@ -125,6 +134,7 @@ export function TaskRow({
                 {task.due_at > 0 ? (
                   <button
                     type="button"
+                    disabled={readOnly}
                     onClick={() => {
                       setFocusDueDate(true)
                       onOpen()
@@ -157,7 +167,7 @@ export function TaskRow({
         )}
 
         {/* Delete floats over the end of the title instead of reserving a column for it. */}
-        {expanded ? null : (
+        {expanded || readOnly ? null : (
           <div
             className="pointer-events-none absolute right-2 top-1 rounded-full bg-chats opacity-0 shadow-sm focus-within:pointer-events-auto focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
             data-no-drag

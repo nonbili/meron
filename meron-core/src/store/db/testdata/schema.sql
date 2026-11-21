@@ -1,4 +1,4 @@
-PRAGMA user_version = 34;
+PRAGMA user_version = 35;
 
 -- table account_secrets
 CREATE TABLE account_secrets (
@@ -163,6 +163,31 @@ CREATE TABLE folders (
 CREATE TABLE google_grants (
                 email TEXT PRIMARY KEY, id TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL DEFAULT ''
             );
+
+-- table google_task_accounts
+CREATE TABLE google_task_accounts (
+    email TEXT PRIMARY KEY,
+    last_error TEXT NOT NULL DEFAULT '',
+    last_sync_at INTEGER NOT NULL DEFAULT 0
+);
+
+-- table google_task_items
+CREATE TABLE google_task_items (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES google_task_lists(id) ON DELETE CASCADE,
+    remote_id TEXT,
+    etag TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT '',
+    UNIQUE(list_id, remote_id)
+);
+
+-- table google_task_lists
+CREATE TABLE google_task_lists (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL REFERENCES google_task_accounts(email) ON DELETE CASCADE,
+    remote_id TEXT NOT NULL,
+    UNIQUE(email, remote_id)
+);
 
 -- table invite_responses
 CREATE TABLE invite_responses (

@@ -347,7 +347,10 @@ fn backup_events(conn: &Connection) -> Result<Vec<store::CalendarEvent>> {
 fn collect_task_lists(conn: &Connection) -> Result<Vec<BackupTaskList>> {
     let lists = store::task_lists(conn)?;
     let mut out = Vec::with_capacity(lists.len());
-    for list in lists {
+    for list in lists
+        .into_iter()
+        .filter(|list| crate::tasks::is_local_list(&list.id))
+    {
         let tasks = store::tasks_for_list(conn, &list.id, true)?
             .into_iter()
             .map(|task| BackupTask {

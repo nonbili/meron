@@ -28,6 +28,8 @@ const (
 type calendarServer struct {
 	container string
 	url       string
+	username  string
+	password  string
 }
 
 // startStalwart launches a Stalwart container, completes its first-run setup
@@ -37,7 +39,7 @@ func startStalwart(t *testing.T) *calendarServer {
 	docker := dockerBin(t)
 	port := freePort(t)
 	admin := "admin:" + calendarPassword
-	server := &calendarServer{url: fmt.Sprintf("http://127.0.0.1:%d", port)}
+	server := &calendarServer{url: fmt.Sprintf("http://127.0.0.1:%d", port), username: calendarUser, password: calendarPassword}
 	server.container = runCmd(t, docker, "run", "-d", "--rm",
 		"-e", "STALWART_RECOVERY_ADMIN="+admin,
 		"-p", fmt.Sprintf("127.0.0.1:%d:8080", port),
@@ -131,7 +133,7 @@ func (s *calendarServer) admin(t *testing.T, credentials string, call []any) map
 func (s *calendarServer) dav(t *testing.T, method, path, body string, headers map[string]string) (int, string) {
 	t.Helper()
 	req, _ := http.NewRequest(method, s.url+path, strings.NewReader(body))
-	req.SetBasicAuth(calendarUser, calendarPassword)
+	req.SetBasicAuth(s.username, s.password)
 	for name, value := range headers {
 		req.Header.Set(name, value)
 	}

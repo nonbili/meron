@@ -29,6 +29,8 @@ import {
   createTaskList,
   deleteTask,
   deleteTaskList,
+  loadTaskLists,
+  taskListLabel,
   loadTasks,
   openTaskMail,
   renameTaskList,
@@ -66,6 +68,7 @@ export function TasksPanel({ listId }: { listId: string }) {
   const sensors = useTaskDragSensors()
 
   const activeList = lists.find((list) => list.id === listId)
+  const readOnly = !!activeList?.read_only
   const open = useMemo(() => items.filter((task) => !task.done), [items])
   const completed = useMemo(() => items.filter((task) => task.done), [items])
 
@@ -74,7 +77,13 @@ export function TasksPanel({ listId }: { listId: string }) {
     setRenaming(false)
     // A thread window can add mail to this list while the panel stays open.
     const stop = (window as any).runtime?.EventsOn?.('tasks.changed', (detail?: { method?: string }) => {
-      if (detail?.method === 'tasks.create') void loadTasks(listId, true)
+      if (detail?.method?.startsWith('caldav.') || detail?.method?.startsWith('googleTasks.')) {
+        void loadTaskLists().then(({ lists, defaultListId }) => {
+          if (ui$.activeTaskList.peek() !== listId) return
+          if (lists.some((list) => list.id === listId)) void loadTasks(listId, true)
+          else ui$.activeTaskList.set(defaultListId)
+        })
+      } else if (detail?.method === 'tasks.create') void loadTasks(listId, true)
     })
     return () => stop?.()
   }, [listId])
@@ -127,35 +136,39 @@ export function TasksPanel({ listId }: { listId: string }) {
               </span>
               <ChevronDown size={14} className="shrink-0 text-secondary" />
             </button>
-            <IconButton
-              ref={actionsButtonRef}
-              label={t('chat.moreActions')}
-              icon={MoreHorizontal}
-              size="sm"
-              onClick={() => setActionsMenu(anchorUnder(actionsButtonRef.current))}
-            />
+            {!readOnly && (!activeList?.provider || completed.length > 0) && (
+              <IconButton
+                ref={actionsButtonRef}
+                label={t('chat.moreActions')}
+                icon={MoreHorizontal}
+                size="sm"
+                onClick={() => setActionsMenu(anchorUnder(actionsButtonRef.current))}
+              />
+            )}
             <IconButton label={t('buttons.close')} icon={X} size="sm" onClick={closeTasksPanel} />
           </>
         )}
       </header>
 
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <Plus size={15} className="shrink-0 text-secondary" />
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') submitDraft()
-            if (event.key === 'Escape') setDraft('')
-          }}
-          placeholder={t('tasks.addTask')}
-          className="min-w-0 flex-1 bg-transparent text-sm text-primary outline-none placeholder:text-secondary"
-        />
-      </div>
+      {!readOnly && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+          <Plus size={15} className="shrink-0 text-secondary" />
+          <input
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') submitDraft()
+              if (event.key === 'Escape') setDraft('')
+            }}
+            placeholder={t('tasks.addTask')}
+            className="min-w-0 flex-1 bg-transparent text-sm text-primary outline-none placeholder:text-secondary"
+          />
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {items.length === 0 ? (
-          <PanelEmptyState title={t('tasks.empty')} text={t('tasks.emptyHint')} />
+          <PanelEmptyState title={t('tasks.empty')} text={readOnly ? '' : t('tasks.emptyHint')} />
         ) : (
           <DndContext
             sensors={sensors}
@@ -177,8 +190,9 @@ export function TasksPanel({ listId }: { listId: string }) {
                 <TaskRow
                   key={task.id}
                   task={task}
-                  sortable
-                  expanded={editingId === task.id}
+                  sortable={!readOnly}
+                  readOnly={readOnly}
+                  expanded={!readOnly && editingId === task.id}
                   onToggle={(done) => void setTaskDone(task.id, done)}
                   onOpen={() => tasks$.editingId.set(task.id)}
                   onDelete={() => void deleteTask(task.id)}
@@ -214,7 +228,8 @@ export function TasksPanel({ listId }: { listId: string }) {
                   key={task.id}
                   task={task}
                   sortable={false}
-                  expanded={editingId === task.id}
+                  readOnly={readOnly}
+                  expanded={!readOnly && editingId === task.id}
                   onToggle={(done) => void setTaskDone(task.id, done)}
                   onOpen={() => tasks$.editingId.set(task.id)}
                   onDelete={() => void deleteTask(task.id)}
@@ -241,7 +256,7 @@ export function TasksPanel({ listId }: { listId: string }) {
             <MenuItem
               key={list.id}
               icon={<ListTodo size={13} className="text-secondary" />}
-              label={list.title}
+              label={taskListLabel(list)}
               trailing={list.id === listId ? <Check size={13} className="text-accent" /> : undefined}
               onClick={() => {
                 setListMenu(null)
@@ -270,15 +285,17 @@ export function TasksPanel({ listId }: { listId: string }) {
           overlay
           className="fixed z-50 min-w-[200px] shadow-xl"
         >
-          <MenuItem
-            icon={<Pencil size={13} className="text-secondary" />}
-            label={t('tasks.renameList')}
-            onClick={() => {
-              setActionsMenu(null)
-              setListName(activeList?.title ?? '')
-              setRenaming(true)
-            }}
-          />
+          {!activeList?.provider && (
+            <MenuItem
+              icon={<Pencil size={13} className="text-secondary" />}
+              label={t('tasks.renameList')}
+              onClick={() => {
+                setActionsMenu(null)
+                setListName(activeList?.title ?? '')
+                setRenaming(true)
+              }}
+            />
+          )}
           {completed.length > 0 ? (
             <MenuItem
               icon={<Trash2 size={13} className="text-secondary" />}
@@ -289,16 +306,20 @@ export function TasksPanel({ listId }: { listId: string }) {
               }}
             />
           ) : null}
-          <div className="my-1 border-t border-border" />
-          <MenuItem
-            danger
-            icon={<Trash2 size={13} />}
-            label={t('tasks.deleteList')}
-            onClick={() => {
-              setActionsMenu(null)
-              void deleteTaskList(listId)
-            }}
-          />
+          {!activeList?.provider && (
+            <>
+              <div className="my-1 border-t border-border" />
+              <MenuItem
+                danger
+                icon={<Trash2 size={13} />}
+                label={t('tasks.deleteList')}
+                onClick={() => {
+                  setActionsMenu(null)
+                  void deleteTaskList(listId)
+                }}
+              />
+            </>
+          )}
         </FloatingContextMenu>
       ) : null}
     </div>

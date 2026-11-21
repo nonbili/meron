@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { Check, ChevronRight, ListPlus } from 'lucide-react'
+import { errorMessage } from '../../lib/errors'
 import { useTranslation } from '../../lib/i18n'
-import { addTaskFromMessage, loadTaskLists, type TaskList } from '../../states/tasks'
-import { ui$ } from '../../states/ui'
+import { addTaskFromMessage, loadTaskLists, taskListLabel, type TaskList } from '../../states/tasks'
+import { showToast, ui$ } from '../../states/ui'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
 
@@ -27,7 +28,7 @@ export function AddMailToTasksMenu({
     let active = true
     void loadTaskLists()
       .then((result) => {
-        if (active) setLists(result.lists)
+        if (active) setLists(result.lists.filter((list) => !list.read_only))
       })
       .catch(() => {})
     return () => {
@@ -42,7 +43,9 @@ export function AddMailToTasksMenu({
   }
   function pick(listId: string) {
     onAdded()
-    void addTaskFromMessage({ title, account, threadId, listId })
+    void addTaskFromMessage({ title, account, threadId, listId }).catch((error) => {
+      showToast(errorMessage(error, t('tasks.addFromMessage')), 'error')
+    })
   }
 
   return (
@@ -65,7 +68,7 @@ export function AddMailToTasksMenu({
           {lists.map((list) => (
             <MenuItem
               key={list.id}
-              label={list.title}
+              label={taskListLabel(list)}
               trailing={list.id === selectedList ? <Check size={13} /> : undefined}
               onClick={() => pick(list.id)}
             />

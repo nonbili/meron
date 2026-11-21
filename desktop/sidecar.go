@@ -498,12 +498,12 @@ func sidecarCallTimeout(method string) time.Duration {
 	// Adding an account walks discovery: a few PROPFINDs and redirects, 30s
 	// each at most in the core. A retry after a timeout updates the account
 	// it added rather than adding it twice.
-	case "carddav.add", "caldav.add", "caldav.addGoogle", "caldav.setPassword", "caldav.createCalendar", "caldav.updateCalendar", "caldav.deleteCalendar":
+	case "googleTasks.add", "carddav.add", "caldav.add", "caldav.addGoogle", "caldav.setPassword", "caldav.createCalendar", "caldav.updateCalendar", "caldav.deleteCalendar":
 		return 3 * time.Minute
 	// A sync may fetch a whole calendar, and waits for one already running;
 	// turning a calendar off or removing an account first tries to send
 	// what is unsent.
-	case "carddav.sync", "carddav.addGoogle", "carddav.createContact", "carddav.updateContact", "carddav.deleteContact", "caldav.sync", "caldav.remove", "caldav.setCalendarEnabled":
+	case "googleTasks.sync", "googleTasks.remove", "carddav.sync", "carddav.addGoogle", "carddav.createContact", "carddav.updateContact", "carddav.deleteContact", "caldav.sync", "caldav.remove", "caldav.setCalendarEnabled", "caldav.setTasksEnabled":
 		return 5 * time.Minute
 	// A batch is a handful of full messages, attachments included.
 	// A copy downloads every message in the thread in full, then APPENDs each

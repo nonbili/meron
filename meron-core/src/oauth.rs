@@ -14,6 +14,8 @@ pub const GOOGLE_SCOPES: &str = "openid email profile https://mail.google.com/";
 pub const GOOGLE_CALENDAR_PROVIDER: &str = "google_calendar";
 // Google CalDAV uses the full Calendar scope for event sync.
 pub const GOOGLE_CALENDAR_SCOPE: &str = "https://www.googleapis.com/auth/calendar";
+pub const GOOGLE_TASKS_PROVIDER: &str = "google_tasks";
+pub const GOOGLE_TASKS_SCOPE: &str = "https://www.googleapis.com/auth/tasks";
 pub const GOOGLE_CONTACTS_PROVIDER: &str = "google_contacts";
 pub const GOOGLE_CONTACTS_SCOPE: &str = "https://www.googleapis.com/auth/carddav";
 pub const OUTLOOK_AUTHORIZE_URL: &str =
@@ -113,10 +115,12 @@ pub fn authorize_url(
         scopes.join(" ")
     };
     let calendar_scopes = dav_scopes(GOOGLE_CALENDAR_SCOPE);
+    let tasks_scopes = dav_scopes(GOOGLE_TASKS_SCOPE);
     let contacts_scopes = dav_scopes(GOOGLE_CONTACTS_SCOPE);
     let (base, scope) = match client.provider.as_str() {
         "gmail" => (GOOGLE_AUTHORIZE_URL, GOOGLE_SCOPES),
         GOOGLE_CALENDAR_PROVIDER => (GOOGLE_AUTHORIZE_URL, calendar_scopes.as_str()),
+        GOOGLE_TASKS_PROVIDER => (GOOGLE_AUTHORIZE_URL, tasks_scopes.as_str()),
         GOOGLE_CONTACTS_PROVIDER => (GOOGLE_AUTHORIZE_URL, contacts_scopes.as_str()),
         "outlook" => (OUTLOOK_AUTHORIZE_URL, outlook_scopes.as_str()),
         _ => return Err("unsupported oauth provider".to_string()),

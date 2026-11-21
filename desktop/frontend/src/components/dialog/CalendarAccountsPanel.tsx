@@ -20,6 +20,7 @@ import {
   removeCalendarAccount,
   renameCalendarAccount,
   setCalendarEnabled,
+  setCalendarTasksEnabled,
   setCalendarPassword,
   syncCalendarAccount,
   type CalendarAccount,
@@ -38,6 +39,7 @@ import { SettingRow, SettingsGroup, Switch } from './AccountSettingsRows'
 import { CalendarPickerDialog } from './CalendarPickerDialog'
 import { CalendarColorEditor } from '../calendar/CalendarColorEditor'
 import { PlainHttpWarning } from '../field/PlainHttpWarning'
+import { GoogleTasksAccounts } from './GoogleTasksAccounts'
 
 type CalendarFormValues = { server?: string; email: string }
 
@@ -223,6 +225,7 @@ export function CalendarAccountsPanel() {
       {pickingAccountId && (
         <CalendarPickerDialog accountId={pickingAccountId} onClose={() => setPickingAccountId(undefined)} />
       )}
+      <GoogleTasksAccounts canConnect={googleConfigured} />
     </div>
   )
 }
@@ -379,6 +382,7 @@ function AccountCard({
   const [password, setPassword] = useState<string | null>(null)
   const [passwordError, setPasswordError] = useState('')
   const eventCalendars = account.calendars.filter((calendar) => calendar.events)
+  const taskCalendars = account.calendars.filter((calendar) => calendar.tasks || calendar.tasks_enabled)
 
   const status = account.last_error
     ? t('settings.calendars.syncFailed', { error: account.last_error })
@@ -464,6 +468,21 @@ function AccountCard({
           )}
           {!account.google && <NewCalendar accountId={account.id} />}
         </div>
+        {taskCalendars.length > 0 && (
+          <div className="border-t border-border/40 px-1.5 py-1.5">
+            <h3 className="px-2 pb-1 pt-1 text-[0.6875rem] font-semibold text-secondary">{t('tasks.title')}</h3>
+            {taskCalendars.map((calendar) => (
+              <div key={calendar.id} className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs">
+                <span className="truncate text-primary">{calendar.name}</span>
+                <Switch
+                  checked={!!calendar.tasks_enabled}
+                  label={`${t('tasks.title')} · ${calendar.name}`}
+                  onChange={() => void setCalendarTasksEnabled(calendar.id, !calendar.tasks_enabled)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         <div className="divide-y divide-border/40 border-t border-border/40">
           <SettingRow
             title={t('settings.calendars.accountName')}

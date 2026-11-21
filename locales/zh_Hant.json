@@ -1600,6 +1600,7 @@
   "settings.syncNotifications": "同步和通知",
   "settings.tasks.enable": "啟用任務",
   "settings.tasks.enableHint": "把待辦事項和郵件放在一起。任務儲存在本機，並會包含在備份中。",
+  "settings.tasks.removeGoogleConfirm": "移除 {email}？你的工作會保留在 Google Tasks 中。Meron 將從這部裝置刪除快取的工作及其電子郵件連結。",
   "settings.toast.failedToUploadAvatar": "頭像上傳失敗",
   "settings.toast.logExported": "日誌匯出",
   "settings.updates.autoCheck": "自動檢查更新",

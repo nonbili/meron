@@ -48,6 +48,7 @@ pub(crate) async fn dispatch(
         "caldav.createCalendar" | "caldav.updateCalendar" | "caldav.deleteCalendar" => {
             emit(out, "caldav.changed", json!({})).await;
             emit(out, "calendar.changed", json!({ "method": req.method })).await;
+            emit(out, "tasks.changed", json!({ "method": req.method })).await;
         }
         "caldav.setSyncInterval" => emit(out, "caldav.changed", json!({})).await,
         // The editor's picker names calendars by their account.
@@ -62,9 +63,19 @@ pub(crate) async fn dispatch(
             emit(out, "caldav.changed", json!({})).await;
             emit(out, "calendar.changed", json!({ "method": req.method })).await;
         }
+        "caldav.setTasksEnabled" => {
+            if req.params["enabled"].as_bool().unwrap_or(true)
+                && let Some(calendar) = req.params["calendar_id"].as_str()
+            {
+                spawn_sync_for_calendars(engine, out, &[calendar]);
+            }
+            emit(out, "caldav.changed", json!({})).await;
+            emit(out, "tasks.changed", json!({ "method": req.method })).await;
+        }
         "caldav.remove" => {
             emit(out, "caldav.changed", json!({})).await;
             emit(out, "calendar.changed", json!({ "method": req.method })).await;
+            emit(out, "tasks.changed", json!({ "method": req.method })).await;
         }
         "caldav.sync" => {
             emit(out, "caldav.changed", json!({})).await;
@@ -72,6 +83,7 @@ pub(crate) async fn dispatch(
                 || result["pushed"].as_u64().unwrap_or(0) > 0
             {
                 emit(out, "calendar.changed", json!({ "method": req.method })).await;
+                emit(out, "tasks.changed", json!({ "method": req.method })).await;
             }
         }
         _ => {}
@@ -111,6 +123,7 @@ pub(crate) fn spawn_sync(engine: Arc<Engine>, out: Writer, account: Option<Strin
                 // Publish local changes made while reconciling uploads too.
                 if report.pulled > 0 || report.pushed > 0 {
                     emit(&out, "calendar.changed", json!({ "method": "caldav.sync" })).await;
+                    emit(&out, "tasks.changed", json!({ "method": "caldav.sync" })).await;
                 }
                 if !report.error.is_empty() {
                     eprintln!("meron-core: calendar sync failed: {}", report.error);

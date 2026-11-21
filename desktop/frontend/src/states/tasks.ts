@@ -9,6 +9,13 @@ import { persistedField } from '../lib/sessionPref'
 export type TaskList = {
   id: string
   title: string
+  provider?: 'caldav' | 'google'
+  read_only?: boolean
+}
+
+export function taskListLabel(list: TaskList): string {
+  const provider = list.provider === 'google' ? 'Google Tasks' : list.provider === 'caldav' ? 'CalDAV' : ''
+  return provider ? `${list.title} · ${provider}` : list.title
 }
 
 export type Task = {
@@ -178,8 +185,10 @@ export async function addTaskFromMessage(input: {
   filingThreads.add(input.threadId)
   try {
     if (input.threadId && !input.checked && (await warnIfThreadInTasks(input.threadId))) return
+    const selectedId = ui$.activeTaskList.peek()
+    const selected = tasks$.lists.peek().find((list) => list.id === selectedId)
     await invoke('tasks.create', {
-      list_id: input.listId ?? ui$.activeTaskList.peek(),
+      list_id: input.listId ?? (selected?.read_only ? '' : selectedId),
       title: input.title,
       account: input.account,
       thread_id: input.threadId,

@@ -55,6 +55,12 @@
 
 [google_grants] email, id, scopes
 
+[google_task_accounts] email, last_error, last_sync_at
+
+[google_task_items] id, list_id, remote_id, etag, state
+
+[google_task_lists] id, email, remote_id
+
 [invite_responses] account, uid, recurrence_id, response, sequence, responded_at, this_and_future
 
 [mail_search_hits] token, account, query, scope, position, folder, uid, created_at

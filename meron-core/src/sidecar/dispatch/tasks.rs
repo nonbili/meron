@@ -17,15 +17,45 @@ pub(crate) async fn dispatch(
 ) -> anyhow::Result<Value> {
     let method = req.method.clone();
     let params = req.params.clone();
-    let result = crate::sidecar::db::run(&engine.db, "tasks.dispatch", move |db| {
-        execute(db, &method, &params)
-    })
-    .await?;
+    let (result, pending, google_pending) =
+        crate::sidecar::db::run(&engine.db, "tasks.dispatch", move |db| {
+            let value = execute(db, &method, &params)?;
+            let syncs = matches!(
+                method.as_str(),
+                "tasks.create"
+                    | "tasks.update"
+                    | "tasks.setDone"
+                    | "tasks.delete"
+                    | "tasks.clearCompleted"
+                    | "tasks.restore"
+            );
+            let pending = if syncs {
+                meron_core::caldav::todo::calendars_with_pending(db)?
+            } else {
+                Vec::new()
+            };
+            Ok((
+                value,
+                pending,
+                syncs && meron_core::google_tasks::pending(db)?,
+            ))
+        })
+        .await?;
     if !matches!(
         req.method.as_str(),
         "tasks.lists" | "tasks.items" | "tasks.forThread"
     ) {
         emit(out, "tasks.changed", json!({ "method": req.method })).await;
+    }
+    if !pending.is_empty() {
+        super::caldav::spawn_sync_for_calendars(
+            engine,
+            out,
+            &pending.iter().map(String::as_str).collect::<Vec<_>>(),
+        );
+    }
+    if google_pending {
+        super::google_tasks::spawn_sync(engine.clone(), out.clone());
     }
     Ok(result)
 }

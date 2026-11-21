@@ -29,7 +29,7 @@ use serde_json::{Value, json};
 /// Calendar parts bigger than this are not read as invites. A real invitation
 /// is a few kilobytes even with a long VTIMEZONE; a multi-megabyte `.ics` is a
 /// whole exported calendar, which a card cannot describe anyway.
-const MAX_ICS_BYTES: usize = 512 * 1024;
+pub(crate) const MAX_ICS_BYTES: usize = 512 * 1024;
 
 #[derive(Debug, Default, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Person {
