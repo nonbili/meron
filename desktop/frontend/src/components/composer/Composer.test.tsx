@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
 import { draftOpenInComposeTab } from '../../states/quickReply'
 import { settings$ } from '../../states/settings'
@@ -16,6 +16,8 @@ import { kanban$ } from '../../states/kanban'
 import { dismissToast, runToastUndo, settleConfirm, ui$ } from '../../states/ui'
 import type { Account, ComposeDraft, Message } from '../../types'
 import { Composer } from './Composer'
+import { ComposerToolbar } from './ComposerToolbar'
+import { useComposer } from './useComposer'
 import { ConversationTabs } from '../chat/ConversationTabs'
 import { AppConfirm } from '../dialog/AppConfirm'
 import { AppHotkeys } from '../dialog/AppHotkeys'
@@ -127,6 +129,77 @@ describe('Composer', () => {
   const draftOf = (tabId: string) => compose$.tabs.peek().find((tab) => tab.id === tabId)?.compose
   const bodyHtml = () => document.querySelector('.tiptap-body')?.innerHTML ?? ''
   const savedDraftIds = () => calls.filter((c) => c.command === 'mail.saveDraft').map((c) => c.payload.draft_id)
+
+  it.each([
+    ['a plain-text URL', false],
+    ['a formatted hyperlink', true],
+  ] as const)('keeps text typed after pasting %s outside the link', (_description, formatted) => {
+    const id = openComposeTab({ rich: true })!
+    const { result } = renderHook(() => useComposer(id))
+    const editor = result.current.editor!
+    const url = 'https://example.com/video'
+    const label = formatted ? 'Watch the video' : url
+
+    act(() => {
+      editor.commands.setContent('<p></p>')
+      if (formatted) editor.view.pasteHTML(`<a href="${url}">${label}</a>`)
+      else editor.view.pasteText(url)
+      editor.view.dispatch(editor.state.tr.insertText(' '))
+      editor.view.dispatch(editor.state.tr.insertText('and'))
+    })
+
+    const paragraph = new DOMParser().parseFromString(editor.getHTML(), 'text/html').querySelector('p')!
+    const links = paragraph.querySelectorAll('a')
+    expect(paragraph.textContent).toBe(`${label} and`)
+    expect(links).toHaveLength(1)
+    expect(links[0].textContent).toBe(label)
+    expect(links[0].getAttribute('href')).toBe(url)
+  })
+
+  it('can remove a pasted link with the caret at its end', () => {
+    const id = openComposeTab({ rich: true })!
+    const view = render(<Composer tabId={id} />)
+    const url = 'https://example.com/video'
+
+    fireEvent.paste(view.container.querySelector('.tiptap-body')!, {
+      clipboardData: {
+        files: [],
+        items: [],
+        types: ['text/plain'],
+        getData: (type: string) => (type === 'text/plain' ? url : ''),
+      },
+    })
+    fireEvent.click(view.getByTitle('Link'))
+
+    const input = view.getByRole('textbox', { name: 'Link URL' }) as HTMLInputElement
+    expect(input.value).toBe(url)
+    fireEvent.click(view.getByRole('button', { name: 'Remove link' }))
+    expect(view.container.querySelector('.tiptap-body a')).toBeNull()
+    expect(view.container.querySelector('.tiptap-body')?.textContent).toContain(url)
+  })
+
+  it('keeps the entire label linked when the Link dialog starts a link at the caret', () => {
+    const id = openComposeTab({ rich: true })!
+    const { result } = renderHook(() => useComposer(id))
+    const editor = result.current.editor!
+    act(() => {
+      editor.commands.setContent('<p></p>')
+    })
+    const toolbar = render(<ComposerToolbar editor={editor} />)
+    const url = 'https://example.com/video'
+    fireEvent.click(toolbar.getByTitle('Link'))
+    fireEvent.change(toolbar.getByRole('textbox', { name: 'Link URL' }), { target: { value: url } })
+    fireEvent.click(toolbar.getByRole('button', { name: 'Save' }))
+
+    const label = 'Watch the video'
+    act(() => {
+      for (const character of label) editor.view.dispatch(editor.state.tr.insertText(character))
+    })
+
+    const link = new DOMParser().parseFromString(editor.getHTML(), 'text/html').querySelector('a')
+    expect(link?.textContent).toBe(label)
+    expect(link?.getAttribute('href')).toBe(url)
+  })
 
   for (const rich of [false, true]) {
     it(`keeps the Linux ${rich ? 'rich' : 'plain'} paste-event fallback for image markup without files`, async () => {

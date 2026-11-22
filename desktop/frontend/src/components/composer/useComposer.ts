@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { encryptionBlocksSend, recipientAddresses, useRecipientKeys } from '../crypto/EncryptToggle'
 import { confirmKeyChanges } from '../../states/crypto'
 import { Extension, useEditor } from '@tiptap/react'
-import { TextSelection } from '@tiptap/pm/state'
+import { Plugin, TextSelection } from '@tiptap/pm/state'
 import { StarterKit } from '@tiptap/starter-kit'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -71,6 +71,24 @@ const SendShortcutKey = Extension.create({
   name: 'sendShortcutKey',
   addKeyboardShortcuts() {
     return { 'Mod-Enter': () => true }
+  },
+})
+
+const ExitPastedLink = Extension.create({
+  name: 'exitPastedLink',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        appendTransaction(transactions, _oldState, state) {
+          const { empty, $from } = state.selection
+          if (!empty || !transactions.some((transaction) => transaction.getMeta('paste'))) return
+
+          // Leave the link at its end, while keeping any surrounding formatting.
+          const link = state.schema.marks.link.isInSet(state.storedMarks ?? $from.marks())
+          if (link && !link.isInSet($from.nodeAfter?.marks ?? [])) return state.tr.removeStoredMark(link)
+        },
+      }),
+    ]
   },
 })
 
@@ -232,6 +250,7 @@ export function useComposer(tabId: string) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
+      ExitPastedLink,
       // No HTMLAttributes: the node view does the styling on screen, and class
       // names would only go out in the mail, meaning nothing to its recipient.
       ResizableImage.configure({ allowBase64: true }),

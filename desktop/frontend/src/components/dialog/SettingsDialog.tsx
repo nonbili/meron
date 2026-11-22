@@ -223,17 +223,17 @@ export function SettingsDialog() {
             </NavItem>
           ))}
 
-          <NavItem active={activeKey === 'mcp'} onClick={() => selectAccount('mcp')}>
-            <Server size={15} className="shrink-0" />
-            <span>{t('mcp.title')}</span>
+          <NavItem active={activeKey === 'calendars'} onClick={() => selectAccount('calendars')}>
+            <CalendarDays size={15} className="shrink-0" />
+            <span>{t('settings.calendars.nav')}</span>
           </NavItem>
           <NavItem active={activeKey === 'encryption'} onClick={() => selectAccount('encryption')}>
             <Lock size={15} className="shrink-0" />
             <span>{t('crypto.peers.nav')}</span>
           </NavItem>
-          <NavItem active={activeKey === 'calendars'} onClick={() => selectAccount('calendars')}>
-            <CalendarDays size={15} className="shrink-0" />
-            <span>{t('settings.calendars.nav')}</span>
+          <NavItem active={activeKey === 'mcp'} onClick={() => selectAccount('mcp')}>
+            <Server size={15} className="shrink-0" />
+            <span>{t('mcp.title')}</span>
           </NavItem>
           <BoardGroup boards={boards} activeKey={activeKey} onSelect={selectAccount} />
           <AccountGroup
