@@ -192,7 +192,7 @@ tasks.register("generateI18n", Exec) {
     description = "Regenerates localization catalogs from locales/*.json."
     group = "build"
     workingDir rootProject.projectDir.parentFile
-    commandLine "bun", "scripts/i18n/catalog.ts", "generate"
+    commandLine rootProject.ext.bunExecutable, "scripts/i18n/catalog.ts", "generate"
 }
 
 tasks.register("packageRustCoreAndroid", Exec) {

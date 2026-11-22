@@ -10,6 +10,16 @@ plugins {
     id "org.jlleitschuh.gradle.ktlint" version "14.2.0" apply false
 }
 
+// Exec looks a bare command up on the PATH the Gradle daemon started with,
+// and an idle daemon is reused by builds from any shell, so a daemon started
+// without ~/.bun/bin on its PATH fails every later build. Resolve bun here.
+ext.bunExecutable = {
+    def dirs = (System.getenv("PATH") ?: "").split(File.pathSeparator).toList()
+    dirs.add("${System.getProperty("user.home")}/.bun/bin")
+    def name = System.getProperty("os.name").toLowerCase().contains("windows") ? "bun.exe" : "bun"
+    dirs.collect { new File(it, name) }.find { it.isFile() && it.canExecute() }?.absolutePath ?: "bun"
+}()
+
 subprojects {
     apply plugin: "org.jlleitschuh.gradle.ktlint"
 

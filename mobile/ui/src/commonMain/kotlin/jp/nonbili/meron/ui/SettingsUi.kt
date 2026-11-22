@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -1368,15 +1369,21 @@ private fun ConversationFooterRow(
             onClick = { menu = true },
             trailing = { Text(footer.label(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
         )
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            ConversationFooter.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.label()) },
-                    onClick = {
-                        menu = false
-                        if (option != footer) onChange(option)
-                    },
-                )
+        // A zero-width anchor, as tall as the row, at its end edge: the menu opens
+        // below the row (or above it, near the screen bottom) flush with its end.
+        Box(Modifier.matchParentSize(), contentAlignment = Alignment.TopEnd) {
+            Box(Modifier.fillMaxHeight().width(0.dp)) {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    ConversationFooter.entries.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.label()) },
+                            onClick = {
+                                menu = false
+                                if (option != footer) onChange(option)
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -1400,15 +1407,21 @@ private fun AlertDefaultRow(
             onClick = { menu = true },
             trailing = { Text(alertLabel(lead, allDay), color = MaterialTheme.colorScheme.onSurfaceVariant) },
         )
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            (listOf(NO_ALERT) + alertOptions(allDay)).forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(alertLabel(option, allDay)) },
-                    onClick = {
-                        menu = false
-                        if (option != lead) onChange(option)
-                    },
-                )
+        // A zero-width anchor, as tall as the row, at its end edge: the menu opens
+        // below the row (or above it, near the screen bottom) flush with its end.
+        Box(Modifier.matchParentSize(), contentAlignment = Alignment.TopEnd) {
+            Box(Modifier.fillMaxHeight().width(0.dp)) {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    (listOf(NO_ALERT) + alertOptions(allDay)).forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(alertLabel(option, allDay)) },
+                            onClick = {
+                                menu = false
+                                if (option != lead) onChange(option)
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -1438,13 +1451,19 @@ private fun NotificationActionsRow(
             hint = tr("settings.notificationActionsHint"),
             onClick = { menu = true },
         )
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            notificationActionIds.forEach { action ->
-                DropdownMenuItem(
-                    text = { Text(tr(notificationActionLabelKey(action))) },
-                    leadingIcon = { Checkbox(checked = action in selected, onCheckedChange = null) },
-                    onClick = { onToggle(action) },
-                )
+        // A zero-width anchor, as tall as the row, at its end edge: the menu opens
+        // below the row (or above it, near the screen bottom) flush with its end.
+        Box(Modifier.matchParentSize(), contentAlignment = Alignment.TopEnd) {
+            Box(Modifier.fillMaxHeight().width(0.dp)) {
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    notificationActionIds.forEach { action ->
+                        DropdownMenuItem(
+                            text = { Text(tr(notificationActionLabelKey(action))) },
+                            leadingIcon = { Checkbox(checked = action in selected, onCheckedChange = null) },
+                            onClick = { onToggle(action) },
+                        )
+                    }
+                }
             }
         }
     }

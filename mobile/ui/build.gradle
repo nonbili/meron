@@ -18,7 +18,7 @@ tasks.register("generateComposeStrings", Exec) {
     inputs.dir("${rootProject.projectDir.parentFile}/locales")
     inputs.file("${rootProject.projectDir.parentFile}/scripts/i18n/gen-compose-strings.ts")
     outputs.file(generatedComposeStringsFile)
-    commandLine "bun", "scripts/i18n/gen-compose-strings.ts", generatedComposeStringsFile.get().asFile.absolutePath
+    commandLine rootProject.ext.bunExecutable, "scripts/i18n/gen-compose-strings.ts", generatedComposeStringsFile.get().asFile.absolutePath
 }
 
 kotlin {

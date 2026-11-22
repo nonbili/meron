@@ -853,6 +853,19 @@ internal fun MailRouteContent(
                                                 )
                                             },
                                             fontSize = 18.sp,
+                                            // Names the account in a single-account view, where
+                                            // the folder alone ('Inbox') doesn't say whose it is.
+                                            leading =
+                                                selectedAccount?.takeIf { !unifiedMailbox }?.let { account ->
+                                                    {
+                                                        AccountBadgeAvatar(
+                                                            label = account.displayName.ifBlank { account.email.ifBlank { account.id } },
+                                                            avatarUrl = account.avatarUrl,
+                                                            size = 24.dp,
+                                                            fallbackIcon = accountAvatarFallbackIcon(account),
+                                                        )
+                                                    }
+                                                },
                                             onSetFolderNotify =
                                                 if (unifiedMailbox) {
                                                     null

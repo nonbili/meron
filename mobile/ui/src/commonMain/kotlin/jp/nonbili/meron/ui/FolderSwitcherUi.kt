@@ -56,6 +56,8 @@ internal fun FolderSwitcher(
     fontWeight: FontWeight = FontWeight.SemiBold,
     /** Long-pressing a folder that can notify offers this; absent when the list has no such action. */
     onSetFolderNotify: ((FolderSummary, Boolean) -> Unit)? = null,
+    /** Drawn before the label inside the tap target, e.g. the account's avatar. */
+    leading: (@Composable () -> Unit)? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -68,6 +70,10 @@ internal fun FolderSwitcher(
                 }.padding(horizontal = 2.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (leading != null) {
+                leading()
+                Spacer(Modifier.width(8.dp))
+            }
             Text(
                 label,
                 fontWeight = fontWeight,
