@@ -1,5 +1,5 @@
 import { useConversationView } from './conversationView'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import {
   Archive,
@@ -28,8 +28,7 @@ import { printThread } from '../../lib/printMail'
 import { openThreadWindow } from '../../lib/threadWindow'
 import { threadWindowSession } from '../../lib/windowSession'
 import { useTranslation } from '../../lib/i18n'
-import { copyText } from '../../lib/native'
-import { showToast, ui$ } from '../../states/ui'
+import { ui$ } from '../../states/ui'
 import { settings$ } from '../../states/settings'
 import { starThread } from '../../states/mailFlags'
 import { deletesForever, isDraftFolder } from '../../states/mailFolders'
@@ -43,7 +42,7 @@ import { openReplyInFullEditor } from '../../states/compose'
 import { canReplyAllToThread } from '../../states/composeReply'
 import { compose$ } from '../../states/composeState'
 import type { Message } from '../../types'
-import { Avatar } from '../avatar/Avatar'
+import type { Participant } from './ConversationDetailsPanel'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
@@ -51,18 +50,31 @@ import { targetWithin } from '../menu/useDismissOnOutside'
 import { AddToTasksButton } from '../tasks/AddToTasksButton'
 import { ThreadMoveCopyItems } from '../threads/ThreadMoveCopyItems'
 import { ThreadTagItem } from '../threads/ThreadTagItem'
-import { ConversationSubject } from './ConversationSubject'
 import { useConversationMode } from './useMessageView'
+import { TOOLBAR_TOP_PX } from './conversationScroll'
 
-// The conversation header: back/close affordances, the subject, add-to-tasks, the desktop in-thread search box and
-// the overflow actions menu (view mode, star, archive, delete). Search match
-// state is published to thread$ by useThreadSearch.
+// A floating pill of buttons, drawn like the reader tab's.
+const PILL =
+  'pointer-events-auto flex shrink-0 items-center gap-0.5 rounded-full border border-border/40 bg-chats p-1 shadow-float'
+
+// The conversation toolbar, two pills floating over the top of the message
+// list: back/close affordances, archive, delete and add-to-tasks on the left;
+// the desktop in-thread search box, the details toggle and the overflow actions
+// menu on the right. The list's top padding clears them (conversationScroll).
+// The subject heads the message list (ConversationSubject) and scrolls away
+// with it; hovering the details button previews it, with who is in the
+// conversation, wherever the list is scrolled. Search match state is published
+// to thread$ by useThreadSearch.
 export function ConversationHeader({
   activeThread,
   desktopSearchInputRef,
+  participants,
+  messageCount,
 }: {
   activeThread: Message
   desktopSearchInputRef: RefObject<HTMLInputElement | null>
+  participants: Participant[]
+  messageCount: number
 }) {
   const { state: thread$, active: viewActive, scope } = useConversationView()
   const { t } = useTranslation()
@@ -85,6 +97,8 @@ export function ConversationHeader({
   const tasksEnabled = useValue(settings$.tasksEnabled)
   const normalizedThreadSearch = threadSearch.trim().toLowerCase()
 
+  const detailsPreviewId = useId()
+  const detailsLabel = isRSS ? t('chat.feedDetails') : t('chat.conversationDetails')
   const [printing, setPrinting] = useState(false)
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
   useEffect(() => {
@@ -105,16 +119,6 @@ export function ConversationHeader({
     return () => window.removeEventListener('mousedown', onDown)
   }, [actionsMenuOpen])
 
-  const copyHeaderText = (text: string, toast: string) => {
-    const value = text.trim()
-    if (!value) return
-    copyText(value)
-      .then(() => {
-        showToast(toast)
-      })
-      .catch(() => undefined)
-  }
-
   // Hidden when the conversation's reply target has no other recipients: a
   // reply-all identical to the reply is a second name for the same action.
   const replyAll = useValue(canReplyAllToThread)
@@ -122,6 +126,15 @@ export function ConversationHeader({
   // The same wording, and the same permanence in Trash, as the thread list's menu.
   const inTrash = deletesForever(activeThread.account_id, activeThread.folder_id)
   const inDrafts = isDraftFolder(activeThread.folder_id, activeThread.account_id)
+  // The left pill: back on a narrow window, close on a board, and the thread's
+  // own actions. An RSS item on a wide window has none of them.
+  const hasDesktopLeftItems = showCloseConversation || !isRSS || printing
+  const hasLeftItems = hasDesktopLeftItems || !threadWindowSession
+  const deleteLabel = inTrash
+    ? t('threads.actions.deleteForever')
+    : inDrafts
+      ? t('threads.actions.discardDraft')
+      : t('threads.actions.moveToTrash')
   const closeActionMenus = () => {
     setActionsMenuOpen(false)
     thread$.conversationMenu.set(null)
@@ -274,11 +287,7 @@ export function ConversationHeader({
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-950/25"
           >
             <Trash2 size={15} className="shrink-0" />
-            {inTrash
-              ? t('threads.actions.deleteForever')
-              : inDrafts
-                ? t('threads.actions.discardDraft')
-                : t('threads.actions.moveToTrash')}
+            {deleteLabel}
           </button>
         </>
       )}
@@ -287,72 +296,71 @@ export function ConversationHeader({
 
   return (
     <>
-      <header
-        className={`relative z-40 flex h-12 shrink-0 items-center gap-3 border-b border-border/60 bg-header select-none ${showCloseConversation ? 'px-2' : 'px-4'}`}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between gap-2 pl-3 pr-5 select-none"
+        style={{ paddingTop: TOOLBAR_TOP_PX }}
       >
-        {printing && (
-          <LoaderCircle
-            size={16}
-            className="shrink-0 animate-spin text-secondary"
-            role="status"
-            aria-label={t('chat.actions.printThread')}
-          />
-        )}
-        {!threadWindowSession && (
-          <button
-            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-hover text-secondary min-[769px]:hidden cursor-pointer"
-            onClick={() => ui$.mobilePane.set('threads')}
-            title={t('chat.backToChats')}
-          >
-            <ChevronLeft size={20} />
-          </button>
-        )}
-
-        {showCloseConversation && (
-          <button
-            className="-mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-hover text-secondary cursor-pointer max-[768px]:hidden"
-            onClick={closeCurrentConversation}
-            title={t('chat.closeConversationEsc')}
-          >
-            <X size={18} />
-          </button>
-        )}
-
-        <Avatar
-          name={activeThread.from_name || activeThread.from_addr}
-          email={isRSS ? undefined : activeThread.from_addr}
-          src={isRSS && activeThread.feed_icon ? `/media/${activeThread.feed_icon}` : undefined}
-          size={32}
-        />
-
-        <div className="min-w-0 flex-1">
-          <ConversationSubject
-            subject={activeThread.subject}
-            copyLabel={t('chat.copySubject')}
-            onCopy={() => copyHeaderText(activeThread.subject, 'Subject copied')}
-          />
-          {isRSS && (
-            // RSS subject == from_name (both the feed title), so the feed host
-            // sits under it rather than the name again.
-            <p className="truncate text-[0.71875rem] text-secondary mt-0.5 font-medium" title={activeThread.from_addr}>
-              {activeThread.from_addr}
-            </p>
+        <div className={`${PILL} ${hasDesktopLeftItems ? '' : 'min-[769px]:hidden'} ${hasLeftItems ? '' : 'hidden'}`}>
+          {!threadWindowSession && (
+            <IconButton
+              icon={ChevronLeft}
+              iconSize={20}
+              label={t('chat.backToChats')}
+              className="min-[769px]:hidden"
+              onClick={() => ui$.mobilePane.set('threads')}
+            />
+          )}
+          {showCloseConversation && (
+            <IconButton
+              icon={X}
+              iconSize={18}
+              label={t('chat.closeConversationEsc')}
+              className="max-[768px]:hidden"
+              onClick={closeCurrentConversation}
+            />
+          )}
+          {!isRSS && (
+            <>
+              {!isLocalAccountId(activeThread.account_id) && (
+                <IconButton
+                  icon={Archive}
+                  label={t('threads.actions.archiveThread')}
+                  onClick={() => void archiveThread(activeThread.thread_id)}
+                />
+              )}
+              <IconButton
+                icon={Trash2}
+                label={deleteLabel}
+                onClick={() => void deleteThread(activeThread.thread_id, { permanent: inTrash })}
+              />
+              {tasksEnabled && (
+                <AddToTasksButton
+                  title={activeThread.subject}
+                  account={activeThread.account_id}
+                  threadId={activeThread.thread_id}
+                />
+              )}
+            </>
+          )}
+          {printing && (
+            <span className="flex h-9 w-9 items-center justify-center">
+              <LoaderCircle
+                size={16}
+                className="animate-spin text-secondary"
+                role="status"
+                aria-label={t('chat.actions.printThread')}
+              />
+            </span>
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          {tasksEnabled && !isRSS && (
-            <AddToTasksButton
-              title={activeThread.subject}
-              account={activeThread.account_id}
-              threadId={activeThread.thread_id}
-            />
-          )}
+        {/* ml-auto keeps it right when the left pill is hidden. */}
+        <div className={`${PILL} ml-auto`}>
           {!threadSearchOpen ? (
             <IconButton icon={Search} label={t('chat.searchThread')} onClick={() => thread$.searchOpen.set(true)} />
           ) : (
             <div
-              className="hidden min-[900px]:flex w-[286px] items-center gap-1 rounded-xl bg-hover px-2 py-1.5 border border-transparent focus-within:border-accent/40 focus-within:bg-chats"
+              className="hidden min-[900px]:flex w-[286px] items-center gap-1 rounded-full bg-hover px-2.5 py-1.5 border border-transparent focus-within:border-accent/40 focus-within:bg-chats"
               // Folds back to the icon once focus leaves it empty, like the kanban
               // board's search; moving between its own buttons keeps it open.
               onBlur={(event) => {
@@ -409,13 +417,30 @@ export function ConversationHeader({
               </button>
             </div>
           )}
-          <IconButton
-            icon={PanelRight}
-            label={isRSS ? t('chat.feedDetails') : t('chat.conversationDetails')}
-            active={mediaOpen}
-            aria-expanded={mediaOpen}
-            onClick={() => thread$.mediaOpen.set(!mediaOpen)}
-          />
+          <div className="group/details relative">
+            <IconButton
+              icon={PanelRight}
+              label={detailsLabel}
+              active={mediaOpen}
+              aria-expanded={mediaOpen}
+              aria-describedby={detailsPreviewId}
+              // The preview below stands in for the native tooltip.
+              title={mediaOpen ? detailsLabel : ''}
+              onClick={() => thread$.mediaOpen.set(!mediaOpen)}
+            />
+            {/* A preview of what the button opens: the subject, which has
+                usually scrolled away above, and who is in the conversation.
+                Not while the panel itself is open. */}
+            {!mediaOpen && (
+              <ConversationPreview
+                id={detailsPreviewId}
+                subject={activeThread.subject}
+                feedHost={isRSS ? activeThread.from_addr : ''}
+                participants={participants}
+                messageCount={messageCount}
+              />
+            )}
+          </div>
           <div ref={actionsMenuRef} className="relative">
             <IconButton
               icon={MoreHorizontal}
@@ -428,7 +453,7 @@ export function ConversationHeader({
             )}
           </div>
         </div>
-      </header>
+      </div>
       {viewActive && conversationMenu && (
         <FloatingContextMenu
           x={conversationMenu.x}
@@ -446,3 +471,50 @@ export function ConversationHeader({
   )
 }
 import { MenuSurface } from '../menu/MenuSurface'
+
+// How many names the preview lists before summing up the rest as a count.
+const PREVIEW_NAMES = 3
+
+function ConversationPreview({
+  id,
+  subject,
+  feedHost,
+  participants,
+  messageCount,
+}: {
+  id: string
+  subject: string
+  /** An RSS item's feed host, in place of the people. */
+  feedHost: string
+  participants: Participant[]
+  messageCount: number
+}) {
+  const { t } = useTranslation()
+  // Others first (buildParticipants keeps "you" out of the lead), then you.
+  const names = participants.slice(0, PREVIEW_NAMES).map((person) => person.name)
+  const counts = [
+    messageCount > 0 ? t('chat.messagesCount', { count: messageCount }) : '',
+    participants.length > PREVIEW_NAMES ? t('chat.people', { count: participants.length }) : '',
+  ].filter(Boolean)
+  return (
+    <span
+      id={id}
+      role="tooltip"
+      // Shown after a short pause, so passing over the button on the way
+      // elsewhere doesn't flash it; hidden at once on leaving.
+      className="pointer-events-none invisible absolute right-0 top-[calc(100%+0.75rem)] z-50 w-max max-w-72 rounded-xl border border-border bg-chats px-3 py-2 text-left opacity-0 shadow-lg transition-[opacity,visibility] group-hover/details:visible group-hover/details:opacity-100 group-hover/details:delay-300 group-has-[:focus-visible]/details:visible group-has-[:focus-visible]/details:opacity-100"
+    >
+      <span className="block break-words text-xs font-semibold leading-snug text-primary">
+        {subject || '(no subject)'}
+      </span>
+      {feedHost ? (
+        <span className="mt-1 block truncate text-[0.6875rem] text-secondary">{feedHost}</span>
+      ) : (
+        names.length > 0 && (
+          <span className="mt-1 block truncate text-[0.6875rem] text-secondary">{names.join(', ')}</span>
+        )
+      )}
+      {counts.length > 0 && <span className="mt-0.5 block text-[0.6875rem] text-secondary">{counts.join(' · ')}</span>}
+    </span>
+  )
+}

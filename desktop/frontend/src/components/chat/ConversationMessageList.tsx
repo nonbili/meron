@@ -1,6 +1,6 @@
 import { useConversationView } from './conversationView'
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -13,6 +13,8 @@ import type { Message } from '../../types'
 import { LinkHoverPreview } from './LinkHoverPreview'
 import { MessageBubble } from './MessageBubble'
 import { MessageRow } from './MessageRow'
+import { FrostedBand } from './FrostedBand'
+import { LIST_TOP_PADDING_PX, PINNED_HEADER_GAP_PX, TOOLBAR_CLEARANCE_PX } from './conversationScroll'
 import { formatDateDivider, mediaFilename, imageSource } from './messageHelpers'
 import { MESSAGE_PAGE_EVENT } from './messagePaging'
 import { ConversationScrollContext } from './useConversationScroll'
@@ -52,6 +54,8 @@ export function ConversationMessageList({
   galleryOffsets,
   wallpaperClassName,
   wallpaperStyle,
+  title,
+  toolbar,
 }: {
   messages: Message[]
   showThreadLoading: boolean
@@ -68,6 +72,10 @@ export function ConversationMessageList({
   galleryOffsets: Map<string, number>
   wallpaperClassName: string
   wallpaperStyle?: CSSProperties
+  /** Heads the list (the subject), scrolling away with the messages. */
+  title?: ReactNode
+  /** Floats over the top of the list (ConversationHeader). */
+  toolbar?: ReactNode
 }) {
   const { state: thread$, active: viewActive, scope: viewScope } = useConversationView()
   const { t } = useTranslation()
@@ -282,12 +290,15 @@ export function ConversationMessageList({
           }
         }}
         // The padding round the messages lines them up with the composer's
-        // box. MessageRow's pinned header offsets itself against the top
-        // padding; keep the two in step. The end pads past the
+        // box. The top pads past the toolbar floating over the list
+        // (ConversationHeader), by the same gap as the sides. MessageRow's
+        // pinned header offsets itself against the top padding; keep the two
+        // in step. The end pads past the
         // composer floating over the list (MessagePane), so the newest message
         // clears it — by the same gap, less the pt-1 the composer's footer
         // already puts above its box; the rest of the list runs on behind it.
-        className="message-scroll flex-1 overflow-y-auto outline-none px-3 pt-3 pb-[calc(0.5rem+var(--me-composer-overlap,0px))] space-y-4 z-10 relative"
+        style={{ paddingTop: LIST_TOP_PADDING_PX, scrollPaddingTop: TOOLBAR_CLEARANCE_PX }}
+        className="message-scroll flex-1 overflow-y-auto outline-none px-3 pb-[calc(0.5rem+var(--me-composer-overlap,0px))] space-y-4 z-10 relative"
       >
         {showThreadLoading && (
           <div className="flex h-full items-center justify-center">
@@ -306,6 +317,7 @@ export function ConversationMessageList({
             </button>
           </div>
         )}
+        {!showThreadLoading && !showThreadError && title}
         {!showThreadLoading && messagesCursor && (
           <div className="flex justify-center pb-2">
             <button
@@ -398,6 +410,18 @@ export function ConversationMessageList({
         <div ref={bottomAnchorRef} className="message-scroll-anchor h-px" />
       </div>
       {/* Above the composer floating over the end of the list, not on it. */}
+      {toolbar && (
+        <>
+          {/* Frosts what scrolls on behind the toolbar, as under the composer;
+              down to where a pinned message header takes over. */}
+          <FrostedBand
+            fade="bottom"
+            className="left-0 right-3 top-0 z-30"
+            style={{ height: TOOLBAR_CLEARANCE_PX + PINNED_HEADER_GAP_PX }}
+          />
+          {toolbar}
+        </>
+      )}
       <div className="pointer-events-none absolute inset-x-0 bottom-[var(--me-composer-overlap,0px)] z-30">
         <HoveredLinkPreview />
       </div>

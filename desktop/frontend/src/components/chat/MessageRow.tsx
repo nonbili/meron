@@ -13,6 +13,7 @@ import { AddressRow } from './AddressList'
 import { RemoteContentButton } from './RemoteContentButton'
 import { CryptoBadge } from '../crypto/CryptoBadge'
 import { FrostedBand } from './FrostedBand'
+import { TOOLBAR_CLEARANCE_PX } from './conversationScroll'
 import { MessageContent } from './MessageContent'
 import { formatFullTimestamp, formatMessageStamp, normalizeBodyText } from './messageHelpers'
 import { useMessageView } from './useMessageView'
@@ -56,7 +57,9 @@ function usePinnedHeader(expanded: boolean) {
         else if (!header.hasAttribute('data-stuck')) header.style.height = `${header.offsetHeight}px`
         header.toggleAttribute('data-stuck', stuck)
       },
-      { root: scroller, rootMargin: '0px 0px 10000000px 0px' },
+      // The top edge is the floating toolbar's, not the scroller's: the
+      // header pins just under it (the list's top padding clears it).
+      { root: scroller, rootMargin: `-${TOOLBAR_CLEARANCE_PX}px 0px 10000000px 0px` },
     )
     observer.observe(rest)
     return () => {

@@ -4,10 +4,27 @@
 // view should land. Both conversation layouts (chat bubbles and the traditional
 // rows) share the hook, so they share these rules.
 
+/** Where the conversation's floating toolbar (ConversationHeader) sits from the
+ *  top of the message list, and how tall its pills are: a 36px button, the
+ *  pill's 4px padding and 1px border either side. */
+export const TOOLBAR_TOP_PX = 12
+const TOOLBAR_PILL_PX = 46
+
+/** How much of the list's top the floating toolbar covers. Messages scroll on
+ *  behind it; a pinned message header (MessageRow) stops under it. */
+export const TOOLBAR_CLEARANCE_PX = TOOLBAR_TOP_PX + TOOLBAR_PILL_PX
+
+/** How far a pinned message header (MessageRow's sticky -top-1.5) rides above
+ *  the list's top padding: it pins this far below the toolbar. */
+export const PINNED_HEADER_GAP_PX = 6
+
+/** The message list's top padding: the toolbar, then the same gap again. */
+export const LIST_TOP_PADDING_PX = TOOLBAR_CLEARANCE_PX + 12
+
 /** Breathing room left above a message the view anchors to: the list's own top
- *  padding (ConversationMessageList's pt-3), so a message brought to the top
- *  sits where the first one does. */
-export const ANCHOR_GAP_PX = 12
+ *  padding, so a message brought to the top sits clear of the toolbar, where
+ *  the first one does. */
+export const ANCHOR_GAP_PX = LIST_TOP_PADDING_PX
 
 /** Below this distance from the bottom the view counts as "at the bottom", and
  *  content growing underneath keeps it there. */

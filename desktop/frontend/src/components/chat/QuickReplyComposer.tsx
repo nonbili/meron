@@ -67,9 +67,8 @@ export function QuickReplyComposer() {
       >
         <QuickReplyAttachments attachments={composerAttachments} />
 
-        {/* The text leads and has the box's full width; everything else shares
-            the one line under it, so a growing reply never strands a control
-            beside it and a narrow pane gives no text width to buttons. */}
+        {/* Extend the textarea through the box's right padding for the scrollbar.
+            Keep that padding inside the textarea to preserve the text inset. */}
         <textarea
           ref={textareaRef}
           value={composer}
@@ -77,7 +76,7 @@ export function QuickReplyComposer() {
           placeholder={t('composer.placeholders.quickMessage')}
           rows={1}
           spellCheck={spellCheck}
-          className="w-full px-1.5 max-h-[254px] bg-transparent text-[calc(0.9375rem*var(--me-message-scale))] text-primary resize-none placeholder-secondary border-none outline-none leading-[1.3333]"
+          className="-mr-2 pl-1.5 pr-3.5 max-h-[254px] bg-transparent text-[calc(0.9375rem*var(--me-message-scale))] text-primary resize-none placeholder-secondary border-none outline-none leading-[1.3333]"
           onKeyDown={handleComposerKeyDown}
           onPaste={handleComposerPaste}
         />

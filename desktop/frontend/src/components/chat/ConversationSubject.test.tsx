@@ -3,27 +3,21 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { ConversationSubject } from './ConversationSubject'
 
 describe('ConversationSubject', () => {
-  it('exposes the complete subject in an accessible tooltip', () => {
+  it('shows the complete subject, wrapped rather than truncated', () => {
     const subject = '[nonbili/NouTube] [feature request] adding seeking slider, a closing button, and more controls'
     const html = renderToStaticMarkup(
-      <ConversationSubject subject={subject} copyLabel="Copy subject" onCopy={() => undefined} />,
+      <ConversationSubject subject={subject} copyLabel="Copy subject" copiedLabel="Subject copied" />,
     )
-
-    const tooltipId = html.match(/aria-describedby="([^"]+)"/)?.[1]
-    expect(tooltipId).toBeTruthy()
-    expect(html).toContain(`id="${tooltipId}"`)
-    expect(html).toContain('role="tooltip"')
-    expect(html).toContain('aria-label="Copy subject"')
-    expect(html.match(new RegExp(subject.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toHaveLength(2)
-    expect(html).not.toContain('title="Copy subject"')
+    expect(html).toContain(subject)
+    expect(html).toContain('break-words')
+    expect(html).not.toContain('truncate')
+    expect(html).toContain('title="Copy subject"')
   })
 
-  it('paints the tooltip with the opaque surface colour, not the translucent raised one', () => {
+  it('puts the subtitle under the subject', () => {
     const html = renderToStaticMarkup(
-      <ConversationSubject subject="Subject" copyLabel="Copy subject" onCopy={() => undefined} />,
+      <ConversationSubject subject="Feed" subtitle="feeds.example.com" copyLabel="Copy" copiedLabel="Copied" />,
     )
-    const tooltipClass = html.match(/<span[^>]*role="tooltip"[^>]*>/)?.[0].match(/class="([^"]+)"/)?.[1] ?? ''
-    expect(tooltipClass).toContain('bg-chats')
-    expect(tooltipClass).not.toContain('bg-raised')
+    expect(html.indexOf('Feed')).toBeLessThan(html.indexOf('feeds.example.com'))
   })
 })

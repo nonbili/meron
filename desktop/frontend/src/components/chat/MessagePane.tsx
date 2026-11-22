@@ -25,6 +25,7 @@ import { useFileDrop } from '../../lib/useFileDrop'
 import { ConversationTabs } from './ConversationTabs'
 import { ReaderTabView } from './ReaderTabView'
 import { ConversationHeader } from './ConversationHeader'
+import { ConversationSubject } from './ConversationSubject'
 import { ThreadSearchBarMobile } from './ThreadSearchBarMobile'
 import { ConversationMessageList } from './ConversationMessageList'
 import { MessageContextMenu } from './MessageContextMenu'
@@ -450,6 +451,25 @@ function ConversationPane({
             galleryOffsets={galleryOffsets}
             wallpaperClassName={conversationWallpaper.className}
             wallpaperStyle={conversationWallpaper.style}
+            title={
+              <ConversationSubject
+                subject={activeThread.subject}
+                // RSS subject == from_name (both the feed title), so the feed
+                // host sits under it rather than the name again.
+                subtitle={isRSS ? activeThread.from_addr : undefined}
+                copyLabel={t('chat.copySubject')}
+                copiedLabel="Subject copied"
+              />
+            }
+            toolbar={
+              <ConversationHeader
+                activeThread={activeThread}
+                desktopSearchInputRef={desktopThreadSearchInputRef}
+                participants={participants}
+                // The thread's own total: older pages may not be loaded yet.
+                messageCount={Math.max(activeThread.message_count ?? 0, displayMessages.length)}
+              />
+            }
           />
         </ConversationScrollIntentContext>
       </ConversationScrollContext>
@@ -468,9 +488,6 @@ function ConversationPane({
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      {activeThread && (
-        <ConversationHeader activeThread={activeThread} desktopSearchInputRef={desktopThreadSearchInputRef} />
-      )}
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <section className="relative flex flex-1 flex-col overflow-hidden bg-chat">
           <div ref={conversationRef} className="relative flex min-h-0 flex-1 flex-col">
