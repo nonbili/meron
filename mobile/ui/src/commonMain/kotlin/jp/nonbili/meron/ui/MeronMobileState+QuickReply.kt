@@ -336,11 +336,54 @@ internal fun MeronMobileState.visibleThreadMessages(): List<MessageBody> {
     // back: navigating away clears the bar's id, so reopening the conversation
     // mid-send would otherwise show the draft beside the reply it was sent as.
     val hidden = quickReplyConsumedDraftIds.toMutableSet()
-    if (quickReplyDraftId.isNotBlank()) hidden += quickReplyDraftId.normalizedComposeDraftId()
+    // Without the bar (the conversation-footer setting), a draft is a bubble like any other.
+    if (quickReplyDraftId.isNotBlank() && effectiveConversationFooter() == ConversationFooter.Reply) {
+        hidden += quickReplyDraftId.normalizedComposeDraftId()
+    }
     if (hidden.isEmpty()) return messages
     return messages.filterNot {
         folderIsDrafts(it.folderId) && it.messageId.normalizedComposeDraftId() in hidden
     }
+}
+
+/**
+ * What the conversation shows at its bottom: the conversation-footer setting,
+ * except that a reply already in the bar keeps it, so switching the setting
+ * mid-reply hides nothing unsaved. The reply keeps its bar until it is sent,
+ * emptied, or left behind with its thread, through its send, so a failed one
+ * still has the bar's Retry, and while the bar still owns a saved draft, which
+ * the bar discards once emptied and keeps out of the conversation till then.
+ */
+internal fun MeronMobileState.effectiveConversationFooter(): ConversationFooter {
+    val replyHeld =
+        !quickReplyIsBlank() ||
+            quickReplyDraftId.isNotBlank() ||
+            (quickReplySendInFlight && quickReplySendThreadId == quickReplyThreadId) ||
+            quickReplyFailure.isNotBlank()
+    return if (replyHeld) ConversationFooter.Reply else conversationFooter
+}
+
+// By the folder's role first: a localized Drafts folder's name can miss.
+private fun isDraftMessage(message: MessageBody): Boolean = message.folderRole == "drafts" || folderIsDrafts(message.folderId)
+
+/**
+ * The message the conversation's buttons reply to and forward: the one the
+ * reply bar would answer, but never a draft, which would answer a message never
+ * sent; the draft's own bubble is where it is edited.
+ */
+internal fun MeronMobileState.conversationActionTarget(
+    thread: ThreadSummary?,
+    messages: List<MessageBody>,
+): MessageBody? = quickReplyParent(thread, messages.filterNot { isDraftMessage(it) })?.takeUnless { isDraftMessage(it) }
+
+/**
+ * Switch what sits at the bottom of a conversation. Back to the reply bar, the
+ * draft its hydration passed over while there was no bar takes its place in it
+ * now, as it would have on load.
+ */
+internal fun MeronMobileState.setConversationFooter(footer: ConversationFooter) {
+    conversationFooter = footer
+    if (footer == ConversationFooter.Reply) hydrateQuickReplyFromTailDraft(quickReplyThreadId, messages)
 }
 
 internal fun MeronMobileState.autoSaveQuickReplyDraft() {

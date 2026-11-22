@@ -323,8 +323,8 @@ internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
                 chatFullMessages = loadAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, false)
             }
 
-            settingKeyFor(READER_BOTTOM_ACTIONS_PREF) -> {
-                readerBottomActions = loadAppBoolean(prefs, READER_BOTTOM_ACTIONS_PREF, false)
+            settingKeyFor(CONVERSATION_FOOTER_PREF) -> {
+                setConversationFooter(loadConversationFooter(prefs))
             }
 
             settingKeyFor(QUOTE_REPLIES_PREF) -> {

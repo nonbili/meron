@@ -62,6 +62,9 @@ export type SendShortcut = 'enter' | 'mod_enter'
  * except the newest and the unread ones (the classic mail-client reading view).
  */
 export type ConversationLayout = 'chat' | 'traditional'
+/** What sits at the bottom of a conversation: the quick-reply box, a bar of
+ *  reply/forward/delete buttons, or nothing. */
+export type ConversationFooter = 'reply' | 'actions' | 'none'
 export type KanbanBoardColumn = {
   accountId: string
   folderId: string
@@ -134,13 +137,12 @@ export type Settings = {
   darkMessageBodies: boolean
   /** Whether a bubble shrinks a table too wide for it to fit, instead of scrolling it. */
   autoFitMessages: boolean
-  /** Whether reader tabs put reply, forward and delete in a bar at the bottom. */
-  readerBottomActions: boolean
   /** Whether to overlay an inbox unread-count badge on side navigation account avatars. */
   showUnreadAccountBadge: boolean
   sendShortcut: SendShortcut
   /** Chat bubbles or the traditional stacked reading view (desktop only). */
   conversationLayout: ConversationLayout
+  conversationFooter: ConversationFooter
   /** Whether chat bubbles grow to fit long bodies instead of scrolling inside a
    *  capped box, so only the conversation scrolls (desktop only). */
   chatFullMessages: boolean
@@ -242,10 +244,10 @@ const DB_KEY = {
   showThreadAvatars: 'show_thread_avatars',
   darkMessageBodies: 'dark_message_bodies',
   autoFitMessages: 'auto_fit_messages',
-  readerBottomActions: 'reader_bottom_actions',
   showUnreadAccountBadge: 'show_unread_account_badge',
   sendShortcut: 'send_shortcut',
   conversationLayout: 'conversation_layout',
+  conversationFooter: 'conversation_footer',
   chatFullMessages: 'chat_full_messages',
   spellCheck: 'spell_check',
   quoteReplies: 'quote_replies',
@@ -461,10 +463,10 @@ export const settings$ = observable<Settings>({
   showThreadAvatars: true,
   darkMessageBodies: false,
   autoFitMessages: false,
-  readerBottomActions: false,
   showUnreadAccountBadge: false,
   sendShortcut: 'mod_enter',
   conversationLayout: 'chat',
+  conversationFooter: 'reply',
   chatFullMessages: false,
   spellCheck: true,
   quoteReplies: false,
@@ -1003,10 +1005,6 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
       settings$.autoFitMessages.set(prefs[DB_KEY.autoFitMessages] as boolean)
     }
 
-    if (typeof prefs[DB_KEY.readerBottomActions] === 'boolean') {
-      settings$.readerBottomActions.set(prefs[DB_KEY.readerBottomActions] as boolean)
-    }
-
     if (typeof prefs[DB_KEY.showUnreadAccountBadge] === 'boolean') {
       settings$.showUnreadAccountBadge.set(prefs[DB_KEY.showUnreadAccountBadge] as boolean)
     }
@@ -1019,6 +1017,10 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     const conversationLayout = prefs[DB_KEY.conversationLayout]
     if (conversationLayout === 'chat' || conversationLayout === 'traditional') {
       settings$.conversationLayout.set(conversationLayout)
+    }
+    const conversationFooter = prefs[DB_KEY.conversationFooter]
+    if (conversationFooter === 'reply' || conversationFooter === 'actions' || conversationFooter === 'none') {
+      settings$.conversationFooter.set(conversationFooter)
     }
 
     if (typeof prefs[DB_KEY.chatFullMessages] === 'boolean') {

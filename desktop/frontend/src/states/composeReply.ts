@@ -53,6 +53,27 @@ export function pickReplyTarget(activeT: Message, excludedId = ''): Message {
   return replyable[replyable.length - 1] ?? received[received.length - 1] ?? inThread[inThread.length - 1] ?? activeT
 }
 
+/** The message the conversation's action bar replies to and forwards: picked
+ * as {@link pickReplyTarget} picks, but only from loaded messages, whose
+ * headers and body a reply or forward needs (the thread row has neither), and
+ * never a draft, which would answer a message never sent. Null until one has
+ * loaded. Reactive. */
+export function actionBarTarget(): Message | null {
+  const thread = getActiveThread()
+  if (!thread) return null
+  const ownAddrs = ownAddressSet(accounts$.get())
+  const inThread = mail$.messages.get().filter(
+    (m) =>
+      m.thread_id === thread.thread_id &&
+      // By the message's own role first: a localized Drafts name can miss.
+      m.folder_role !== 'drafts' &&
+      !isDraftFolder(m.folder_id, m.account_id),
+  )
+  const received = inThread.filter((m) => !sentByUs(m, ownAddrs))
+  const replyable = received.filter((m) => m.reply?.accepts_replies !== false)
+  return replyable[replyable.length - 1] ?? received[received.length - 1] ?? inThread[inThread.length - 1] ?? null
+}
+
 /** Whether a loaded message is one we sent, as opposed to one we received.
  * The core settles this from the message's own delivery headers whenever it has
  * the body cached. Until then `outgoing` — like the address fallback kept here

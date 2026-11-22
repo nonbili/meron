@@ -191,6 +191,18 @@ internal fun saveConversationLayout(
     layout: ConversationLayout,
 ) = prefs.putString(CONVERSATION_LAYOUT_PREF, layout.storageValue())
 
+internal fun loadConversationFooter(prefs: AppPreferences): ConversationFooter =
+    when (prefs.getString(CONVERSATION_FOOTER_PREF, "reply")) {
+        "actions" -> ConversationFooter.Actions
+        "none" -> ConversationFooter.None
+        else -> ConversationFooter.Reply
+    }
+
+internal fun saveConversationFooter(
+    prefs: AppPreferences,
+    footer: ConversationFooter,
+) = prefs.putString(CONVERSATION_FOOTER_PREF, footer.storageValue())
+
 internal fun loadMessageFontScale(prefs: AppPreferences): Int = coerceMessageFontScale(loadAppInt(prefs, MESSAGE_FONT_SCALE_PREF, DEFAULT_MESSAGE_FONT_SCALE))
 
 internal fun saveMessageFontScale(

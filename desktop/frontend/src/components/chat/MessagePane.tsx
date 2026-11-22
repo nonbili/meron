@@ -4,9 +4,9 @@ import { retainThreadView } from '../../states/threadView'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { openComposeTab, openReplyInFullEditor } from '../../states/compose'
+import { openComposeTab, openReplyInFullEditor, replyToMessage } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
-import { withoutHydratedQuickReplyDraft } from '../../states/quickReply'
+import { quickReplyBoxShown, withoutHydratedQuickReplyDraft } from '../../states/quickReply'
 import { ui$ } from '../../states/ui'
 import { findLocalThread, loadThread, threadFromTab } from '../../states/mail'
 import { accounts$, isLocalAccountId } from '../../states/accounts'
@@ -18,6 +18,7 @@ import { Gallery } from './Gallery'
 import { ConversationDetailsPanel } from './ConversationDetailsPanel'
 import { EmptyState } from '../empty-state/EmptyState'
 import { QuickReplyComposer } from './QuickReplyComposer'
+import { ConversationActionBar } from './ActionBar'
 import { addQuickReplyAttachments } from './useQuickReply'
 import { DropOverlay } from './DropOverlay'
 import { useFileDrop } from '../../lib/useFileDrop'
@@ -67,7 +68,15 @@ export function MessagePane({ standalone = false }: { standalone?: boolean }) {
         : current
   const accountId = activeThread?.account_id ?? selectedAccount
   const account = accounts.find((item) => item.id === accountId)
-  const showComposer = !!activeThread && !isRssAccount(account, accountId) && !isLocalAccountId(accountId)
+  // What sits at the bottom of the conversation: the quick-reply box, a bar of
+  // actions, or nothing (the conversation-footer setting).
+  // A reply already in the box keeps it whatever the setting says (quickReplyBoxShown).
+  const boxShown = useValue(quickReplyBoxShown)
+  const footerSetting = useValue(settings$.conversationFooter)
+  const footer = boxShown ? 'reply' : footerSetting
+  const showComposer =
+    footer !== 'none' && !!activeThread && !isRssAccount(account, accountId) && !isLocalAccountId(accountId)
+  const quickReply = showComposer && footer === 'reply'
   // State rather than a ref: the composer renders after the conversations, so
   // its ref is still unset while a conversation mounting in the same commit runs
   // its layout effects. As state, attaching it re-runs their measurement.
@@ -77,7 +86,7 @@ export function MessagePane({ standalone = false }: { standalone?: boolean }) {
     mayBeLink,
     dropHandlers,
   } = useFileDrop(addQuickReplyAttachments, {
-    enabled: showComposer && !documentTab && !standalone,
+    enabled: quickReply && !documentTab && !standalone,
     scope: selectedThread,
   })
 
@@ -129,7 +138,9 @@ export function MessagePane({ standalone = false }: { standalone?: boolean }) {
             <FrostedBand fade="top" className="bottom-0 left-0 right-3 top-5" />
             <div className="relative">
               <ConversationViewContext value={{ state: thread$, active: !documentTab, scope: selectedThread }}>
-                {standalone ? (
+                {footer === 'actions' && activeThread ? (
+                  <ConversationActionBar thread={activeThread} />
+                ) : standalone ? (
                   <button
                     className="pointer-events-auto m-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-white cursor-pointer"
                     onClick={() => openReplyInFullEditor()}
@@ -240,10 +251,18 @@ function ConversationPane({
   // Keep the draft hydrated into the quick-reply bar out of the conversation,
   // including while an optimistic sending bubble follows it. Drafts a send has
   // already taken over stay hidden too, until the post-send discard settles —
-  // the quick reply has let go of them by then, so nothing else would.
+  // the quick reply has let go of them by then, so nothing else would. Without
+  // the box (quickReplyBoxShown), a draft is a bubble like any other.
+  const quickReplyShown = useValue(quickReplyBoxShown)
   const displayMessages = useMemo(
-    () => withoutHydratedQuickReplyDraft(messages, quickReplyDraftId, quickReplyDraftSaved, sendingDraftIds),
-    [messages, quickReplyDraftId, quickReplyDraftSaved, sendingDraftIds],
+    () =>
+      withoutHydratedQuickReplyDraft(
+        messages,
+        quickReplyShown ? quickReplyDraftId : '',
+        quickReplyDraftSaved,
+        sendingDraftIds,
+      ),
+    [messages, quickReplyShown, quickReplyDraftId, quickReplyDraftSaved, sendingDraftIds],
   )
   const unreadKey = displayMessages.map((message) => `${message.id}:${message.unread ? '1' : '0'}`).join('|')
 
@@ -275,7 +294,12 @@ function ConversationPane({
   // would otherwise count the ones behind the composer as seen.
   useLayoutEffect(() => {
     const host = conversationRef.current
-    if (!active || !host || !composer) return
+    if (!active || !host) return
+    // Nothing at the bottom (the conversation-footer setting): the list ends at the pane's.
+    if (!composer) {
+      host.style.removeProperty(COMPOSER_OVERLAP_VAR)
+      return
+    }
     // The shared composer follows the message column when the details panel
     // changes its width, just as it did when it lived inside that column.
     composer.style.width = `${host.offsetWidth}px`
@@ -502,7 +526,14 @@ function ConversationPane({
       )}
 
       {active && contextMenu && (
-        <MessageContextMenu state={contextMenu} isRSS={isRSS} onClose={() => thread$.messageContextMenu.set(null)} />
+        <MessageContextMenu
+          state={contextMenu}
+          isRSS={isRSS}
+          onClose={() => thread$.messageContextMenu.set(null)}
+          // Without the reply box (the conversation-footer setting), a message's
+          // own menu is where a pointer replies to it.
+          onReply={quickReplyShown ? undefined : () => replyToMessage(contextMenu.message)}
+        />
       )}
     </div>
   )

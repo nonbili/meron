@@ -1308,10 +1308,10 @@ private fun MeronMobileScreenContent(
                                 autoFitMessages = !autoFitMessages
                                 saveAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, autoFitMessages)
                             },
-                            readerBottomActions = readerBottomActions,
-                            onToggleReaderBottomActions = {
-                                readerBottomActions = !readerBottomActions
-                                saveAppBoolean(prefs, READER_BOTTOM_ACTIONS_PREF, readerBottomActions)
+                            conversationFooter = conversationFooter,
+                            onConversationFooterChange = { footer ->
+                                setConversationFooter(footer)
+                                saveConversationFooter(prefs, footer)
                             },
                             showUnreadBadges = showUnreadBadges,
                             onToggleUnreadBadges = {
@@ -1724,7 +1724,8 @@ private fun MeronMobileScreenContent(
                                             onReplyAllToMessage = ::replyAllToMessage,
                                             canReplyAllToMessage = ::canReplyAllToMessage,
                                             onEditAsNew = { openMessageCompose(it, forward = false) },
-                                            readerBottomActions = readerBottomActions,
+                                            conversationFooter = if (active) effectiveConversationFooter() else conversationFooter,
+                                            conversationReplyTarget = conversationActionTarget(pageThread, pageMessages),
                                             onOpenDraft = { message ->
                                                 selectedCoreThread?.let { thread ->
                                                     openDraftCompose(message, thread, returnScreen = Screen.Thread)

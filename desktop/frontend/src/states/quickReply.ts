@@ -104,6 +104,23 @@ export function isQuickReplyBlank(): boolean {
 }
 
 /**
+ * Whether the conversation shows the quick-reply box: where the
+ * conversation-footer setting puts it there, and wherever it still holds a
+ * reply, so switching the setting mid-reply hides nothing unsaved. The reply
+ * keeps its box until it is sent, emptied, or left behind with its thread, and
+ * while the box still owns a saved draft: emptying the box discards that draft,
+ * which the box has to stay mounted (useQuickReply) to do. Reactive.
+ */
+export function quickReplyBoxShown(): boolean {
+  return (
+    settings$.conversationFooter.get() === 'reply' ||
+    !!compose$.composer.get().trim() ||
+    compose$.composerAttachments.get().length > 0 ||
+    !!compose$.quickReplyDraftId.get()
+  )
+}
+
+/**
  * The quick reply as it is saved and sent: what the box holds, exactly as
  * written, with the signature below it while it is on. A saved draft is thus
  * the reply as it would go out, and `hydrateQuickReplyFromTailDraft` takes the
@@ -559,8 +576,17 @@ function quickReplyCanHoldDraft(draft: Message): { added: string[] } | null {
 // the active thread, so the user can continue and send it inline instead of
 // being forced into the full editor. No-op when the tail message isn't a
 // draft, or is already the one loaded.
+// Back to the box: the draft its hydration passed over while the setting had
+// no box takes its place in it now, as it would have on load.
+settings$.conversationFooter.onChange(({ value }) => {
+  if (value === 'reply') hydrateQuickReplyFromTailDraft(mail$.messages.peek())
+})
+
 function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   if (threadWindowSession) return
+  // No box to fill: the conversation-footer setting put buttons, or nothing,
+  // there. The draft stays a bubble in the conversation, to open from there.
+  if (settings$.conversationFooter.peek() !== 'reply') return
   const activeThreadId = ui$.selectedThread.peek()
   if (!activeThreadId) return
   const inThread = messages.filter((message) => message.thread_id === activeThreadId)

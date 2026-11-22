@@ -440,6 +440,22 @@ internal fun ConversationLayout.storageValue(): String =
         ConversationLayout.Traditional -> "traditional"
     }
 
+@Composable
+@ReadOnlyComposable
+internal fun ConversationFooter.label(): String =
+    when (this) {
+        ConversationFooter.Reply -> tr("settings.appearance.conversationFooterReply")
+        ConversationFooter.Actions -> tr("settings.appearance.conversationFooterActions")
+        ConversationFooter.None -> tr("settings.appearance.conversationFooterNone")
+    }
+
+internal fun ConversationFooter.storageValue(): String =
+    when (this) {
+        ConversationFooter.Reply -> "reply"
+        ConversationFooter.Actions -> "actions"
+        ConversationFooter.None -> "none"
+    }
+
 internal fun ConversationLayout.next(): ConversationLayout =
     when (this) {
         ConversationLayout.Chat -> ConversationLayout.Traditional

@@ -13,7 +13,7 @@ import { isNarrowWindow } from '../lib/useNarrowWindow'
 import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
-import { ui$, showToast, showUndoToast } from './ui'
+import { focusQuickReply, ui$, showToast, showUndoToast } from './ui'
 import { contextualErrorMessage } from '../lib/errors'
 import { inlineRichStyles, prepareInlineImages, withoutInlineRichStyles } from '../components/composer/composerHelpers'
 import { accounts$, isSendableAccount, accountIdentities } from './accounts'
@@ -55,6 +55,7 @@ import {
   trackDraftSave,
 } from './composeSessions'
 import {
+  actionBarTarget,
   buildReplyRecipients,
   quickReplyAddressing,
   buildReplyThreading,
@@ -84,6 +85,7 @@ import {
   discardClosedDraft,
   discardingDraftIds,
   quickReplyAbandonedSaves,
+  quickReplyBoxShown,
   nextQuickReplyOwnershipTick,
   quickReplyDraftSaveInFlight,
   reserveOpeningDraft,
@@ -808,6 +810,37 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
 // No-op when there's no active conversation. `replyAll` seeds the wider
 // recipient list; the quick reply box has no recipient fields to show it in, so
 // reply-all always lands here rather than in the box.
+/** Whether a reader tab with its message is in front, for the reply shortcut,
+ * which answers it even with no conversation selected behind it. */
+export function readerTabInFront(): boolean {
+  const tab = compose$.tabs.peek().find((item) => item.id === compose$.activeTab.peek())
+  return tab?.kind === 'reader' && !!tab.message
+}
+
+/** The reply shortcut. A reader tab in front answers the message it shows;
+ * otherwise the conversation's reply goes into the quick-reply box or, where
+ * the conversation-footer setting leaves none, the full editor. */
+export function replyInConversation() {
+  const tab = compose$.tabs.peek().find((item) => item.id === compose$.activeTab.peek())
+  if (tab?.kind === 'reader') {
+    // As the tab's own Reply button: not for a feed's article.
+    if (tab.message && !isRssMessage(tab.message)) replyToMessage(tab.message)
+    return
+  }
+  // A compose tab in front: the conversation behind it is not the one on screen.
+  if (tab?.kind === 'compose') return
+  if (quickReplyBoxShown()) return focusQuickReply()
+  // The message the action bar's Reply takes, so never a draft; and, as there
+  // is no bar under a feed, no reply to one.
+  const target = actionBarTarget()
+  if (target && !isRssMessage(target)) replyToMessage(target)
+}
+
+function isRssMessage(message: Message): boolean {
+  const account = accounts$.peek().find((acc) => acc.id === message.account_id)
+  return account?.provider === 'rss' || account?.auth_type === 'rss'
+}
+
 export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
   const t = getActiveThread()
   if (!t) return

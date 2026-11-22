@@ -417,7 +417,6 @@ internal class MeronMobileState(
     var darkMailBodies by mutableStateOf(loadAppBoolean(prefs, DARK_MAIL_BODIES_PREF, false))
     var autoFitMessages by mutableStateOf(loadAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, false))
     var chatFullMessages by mutableStateOf(loadAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, false))
-    var readerBottomActions by mutableStateOf(loadAppBoolean(prefs, READER_BOTTOM_ACTIONS_PREF, false))
     var quoteReplies by mutableStateOf(loadAppBoolean(prefs, QUOTE_REPLIES_PREF, false))
     var liveMailPushEnabled by mutableStateOf(loadAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, false))
     var backgroundSyncEnabled by mutableStateOf(loadAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, true))
@@ -427,6 +426,7 @@ internal class MeronMobileState(
     )
     var sendShortcutMode by mutableStateOf(loadSendShortcutMode(prefs))
     var conversationLayout by mutableStateOf(loadConversationLayout(prefs))
+    var conversationFooter by mutableStateOf(loadConversationFooter(prefs))
     var messageFontScale by mutableStateOf(loadMessageFontScale(prefs))
     var kanbanColumnWidth by mutableStateOf(
         loadAppInt(prefs, KANBAN_COLUMN_WIDTH_PREF, KANBAN_COLUMN_DEFAULT_WIDTH)

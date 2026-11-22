@@ -122,6 +122,10 @@ internal enum class SendShortcutMode { Enter, ModEnter }
  */
 internal enum class ConversationLayout { Chat, Traditional }
 
+/** What sits at the bottom of a conversation: the quick-reply bar, a bar of
+ *  reply/forward/delete buttons, or nothing. */
+internal enum class ConversationFooter { Reply, Actions, None }
+
 internal const val UNIFIED_ACCOUNT_ID = "unified"
 internal const val INBOX_FOLDER = "inbox"
 internal const val STARRED_FOLDER = "starred"
@@ -163,9 +167,8 @@ internal const val AUTO_FIT_MESSAGES_PREF = "auto_fit_messages_v1"
  *  capped box, so only the conversation scrolls. Off by default. */
 internal const val CHAT_FULL_MESSAGES_PREF = "chat_full_messages_v1"
 
-/** Whether the message reader puts reply, forward and delete in a bottom bar
- *  where they are easier to reach, instead of only in the top overflow menu. */
-internal const val READER_BOTTOM_ACTIONS_PREF = "reader_bottom_actions_v1"
+/** What sits at the bottom of a conversation (see [ConversationFooter]). */
+internal const val CONVERSATION_FOOTER_PREF = "conversation_footer_v1"
 
 /** Whether replies carry the message they answer, quoted under the reply text.
  *  Off by default: replies read as chat messages. */

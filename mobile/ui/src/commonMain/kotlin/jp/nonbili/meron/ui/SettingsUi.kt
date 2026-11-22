@@ -176,8 +176,8 @@ internal fun SettingsScreen(
     onToggleChatFullMessages: () -> Unit,
     autoFitMessages: Boolean,
     onToggleAutoFitMessages: () -> Unit,
-    readerBottomActions: Boolean,
-    onToggleReaderBottomActions: () -> Unit,
+    conversationFooter: ConversationFooter,
+    onConversationFooterChange: (ConversationFooter) -> Unit,
     showUnreadBadges: Boolean,
     onToggleUnreadBadges: () -> Unit,
     showUnifiedInboxNav: Boolean,
@@ -438,8 +438,8 @@ internal fun SettingsScreen(
                     onToggleChatFullMessages = onToggleChatFullMessages,
                     autoFitMessages = autoFitMessages,
                     onToggleAutoFitMessages = onToggleAutoFitMessages,
-                    readerBottomActions = readerBottomActions,
-                    onToggleReaderBottomActions = onToggleReaderBottomActions,
+                    conversationFooter = conversationFooter,
+                    onConversationFooterChange = onConversationFooterChange,
                     remoteImageSenderCount = remoteImageSenders.size,
                     onOpenRemoteSenders = { settingsNavController.navigate(SettingsRoutes.RemoteSenders) },
                     detectOneTimeCodes = detectOneTimeCodes,
@@ -1202,8 +1202,8 @@ internal fun SettingsMessagesPage(
     onToggleChatFullMessages: () -> Unit,
     autoFitMessages: Boolean,
     onToggleAutoFitMessages: () -> Unit,
-    readerBottomActions: Boolean,
-    onToggleReaderBottomActions: () -> Unit,
+    conversationFooter: ConversationFooter,
+    onConversationFooterChange: (ConversationFooter) -> Unit,
     remoteImageSenderCount: Int,
     onOpenRemoteSenders: () -> Unit,
     detectOneTimeCodes: Boolean,
@@ -1268,13 +1268,7 @@ internal fun SettingsMessagesPage(
             }
         }
         item {
-            SettingsToggleRow(
-                icon = Icons.AutoMirrored.Filled.Reply,
-                title = tr("settings.appearance.readerBottomActions"),
-                hint = tr("settings.appearance.readerBottomActionsHint"),
-                checked = readerBottomActions,
-                onToggle = onToggleReaderBottomActions,
-            )
+            ConversationFooterRow(conversationFooter, onConversationFooterChange)
         }
 
         section(tr("tags.title"))
@@ -1355,6 +1349,35 @@ internal fun SettingsComposerPage(
                 html = appSignatureHtml,
                 onSave = onSaveAppSignature,
             )
+        }
+    }
+}
+
+/** What sits at the bottom of a conversation, picked from a menu. */
+@Composable
+private fun ConversationFooterRow(
+    footer: ConversationFooter,
+    onChange: (ConversationFooter) -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        SettingsRow(
+            icon = Icons.AutoMirrored.Filled.Reply,
+            title = tr("settings.appearance.conversationFooter"),
+            hint = tr("settings.appearance.conversationFooterHint"),
+            onClick = { menu = true },
+            trailing = { Text(footer.label(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            ConversationFooter.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label()) },
+                    onClick = {
+                        menu = false
+                        if (option != footer) onChange(option)
+                    },
+                )
+            }
         }
     }
 }

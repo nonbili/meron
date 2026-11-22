@@ -31,14 +31,7 @@ import { createElement } from 'react'
 import { openEmlFile } from '../../lib/eml'
 import { useTranslation } from '../../lib/i18n'
 import { useValue } from '@legendapp/state/react'
-import {
-  ui$,
-  closeCommandPalette,
-  focusGlobalSearch,
-  focusQuickReply,
-  openSettingsAt,
-  showToast,
-} from '../../states/ui'
+import { ui$, closeCommandPalette, focusGlobalSearch, openSettingsAt, showToast } from '../../states/ui'
 import { appIconSupported$, selectTheme, settings$ } from '../../states/settings'
 import { update$ } from '../../states/update'
 import { windowChrome$ } from '../../lib/windowChrome'
@@ -61,7 +54,13 @@ import { thread$ } from '../../states/thread'
 import { mail$, syncMail } from '../../states/mail'
 import { markAllRead, toggleStarWithUndo, markUnreadWithUndo } from '../../states/mailFlags'
 import { archiveThread, deleteThread } from '../../states/mailMoves'
-import { openComposeTab, openReplyInFullEditor, closeMessageTab } from '../../states/compose'
+import {
+  openComposeTab,
+  openReplyInFullEditor,
+  closeMessageTab,
+  readerTabInFront,
+  replyInConversation,
+} from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { canReplyAllToThread } from '../../states/composeReply'
 import { RAIL_SHORTCUT_IDS, type ShortcutId } from '../../lib/shortcuts'
@@ -255,6 +254,19 @@ export function useCommandList(): Command[] {
       })),
     ]
 
+    // A reader tab in front with no conversation behind it (one restored on
+    // launch, say) is still answered by Reply.
+    if (!selectedThread && readerTabInFront()) {
+      list.push({
+        id: 'reply.focus',
+        label: 'Reply',
+        icon: icon(Reply),
+        keywords: 'respond',
+        shortcut: 'reply.focus',
+        run: run(() => replyInConversation()),
+      })
+    }
+
     // Actions on the open conversation — only when one is on screen.
     if (selectedThread && (!activeBoardId || !!kanbanPaneThreadId())) {
       list.push(
@@ -264,7 +276,7 @@ export function useCommandList(): Command[] {
           icon: icon(Reply),
           keywords: 'respond quick',
           shortcut: 'reply.focus',
-          run: run(() => focusQuickReply()),
+          run: run(() => replyInConversation()),
         },
         ...(replyAll
           ? [

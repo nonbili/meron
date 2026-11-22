@@ -61,6 +61,7 @@ import {
   setCalendarSideNavVisible,
   setCalendarEnabled,
   setTasksEnabled,
+  type ConversationFooter,
   type ConversationLayout,
   type KanbanBoard,
   type SendShortcut,
@@ -123,6 +124,14 @@ const CONVERSATION_LAYOUT_OPTIONS = (
 ): { value: ConversationLayout; label: string }[] => [
   { value: 'chat', label: t('settings.appearance.conversationLayoutChat') },
   { value: 'traditional', label: t('settings.appearance.conversationLayoutTraditional') },
+]
+
+const CONVERSATION_FOOTER_OPTIONS = (
+  t: ReturnType<typeof useTranslation>['t'],
+): { value: ConversationFooter; label: string }[] => [
+  { value: 'reply', label: t('settings.appearance.conversationFooterReply') },
+  { value: 'actions', label: t('settings.appearance.conversationFooterActions') },
+  { value: 'none', label: t('settings.appearance.conversationFooterNone') },
 ]
 
 function isRssAccount(account: Account) {
@@ -672,7 +681,7 @@ function MessagesSection() {
   const chatFullMessages = useValue(settings$.chatFullMessages)
   const darkMessageBodies = useValue(settings$.darkMessageBodies)
   const autoFitMessages = useValue(settings$.autoFitMessages)
-  const readerBottomActions = useValue(settings$.readerBottomActions)
+  const conversationFooter = useValue(settings$.conversationFooter)
   const detectOneTimeCodes = useValue(settings$.detectOneTimeCodes)
 
   return (
@@ -709,12 +718,13 @@ function MessagesSection() {
           checked={autoFitMessages}
           onChange={() => settings$.autoFitMessages.set(!autoFitMessages)}
         />
-        <ToggleRow
+        <SegmentedRow
           icon={<PanelBottom size={15} />}
-          title={t('settings.appearance.readerBottomActions')}
-          hint={t('settings.appearance.readerBottomActionsHint')}
-          checked={readerBottomActions}
-          onChange={() => settings$.readerBottomActions.set(!readerBottomActions)}
+          title={t('settings.appearance.conversationFooter')}
+          hint={t('settings.appearance.conversationFooterHint')}
+          value={conversationFooter}
+          options={CONVERSATION_FOOTER_OPTIONS(t)}
+          onChange={(value) => settings$.conversationFooter.set(value)}
         />
       </SettingsGroup>
 

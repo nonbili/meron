@@ -22,6 +22,7 @@ var mcpAppSettings = map[string]mcpSettingSpec{
 	"signature":                     {Type: "string", Description: "App-wide signature HTML; empty disables it"},
 	"send_shortcut":                 {Type: "string", Description: "Quick reply send shortcut", Values: []string{"enter", "mod_enter"}},
 	"conversation_layout":           {Type: "string", Description: "Message layout", Values: []string{"chat", "traditional"}},
+	"conversation_footer":           {Type: "string", Description: "Bottom of a conversation: quick-reply box, action bar or nothing", Values: []string{"reply", "actions", "none"}},
 	"spell_check":                   {Type: "boolean", Description: "Spell checking in composers"},
 	"show_real_avatars":             {Type: "boolean", Description: "Show sender avatars"},
 	"show_thread_avatars":           {Type: "boolean", Description: "Show avatars in message lists"},

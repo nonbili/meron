@@ -37,6 +37,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.ReplyAll
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Archive
@@ -62,6 +63,7 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -216,7 +218,10 @@ internal fun ThreadScreen(
     onReplyAllToMessage: (MessageBody) -> Unit,
     canReplyAllToMessage: (MessageBody) -> Boolean,
     onEditAsNew: (MessageBody) -> Unit,
-    readerBottomActions: Boolean,
+    // What sits at the bottom of the conversation, and the message its
+    // buttons reply to and forward: the one the reply bar would answer.
+    conversationFooter: ConversationFooter,
+    conversationReplyTarget: MessageBody?,
     onOpenDraft: (MessageBody) -> Unit,
     onToggleMessageRead: (MessageBody) -> Unit,
     onToggleMessageStarred: (MessageBody) -> Unit,
@@ -398,8 +403,10 @@ internal fun ThreadScreen(
     var pinnedHeaderHeightPx by remember { mutableIntStateOf(0) }
     // The conversation, captured for the frosted bands at either end of it.
     val hazeState = rememberHazeState()
-    val showReplyBar = thread != null && !isRss && messages.isNotEmpty()
-    val replyOverlayPx by rememberUpdatedState(if (showReplyBar) replyBarHeightPx else 0)
+    var confirmFooterDelete by remember(thread?.id) { mutableStateOf(false) }
+    val showFooter = thread != null && !isRss && messages.isNotEmpty() && conversationFooter != ConversationFooter.None
+    val showReplyBar = showFooter && conversationFooter == ConversationFooter.Reply
+    val replyOverlayPx by rememberUpdatedState(if (showFooter) replyBarHeightPx else 0)
     var endFollowRequest by remember(thread?.id) { mutableStateOf(0) }
     var followNextLocalSend by remember(thread?.id) { mutableStateOf(false) }
     var keyboardAnchor by remember(thread?.id) { mutableStateOf<Pair<String, Int>?>(null) }
@@ -923,6 +930,19 @@ internal fun ThreadScreen(
                                                 }
                                             },
                                         )
+                                        // Without the reply bar (the conversation-footer
+                                        // setting), the plain reply needs a home too: the
+                                        // traditional layout's rows don't open the reader.
+                                        if (conversationFooter != ConversationFooter.Reply && conversationReplyTarget != null) {
+                                            DropdownMenuItem(
+                                                text = { Text(tr("chat.actions.reply")) },
+                                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null) },
+                                                onClick = {
+                                                    overflowOpen = false
+                                                    onReplyToMessage(conversationReplyTarget)
+                                                },
+                                            )
+                                        }
                                         // Hidden when the reply target has no other
                                         // recipients: a reply-all identical to the
                                         // reply is a second name for the same action.
@@ -1330,6 +1350,57 @@ internal fun ThreadScreen(
                     }
                     // Over the list rather than under it: messages scroll on
                     // behind the card, like desktop's composer.
+                    if (showFooter && !showReplyBar) {
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .onSizeChanged { replyBarHeightPx = it.height }
+                                .padding(bottom = navBarHeight),
+                        ) {
+                            // Reply and forward open the full editor on the message
+                            // the reply bar would answer; delete takes the whole
+                            // conversation, as the top bar's does.
+                            MessageActionsCard(
+                                message = conversationReplyTarget,
+                                canReplyAll = conversationReplyTarget?.let(canReplyAllToMessage) ?: false,
+                                canForward = conversationReplyTarget?.bodyMissing == false,
+                                onReply = { conversationReplyTarget?.let(onReplyToMessage) },
+                                onReplyAll = { conversationReplyTarget?.let(onReplyAllToMessage) },
+                                onForward = { conversationReplyTarget?.let(onForward) },
+                                // Named as the top bar's delete is; one that can't
+                                // be undone (Trash, Drafts) asks first.
+                                deleteLabel = deleteLabel,
+                                onDelete = {
+                                    if (thread?.folderRole == "trash" || thread?.folderRole == "drafts") {
+                                        confirmFooterDelete = true
+                                    } else {
+                                        onDelete()
+                                    }
+                                },
+                                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = REPLY_CARD_TOP_MARGIN, bottom = 12.dp),
+                            )
+                        }
+                        if (confirmFooterDelete) {
+                            AlertDialog(
+                                onDismissRequest = { confirmFooterDelete = false },
+                                title = { Text(deleteLabel) },
+                                text = { Text(tr("mobile.compose.discardDraftText")) },
+                                confirmButton = {
+                                    TextButton(
+                                        onClick = {
+                                            confirmFooterDelete = false
+                                            onDelete()
+                                        },
+                                    ) {
+                                        Text(deleteLabel, color = MaterialTheme.colorScheme.error)
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { confirmFooterDelete = false }) { Text(tr("buttons.cancel")) }
+                                },
+                            )
+                        }
+                    }
                     if (showReplyBar) {
                         // With the keyboard up, the list already stops the
                         // navigation bar's height into it, so the same padding
@@ -1410,7 +1481,10 @@ internal fun ThreadScreen(
         }
 
         // Overlay the full-screen message reader when open
-        readerMessage?.let { reader ->
+        readerMessage?.let { opened ->
+            // The thread's own copy while it has one: a body fetched after the
+            // reader opened (Forward waits for it) shows up here.
+            val reader = messages.firstOrNull { it.id == opened.id } ?: opened
             MessageReaderScreen(
                 message = reader,
                 preferHtml = preferHtml,
@@ -1423,7 +1497,6 @@ internal fun ThreadScreen(
                     readerMessage = null
                     onComposeTo(email)
                 },
-                bottomActions = readerBottomActions,
                 onReplyToMessage = { message ->
                     readerMessage = null
                     onReplyToMessage(message)

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -57,6 +59,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.rememberHazeState
 import jp.nonbili.meron.shared.MessageAttachment
@@ -78,9 +81,6 @@ internal fun MessageReaderScreen(
     onCopy: (String, String) -> Unit,
     onComposeTo: (String) -> Unit,
     onForward: (MessageBody) -> Unit,
-    // Reply, reply all, forward and delete move from the overflow menu to a
-    // bottom bar, where they are easier to reach (the reader-bottom-actions setting).
-    bottomActions: Boolean,
     onReplyToMessage: (MessageBody) -> Unit,
     onReplyAllToMessage: (MessageBody) -> Unit,
     canReplyAllToMessage: (MessageBody) -> Boolean,
@@ -153,7 +153,8 @@ internal fun MessageReaderScreen(
                                 onDelete = onDelete,
                                 onCopyMessageText = onCopy,
                                 onOpenUrl = onOpenUrl,
-                                mailActionsInBar = bottomActions,
+                                // Reply, reply all, forward and delete are in the bottom bar.
+                                mailActionsInBar = true,
                             )
                         }
                     },
@@ -163,35 +164,21 @@ internal fun MessageReaderScreen(
                 )
             },
             bottomBar = {
-                if (actionsEnabled && bottomActions) {
-                    FloatingCard(
-                        RoundedCornerShape(24.dp),
-                        Modifier
-                            .navigationBarsPadding()
-                            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
-                            .onSizeChanged { bottomCardHeightPx = it.height },
-                    ) {
-                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            ReaderBottomAction(Icons.AutoMirrored.Filled.Reply, tr("chat.actions.reply")) {
-                                onReplyToMessage(message)
-                            }
-                            if (canReplyAllToMessage(message)) {
-                                ReaderBottomAction(Icons.AutoMirrored.Filled.ReplyAll, tr("chat.actions.replyAll")) {
-                                    onReplyAllToMessage(message)
-                                }
-                            }
-                            ReaderBottomAction(Icons.AutoMirrored.Filled.Forward, tr("chat.actions.forward")) {
-                                onForward(message)
-                            }
-                            ReaderBottomAction(
-                                Icons.Filled.Delete,
-                                tr("buttons.delete"),
-                                tint = MaterialTheme.colorScheme.error,
-                            ) {
-                                onDelete(message)
-                            }
-                        }
-                    }
+                if (actionsEnabled) {
+                    MessageActionsCard(
+                        message = message,
+                        canReplyAll = canReplyAllToMessage(message),
+                        canForward = !message.bodyMissing,
+                        onReply = { onReplyToMessage(message) },
+                        onReplyAll = { onReplyAllToMessage(message) },
+                        onForward = { onForward(message) },
+                        onDelete = { onDelete(message) },
+                        modifier =
+                            Modifier
+                                .navigationBarsPadding()
+                                .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                                .onSizeChanged { bottomCardHeightPx = it.height },
+                    )
                 }
             },
         ) { innerPadding ->
@@ -325,7 +312,7 @@ internal fun MessageReaderScreen(
                 // floating actions down through the navigation bar: from the
                 // middle of the card, which covers where the band begins.
                 val fadePx = with(density) { 16.dp.toPx() }
-                val bottomCardPx = if (actionsEnabled && bottomActions) bottomCardHeightPx else 0
+                val bottomCardPx = if (actionsEnabled) bottomCardHeightPx else 0
                 FrostedBand(
                     hazeState,
                     heightPx = with(density) { innerPadding.calculateTopPadding().roundToPx() },
@@ -345,21 +332,60 @@ internal fun MessageReaderScreen(
     }
 }
 
+/**
+ * Reply, reply all, forward and delete as one floating card: at the foot of the
+ * message reader, and under a conversation when the conversation-footer setting
+ * puts them there instead of the reply bar. Without a [message] (nothing to
+ * answer yet) only delete shows.
+ */
 @Composable
-private fun ReaderBottomAction(
+internal fun MessageActionsCard(
+    message: MessageBody?,
+    canReplyAll: Boolean,
+    // Forwarding builds on the body and its attachments, so it waits for them.
+    canForward: Boolean,
+    onReply: () -> Unit,
+    onReplyAll: () -> Unit,
+    onForward: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+    deleteLabel: String = tr("buttons.delete"),
+) {
+    FloatingCard(RoundedCornerShape(24.dp), modifier) {
+        Row(Modifier.fillMaxWidth().padding(4.dp)) {
+            if (message != null) {
+                ReaderBottomAction(Icons.AutoMirrored.Filled.Reply, tr("chat.actions.reply"), onClick = onReply)
+                if (canReplyAll) {
+                    ReaderBottomAction(Icons.AutoMirrored.Filled.ReplyAll, tr("chat.actions.replyAll"), onClick = onReplyAll)
+                }
+                ReaderBottomAction(Icons.AutoMirrored.Filled.Forward, tr("chat.actions.forward"), enabled = canForward, onClick = onForward)
+            }
+            ReaderBottomAction(Icons.Filled.Delete, deleteLabel, tint = MaterialTheme.colorScheme.error, onClick = onDelete)
+        }
+    }
+}
+
+// Each action takes an equal share of the card, its label wrapping rather than
+// clipping, so four of them (with Reply all) still fit a narrow phone, large
+// text, or a long translation.
+@Composable
+private fun RowScope.ReaderBottomAction(
     icon: ImageVector,
     label: String,
     tint: Color = LocalContentColor.current,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Column(
         Modifier
+            .weight(1f)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.4f)
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, contentDescription = null, tint = tint)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 2, textAlign = TextAlign.Center)
     }
 }

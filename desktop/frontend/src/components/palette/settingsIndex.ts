@@ -86,7 +86,11 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   },
   { page: 'messages', titleKey: 'settings.appearance.darkMessageBodies', keywords: 'dark mode email html' },
   { page: 'messages', titleKey: 'settings.appearance.autoFitMessages', keywords: 'shrink wide zoom' },
-  { page: 'messages', titleKey: 'settings.appearance.readerBottomActions', keywords: 'buttons toolbar' },
+  {
+    page: 'messages',
+    titleKey: 'settings.appearance.conversationFooter',
+    keywords: 'quick reply box buttons toolbar action bar',
+  },
   { page: 'messages', titleKey: 'settings.appearance.messageFont', keywords: 'typography typeface font family' },
   { page: 'messages', titleKey: 'settings.appearance.messageTextSize', keywords: 'font size scale zoom' },
   { page: 'messages', titleKey: 'tags.title', keywords: 'labels' },

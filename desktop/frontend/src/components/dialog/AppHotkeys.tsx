@@ -8,7 +8,6 @@ import {
   openCommandPalette,
   closeCommandPalette,
   focusGlobalSearch,
-  focusQuickReply,
   modalOpen,
   showToast,
 } from '../../states/ui'
@@ -40,7 +39,14 @@ import {
   bulkRemovalInProgress,
   bulkDeleteSelected,
 } from '../../states/mailMoves'
-import { openComposeTab, openReplyInFullEditor, closeMessageTab, toggleConversationMode } from '../../states/compose'
+import {
+  openComposeTab,
+  openReplyInFullEditor,
+  closeMessageTab,
+  readerTabInFront,
+  replyInConversation,
+  toggleConversationMode,
+} from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { closeComposeSessionKeepingDraft } from '../../states/composeSessions'
 import { calendar$ } from '../../states/calendar'
@@ -525,9 +531,9 @@ export function AppHotkeys() {
           event.preventDefault()
           break
         case 'reply.focus':
-          if (!threadSearchVisible()) return
+          if (!threadSearchVisible() && !readerTabInFront()) return
           event.preventDefault()
-          focusQuickReply()
+          replyInConversation()
           break
         case 'reply.all':
           if (!threadSearchVisible()) return

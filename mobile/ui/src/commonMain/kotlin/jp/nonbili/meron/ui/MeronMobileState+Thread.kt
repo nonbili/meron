@@ -368,6 +368,8 @@ internal fun MeronMobileState.hydrateQuickReplyFromTailDraft(
     mergedMessages: List<MessageBody>,
 ) {
     if (quickReplyThreadId != threadBackendId) return
+    // No bar to fill: the conversation-footer setting put buttons, or nothing, there.
+    if (conversationFooter != ConversationFooter.Reply) return
     val tail = mergedMessages.lastOrNull() ?: return
     if (!folderIsDrafts(tail.folderId)) return
     val normalizedTailId = tail.messageId.normalizedComposeDraftId()
