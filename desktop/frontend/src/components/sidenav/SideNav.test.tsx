@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
 import { mail$ } from '../../states/mail'
 import { settings$ } from '../../states/settings'
@@ -35,11 +35,15 @@ it('marks participating inboxes read from the Unified Inbox menu with unread bad
   mail$.foldersByAccount.set({ personal: [inbox('personal')], studio: [inbox('studio')], other: [inbox('other')] })
   ui$.selectedAccount.set('other')
   const writes: Array<{ account_id: string; folder_id: string }> = []
+  const serverReply = Promise.withResolvers<void>()
   ;(window as any).go = {
     main: {
       App: {
         Invoke: async (command: string, payload: { account_id: string; folder_id: string }) => {
-          if (command === 'mail.markAllRead') writes.push(payload)
+          if (command === 'mail.markAllRead') {
+            writes.push(payload)
+            await serverReply.promise
+          }
           if (command === 'mail.folderList') return { folders: [{ ...inbox(payload.account_id), unread: 0 }] }
           return { folder_unreads: { [payload.account_id]: { INBOX: 0 } } }
         },
@@ -53,18 +57,21 @@ it('marks participating inboxes read from the Unified Inbox menu with unread bad
     fireEvent.contextMenu(unifiedInbox)
     fireEvent.click(view.getByRole('button', { name: 'Mark all as read' }))
 
-    await waitFor(() => {
-      expect(writes).toEqual([
-        { account_id: 'personal', folder_id: 'INBOX' },
-        { account_id: 'studio', folder_id: 'INBOX' },
-      ])
-      expect(mail$.foldersByAccount.studio[0].unread.peek()).toBe(0)
-    })
+    expect(mail$.foldersByAccount.personal[0].unread.peek()).toBe(0)
+    expect(mail$.foldersByAccount.studio[0].unread.peek()).toBe(0)
+    await act(async () => serverReply.resolve())
+
+    expect(writes).toEqual([
+      { account_id: 'personal', folder_id: 'INBOX' },
+      { account_id: 'studio', folder_id: 'INBOX' },
+    ])
+    expect(mail$.foldersByAccount.studio[0].unread.peek()).toBe(0)
     expect(mail$.foldersByAccount.other[0].unread.peek()).toBe(3)
     expect(ui$.selectedAccount.peek()).toBe('other')
     fireEvent.contextMenu(unifiedInbox)
     expect((view.getByRole('button', { name: 'Mark all as read' }) as HTMLButtonElement).disabled).toBe(true)
   } finally {
+    serverReply.resolve()
     cleanup()
     settings$.showUnifiedInboxInSideNav.set(showUnifiedInbox)
     settings$.showUnreadAccountBadge.set(showUnreadBadge)

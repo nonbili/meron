@@ -1,3 +1,4 @@
+import { batch } from '@legendapp/state'
 import type { Message } from '../types'
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
@@ -26,8 +27,10 @@ import {
 } from './mail'
 import {
   applyMutationFolderUnreads,
+  captureFolderUnreadVersion,
   decrementFolderUnread,
   folderMatches,
+  holdFolderUnread,
   inboxUnread,
   loadFolders,
   type MutationResult,
@@ -55,7 +58,11 @@ function refreshFoldersAfterFlagChange(accountId: string | undefined) {
   }
 }
 
-export async function markThreadRead(threadId: string) {
+export function markThreadRead(threadId: string) {
+  return afterThreadInboxRead(threadId, () => writeThreadRead(threadId))
+}
+
+async function writeThreadRead(threadId: string) {
   if (!threadId) return
   const previousThreads = mail$.threads.get()
   const previousMessages = mail$.messages.get()
@@ -110,7 +117,11 @@ export async function markThreadRead(threadId: string) {
 // marks the newest message only — matching the core, which does the same
 // server-side. Marking every message unread would reopen the thread at its
 // oldest message and shed the count again as the reader scrolls down.
-export async function markThreadUnread(threadId: string) {
+export function markThreadUnread(threadId: string) {
+  return afterThreadInboxRead(threadId, () => writeThreadUnread(threadId))
+}
+
+async function writeThreadUnread(threadId: string) {
   if (!threadId) return
   const threadMessages = mail$.messages.get().filter((message) => message.thread_id === threadId)
   const newestMessage = threadMessages.reduce<Message | null>(
@@ -278,14 +289,22 @@ export async function bulkStarSelected(items: BulkSelectionItem[], starred: bool
 // unread messages outside the loaded page are cleared too; RSS feeds are marked
 // per visible thread because they do not have an IMAP-style folder flag, and so
 // is unified Starred, which is a flag rather than a mailbox.
-export async function markAllRead() {
-  const threads = mail$.threads.get()
+export function markAllRead() {
+  const accountId = ui$.selectedAccount.peek()
+  const folderId = ui$.selectedFolder.peek()
+  const accounts = accountId === 'unified' ? unifiedAccounts().map(({ id }) => id) : [accountId]
+  const threads = mail$.threads.peek()
+  return afterPendingInboxReads(accounts, () => writeAllRead(accountId, folderId, threads))
+}
+
+async function writeAllRead(selectedAcc: string, selectedFolder: string, initialThreads: Message[]) {
+  const activeView = ui$.selectedAccount.peek() === selectedAcc && ui$.selectedFolder.peek() === selectedFolder
+  const threads = activeView ? mail$.threads.get() : initialThreads
   const unread = threads.filter((thread) => thread.unread)
 
   const accounts = accounts$.get()
-  const selectedAcc = ui$.selectedAccount.get()
-  const starred = isUnifiedStarred(selectedAcc, ui$.selectedFolder.get())
-  const folder = selectedAcc === 'unified' ? unifiedFolderRole(ui$.selectedFolder.get()) : ui$.selectedFolder.get()
+  const starred = isUnifiedStarred(selectedAcc, selectedFolder)
+  const folder = selectedAcc === 'unified' ? unifiedFolderRole(selectedFolder) : selectedFolder
   const activeAccount = accounts.find((account) => account.id === selectedAcc)
   const mailAccountIds = starred
     ? []
@@ -318,11 +337,11 @@ export async function markAllRead() {
       listFilterKey(ui$.filterMode.peek(), ui$.attachmentsOnly.peek()),
     )
   const previousView = viewKey()
-  const previousMessages = mail$.messages.get()
+  const previousMessages = activeView ? mail$.messages.get() : []
   // What a failure puts back: only the rows and folder counts cleared here, by
   // id, so a view or conversation opened while the write was pending keeps its
   // own state.
-  const clearedThreads = new Map(unread.map((thread) => [thread.id, thread]))
+  const clearedThreads = new Map(activeView ? unread.map((thread) => [thread.id, thread]) : [])
   const clearedMessages = new Map(
     previousMessages.filter((message) => message.unread).map((message) => [message.id, message]),
   )
@@ -343,8 +362,10 @@ export async function markAllRead() {
   // refresh below left the nav counts stale until the server answered. A mail
   // account's folder goes to zero (its write is folder-wide); a folder marked
   // item by item loses only the items marked here.
-  mail$.threads.set(threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)))
-  mail$.messages.set(previousMessages.map((message) => (message.unread ? { ...message, unread: false } : message)))
+  if (activeView) {
+    mail$.threads.set(threads.map((thread) => (thread.unread ? { ...thread, unread: false, unread_count: 0 } : thread)))
+    mail$.messages.set(previousMessages.map((message) => (message.unread ? { ...message, unread: false } : message)))
+  }
   for (const accountId of mailAccountIds) {
     const accountFolders = mail$.foldersByAccount[accountId].get()
     const folderId =
@@ -395,7 +416,7 @@ export async function markAllRead() {
     showToast(failure.reason instanceof Error ? failure.reason.message : t('notification.markReadFailed'), 'error')
     // Some writes may have landed; reload so the rows show what the server has.
     // The folder refresh below reconciles the badges either way.
-    if (viewKey() === previousView) void loadThreads(false)
+    if (activeView && viewKey() === previousView) void loadThreads(false)
   }
 
   // The visible list can span multiple accounts (unified inbox, Starred, a
@@ -405,16 +426,69 @@ export async function markAllRead() {
   // the user is still on this account, so a view opened meanwhile keeps its own.
   await Promise.all(affectedAccountIds.map((accountId) => refreshAccountFoldersCache(accountId, false)))
   if (selectedAcc) publishCachedFolders(selectedAcc)
+  // A queued write can start after navigation. Refresh any mailbox now showing
+  // its results, since its rows were not part of the optimistic update.
+  const currentAccount = ui$.selectedAccount.peek()
+  if (!activeView && (currentAccount === 'unified' || affectedAccountIds.includes(currentAccount))) {
+    await loadThreads(false)
+  }
 }
 
-const pendingInboxReads = new Map<string, Promise<void>>()
+type InboxRead = {
+  write: Promise<void>
+  flagWrites?: Promise<void>
+}
+const pendingInboxReads = new Map<string, InboxRead>()
+
+function matchesInbox(folderId: string, inboxId: string) {
+  return folderId === inboxId || folderId.toLowerCase() === 'inbox'
+}
+
+function afterThreadInboxRead(threadId: string, action: () => Promise<void>) {
+  const accountId = pendingInboxReads.size ? findLocalThread(threadId)?.account_id : undefined
+  return afterInboxRead(accountId, action)
+}
+
+function afterInboxRead(accountId: string | undefined, action: () => Promise<void>): Promise<void> {
+  const pending = accountId ? pendingInboxReads.get(accountId) : undefined
+  return pending ? enqueueInboxAction([pending], action) : action()
+}
+
+export function afterPendingInboxReads(accountIds: string[], action: () => Promise<void>): Promise<void> {
+  if (!accountIds.some((id) => pendingInboxReads.has(id))) return action()
+  // A deferred unified or board action also reserves its other accounts.
+  // A later flag change on one of them must wait even if that account was idle.
+  const pending = Array.from(new Set(accountIds), (id) => {
+    const existing = pendingInboxReads.get(id)
+    if (existing) return existing
+    const read: InboxRead = { write: Promise.resolve() }
+    pendingInboxReads.set(id, read)
+    void finishInboxRead(id, read)
+    return read
+  })
+  return enqueueInboxAction(pending, action)
+}
+
+function enqueueInboxAction(pending: InboxRead[], action: () => Promise<void>): Promise<void> {
+  // Start the whole action after the Inbox write settles, so it snapshots
+  // the reconciled flags and the core receives the writes in click order.
+  const next = Promise.allSettled(pending.map((read) => read.flagWrites ?? read.write)).then(action)
+  const settled = next.then(
+    () => {},
+    () => {},
+  )
+  for (const read of pending) read.flagWrites = settled
+  return next
+}
 
 export async function markUnifiedInboxRead() {
-  await Promise.all(
-    unifiedAccounts()
-      .filter(({ id }) => !isLocalAccountId(id))
-      .map(({ id }) => markAccountInboxRead(id)),
-  )
+  const writes: Promise<void>[] = []
+  batch(() => {
+    for (const { id } of unifiedAccounts()) {
+      if (!isLocalAccountId(id)) writes.push(markAccountInboxRead(id))
+    }
+  })
+  await Promise.all(writes)
 }
 
 // Mark one account's Inbox (or its synthetic RSS Inbox) read from account-level
@@ -423,70 +497,140 @@ export async function markUnifiedInboxRead() {
 export async function markAccountInboxRead(accountId: string) {
   if (!accountId || accountId === 'unified') return
   const pending = pendingInboxReads.get(accountId)
-  if (pending) return pending
+  if (pending && !pending.flagWrites) return pending.write
 
-  const write = writeAccountInboxRead(accountId).finally(() => pendingInboxReads.delete(accountId))
-  pendingInboxReads.set(accountId, write)
-  return write
+  const folderId = accountFolderForRole(mail$.foldersByAccount[accountId].get(), 'inbox') ?? 'inbox'
+  const read: InboxRead = { write: Promise.resolve() }
+  const write = () => writeAccountInboxRead(accountId, folderId)
+  batch(() => {
+    // An intervening flag action makes this a new request, even if the earlier
+    // Inbox write is still running.
+    read.write = pending?.flagWrites ? pending.flagWrites.then(write) : write()
+    pendingInboxReads.set(accountId, read)
+  })
+  void finishInboxRead(accountId, read)
+  return read.write
 }
 
-async function writeAccountInboxRead(accountId: string) {
-  const folderId =
-    mail$.foldersByAccount[accountId].get()?.find((folder) => folderMatches(folder, accountId, 'inbox'))?.id || 'inbox'
+async function finishInboxRead(accountId: string, read: InboxRead) {
+  await read.write.catch(() => {})
+  let writes = read.flagWrites
+  while (writes) {
+    await writes
+    if (writes === read.flagWrites) break
+    writes = read.flagWrites
+  }
+  if (pendingInboxReads.get(accountId) === read) pendingInboxReads.delete(accountId)
+}
+
+async function writeAccountInboxRead(accountId: string, folderId: string) {
+  const previousUnread = mail$.foldersByAccount[accountId]
+    .get()
+    ?.find((folder) => folderMatches(folder, accountId, 'inbox'))?.unread
+  // Only restore rows this write changed and that are still loaded.
+  const cleared = new WeakMap<Message, Message>()
+  const markRead = (row: Message) => {
+    if (!row.unread || row.account_id !== accountId || !matchesInbox(row.folder_id, folderId)) return row
+    const read = { ...row, unread: false, unread_count: 0 }
+    cleared.set(read, row)
+    return read
+  }
+  const settleCount = previousUnread === undefined ? undefined : holdFolderUnread(accountId, folderId)
+  batch(() => {
+    if (settleCount) updateCachedFolderUnread(accountId, folderId, 0, 'local')
+    updateInboxReadRows(accountId, folderId, markRead)
+  })
+
+  let result: MutationResult & { ok?: boolean }
   try {
-    const result = await invoke<MutationResult & { ok?: boolean }>('mail.markAllRead', {
+    result = await invoke<typeof result>('mail.markAllRead', {
       account_id: accountId,
       folder_id: folderId,
     })
     if (result?.ok === false) throw new Error(t('notification.markReadFailed'))
-    if (result?.folder_unreads?.[accountId]) applyMutationFolderUnreads(result)
-    else updateCachedFolderUnread(accountId, folderId, 0, 'mutation')
   } catch (error) {
     showToast(error instanceof Error ? error.message : t('notification.markReadFailed'), 'error')
+    // A refresh held during the write may have seen new mail. Read the cache
+    // again before restoring the count, so that update is not lost.
+    const version = captureFolderUnreadVersion()
+    const refreshed = await refreshAccountFoldersCache(accountId, false)
+    const refreshedInbox = refreshed.find((folder) => folderMatches(folder, accountId, 'inbox'))
+    batch(() => {
+      if (settleCount) settleCount(refreshedInbox?.unread ?? previousUnread ?? 0, !!refreshedInbox, version)
+      else {
+        publishCachedFolders(accountId)
+        publishCachedFolders('unified')
+      }
+      const unread = inboxUnread(mail$.foldersByAccount[accountId].get())
+      const restore = (row: Message) => {
+        const previous = cleared.get(row)
+        return previous && !row.unread ? { ...row, unread: true, unread_count: previous.unread_count } : row
+      }
+      updateInboxReadRows(accountId, folderId, refreshedInbox && unread === 0 ? markRead : restore)
+    })
     return
   }
 
-  // Apply the confirmed write to the latest view. A failed write leaves the
-  // rows and counts intact while navigation, sync, and other writes continue.
+  batch(() => {
+    if (result?.folder_unreads?.[accountId]) applyMutationFolderUnreads(result)
+    else updateCachedFolderUnread(accountId, folderId, 0, 'mutation')
+    const unread = inboxUnread(mail$.foldersByAccount[accountId].get())
+    settleCount?.(unread, true)
+    // A page loaded while the write was pending can still have the old flags.
+    updateInboxReadRows(accountId, folderId, unread === 0 ? markRead : undefined)
+  })
+  void refreshAccountFoldersCache(accountId, false)
+}
+
+function updateInboxReadRows(accountId: string, folderId: string, update?: (row: Message) => Message) {
+  if (update) {
+    mail$.threads.set(mail$.threads.get().map(update))
+    mail$.messages.set(mail$.messages.get().map(update))
+  }
   const foldersByAccount = mail$.foldersByAccount.get()
   const accountUnread = inboxUnread(foldersByAccount[accountId])
   const participants = unifiedAccounts()
   const includedInUnified = participants.some(({ id }) => id === accountId)
-  const inAccountInbox = (item: Pick<Message, 'account_id' | 'folder_id'>) =>
-    item.account_id === accountId &&
-    folderMatches({ id: item.folder_id, account_id: accountId, name: '', role: '', unread: 0 }, accountId, folderId)
-
-  if (accountUnread === 0) {
-    const markRead = (row: Message) =>
-      row.unread && inAccountInbox(row) ? { ...row, unread: false, unread_count: 0 } : row
-    mail$.threads.set(mail$.threads.get().map(markRead))
-    mail$.messages.set(mail$.messages.get().map(markRead))
-    const affectedKanbanThreadIds = new Set(
-      Object.values(kanban$.threads.get())
-        .flat()
-        .filter((thread) => thread.unread && inAccountInbox(thread))
-        .map((thread) => thread.thread_id),
-    )
-    for (const threadId of affectedKanbanThreadIds) {
-      updateKanbanThread(threadId, markRead)
-    }
-  }
-
   const unifiedUnread = participants.reduce((total, { id }) => total + inboxUnread(foldersByAccount[id]), 0)
   const columnKeys = new Set([...Object.keys(kanban$.threads.get()), ...Object.keys(kanban$.unreadCounts.get())])
   for (const key of columnKeys) {
-    const [columnAccountId, columnFolderId] = key.split('\n')
-    if (!columnFolderId) continue
-    if (includedInUnified && columnAccountId === 'unified' && unifiedFolderRole(columnFolderId) === 'inbox') {
+    const threads = kanban$.threads[key].get()
+    let delta = 0
+    let changed = false
+    const nextThreads =
+      update &&
+      threads?.map((row) => {
+        const next = update(row)
+        if (next !== row) {
+          changed = true
+          delta += next.unread ? (next.unread_count ?? 1) : -(row.unread_count ?? 1)
+        }
+        return next
+      })
+    if (changed && nextThreads) kanban$.threads[key].set(nextThreads)
+
+    const [columnAccountId, columnFolderId = ''] = key.split('\n')
+    if (
+      includedInUnified &&
+      columnAccountId === 'unified' &&
+      columnFolderId &&
+      unifiedFolderRole(columnFolderId) === 'inbox'
+    ) {
       kanban$.unreadCounts[key].set(unifiedUnread)
-    } else if (inAccountInbox({ account_id: columnAccountId, folder_id: columnFolderId })) {
+    } else if (columnAccountId === accountId && matchesInbox(columnFolderId, folderId)) {
       kanban$.unreadCounts[key].set(accountUnread)
+    } else if (delta) {
+      const unread = kanban$.unreadCounts[key].get()
+      if (unread !== undefined) kanban$.unreadCounts[key].set(Math.max(0, unread + delta))
     }
   }
-  void refreshAccountFoldersCache(accountId, false)
 }
 
-export async function markMessagesRead(threadId: string, messageIds: string[]) {
+export function markMessagesRead(threadId: string, messageIds: string[]) {
+  return afterThreadInboxRead(threadId, () => writeMessagesRead(threadId, messageIds))
+}
+
+async function writeMessagesRead(threadId: string, messageIds: string[]) {
   const uniqueIds = Array.from(new Set(messageIds.filter(Boolean)))
   if (!threadId || uniqueIds.length === 0) return
 
@@ -594,6 +738,12 @@ export async function markMessagesRead(threadId: string, messageIds: string[]) {
 
 export async function markMessageReadState(message: Message, seen: boolean) {
   if (!message?.id || !message.thread_id) return
+  return afterInboxRead(message.account_id, () =>
+    writeMessageReadState(mail$.messages.peek().find((item) => item.id === message.id) ?? message, seen),
+  )
+}
+
+async function writeMessageReadState(message: Message, seen: boolean) {
   if (message.unread === !seen) return
 
   const previousThreads = mail$.threads.get()
@@ -617,12 +767,14 @@ export async function markMessageReadState(message: Message, seen: boolean) {
   })
 
   try {
-    await invoke('mail.markRead', {
-      thread_id: message.thread_id,
-      folder: message.folder_id,
-      message_ids: [message.id],
-      seen,
-    })
+    applyMutationFolderUnreads(
+      await invoke<MutationResult>('mail.markRead', {
+        thread_id: message.thread_id,
+        folder: message.folder_id,
+        message_ids: [message.id],
+        seen,
+      }),
+    )
   } catch (error) {
     mail$.threads.set(previousThreads)
     mail$.messages.set(previousMessages)

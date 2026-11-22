@@ -11,7 +11,8 @@ import {
   refreshAccountFoldersCache,
   updateCachedFolderUnread,
 } from './mailFolders'
-import { accounts$ } from './accounts'
+import { accounts$, unifiedAccounts } from './accounts'
+import { afterPendingInboxReads } from './mailFlags'
 import { filterThreads, isRssAccount } from '../lib/threadActions'
 import { isUnifiedStarredColumn, loadKanbanColumn } from '../lib/kanbanData'
 import { accountFolderForRole, unifiedFolderRole } from '../lib/unifiedFolders'
@@ -780,18 +781,30 @@ async function markColumnRead(column: KanbanColumn, request: ReadRequest, baseli
   if (clearsBadge) kanban$.unreadCounts[key].set(0)
 }
 
-export async function markColumnAllRead(column: KanbanColumn) {
-  try {
-    await markColumnRead(column, requestRead)
-  } catch {
-    showToast(t('notification.markReadFailed'), 'error')
-  }
+function columnReadAccounts(columns: KanbanColumn[]) {
+  return columns.flatMap((column) =>
+    column.accountId === 'unified' ? unifiedAccounts().map(({ id }) => id) : [column.accountId],
+  )
 }
 
-export async function markBoardAllRead(boardId: string) {
+export function markColumnAllRead(column: KanbanColumn) {
+  return afterPendingInboxReads(columnReadAccounts([column]), async () => {
+    try {
+      await markColumnRead(column, requestRead)
+    } catch {
+      showToast(t('notification.markReadFailed'), 'error')
+    }
+  })
+}
+
+export function markBoardAllRead(boardId: string) {
   const columns = Array.from(
     new Map(getKanbanColumns(boardId).map((column) => [kanbanColumnKey(column), column])).values(),
   )
+  return afterPendingInboxReads(columnReadAccounts(columns), () => writeBoardAllRead(columns))
+}
+
+async function writeBoardAllRead(columns: KanbanColumn[]) {
   const requests = new Map<string, Promise<void>>()
   const request: ReadRequest = (command, payload) => {
     // Reuse a unified folder write for a concrete column covering the same folder.
