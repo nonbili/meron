@@ -31,6 +31,7 @@ import { IconButton } from '../button/IconButton'
 import { Checkbox } from '../field/Checkbox'
 import { LinkifiedText } from '../field/LinkifiedText'
 import { SelectInput, TextInput } from '../field/Field'
+import { TimeInput } from '../field/TimeInput'
 import { alignRepeat, describeRepeat, isPlainRepeat, parseRepeat } from '../../lib/repeatRule'
 import { CustomRepeatDialog } from './CustomRepeatDialog'
 
@@ -508,7 +509,7 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
               value={form.title}
               onChange={(event) => set('title', event.target.value)}
             />
-            <label className="flex items-center gap-2 text-xs font-medium">
+            <label className="flex w-fit items-center gap-2 text-xs font-medium">
               <Checkbox
                 checked={form.allDay}
                 // Leads mean minutes for a timed event and days for an all-day
@@ -530,11 +531,10 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
               {form.allDay ? (
                 <span />
               ) : (
-                <TextInput
-                  type="time"
+                <TimeInput
                   aria-label={t('calendar.fields.startTime')}
                   value={form.startTime}
-                  onChange={(event) => moveStart(form.startDate, event.target.value)}
+                  onChange={(value) => moveStart(form.startDate, value)}
                 />
               )}
               <span className={label}>{t('calendar.fields.ends')}</span>
@@ -548,11 +548,10 @@ export function EventEditorDialog({ editor }: { editor: EventEditor }) {
               {form.allDay ? (
                 <span />
               ) : (
-                <TextInput
-                  type="time"
+                <TimeInput
                   aria-label={t('calendar.fields.endTime')}
                   value={form.endTime}
-                  onChange={(event) => set('endTime', event.target.value)}
+                  onChange={(value) => set('endTime', value)}
                 />
               )}
               <span className={label}>{t('calendar.fields.repeat')}</span>

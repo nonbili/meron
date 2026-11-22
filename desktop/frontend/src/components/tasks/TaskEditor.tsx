@@ -4,6 +4,7 @@ import { CalendarDays, Clock, X } from 'lucide-react'
 
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
+import { TIME_SLOTS_ATTRIBUTE, TimeInput } from '../field/TimeInput'
 
 import { useTranslation } from '../../lib/i18n'
 import { taskDueAt, taskDueTime, toDateInputValue } from '../../lib/date'
@@ -115,7 +116,9 @@ export function TaskEditor({
   useEffect(() => {
     const isOutside = (target: EventTarget | null) => {
       const row = rootRef.current?.closest('[data-task-row]') ?? rootRef.current
-      return target instanceof Node && !!row && !row.contains(target)
+      if (!(target instanceof Node) || !row || row.contains(target)) return false
+      // The due time's slot list renders in a portal outside the row.
+      return !(target instanceof Element && target.closest(`[${TIME_SLOTS_ATTRIBUTE}]`))
     }
     let pressing = false
     const onMouseDown = () => {
@@ -231,13 +234,13 @@ export function TaskEditor({
               className="min-w-0 bg-transparent py-1.5 text-xs text-primary outline-none"
             />
             {savedDueTime ? (
-              <input
-                type="time"
+              <TimeInput
+                unstyled
                 aria-label={t('tasks.dueTime')}
                 value={dueTime}
-                onChange={(event) => {
-                  setDueTime(event.target.value)
-                  if (event.target.value) saveDueTime(event.target.value)
+                onChange={(value) => {
+                  setDueTime(value)
+                  if (value) saveDueTime(value)
                 }}
                 onBlur={() => setDueTime(savedDueTime)}
                 className="min-w-0 bg-transparent py-1.5 text-xs text-primary outline-none"

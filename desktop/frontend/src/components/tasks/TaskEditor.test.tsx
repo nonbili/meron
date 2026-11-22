@@ -248,3 +248,18 @@ it('saves a return to the stored time while another save is pending', async () =
     ]),
   )
 })
+
+it('saves a picked time slot and keeps the row open', async () => {
+  const { taskDueAt } = await import('../../lib/date')
+  const timed = { ...task, due_at: taskDueAt('2026-06-10', '14:30'), due_has_time: true }
+  tasks$.editingId.set(task.id)
+  render(<TaskEditor task={timed} lists={[]} />)
+  const time = document.querySelector<HTMLInputElement>('input[type="time"]')!
+  fireEvent.click(time)
+  const slot = document.querySelectorAll<HTMLElement>('[role="option"]')[30]
+  fireEvent.mouseDown(slot)
+  fireEvent.mouseUp(slot)
+  fireEvent.click(slot)
+  await waitFor(() => expect(updates.some((patch) => patch.due_at === taskDueAt('2026-06-10', '15:00'))).toBe(true))
+  expect(tasks$.editingId.peek()).toBe(task.id)
+})
