@@ -75,6 +75,18 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.6.0" date="2026-11-22">
+      <description>
+        <ul>
+          <li>Sync calendars and tasks with CalDAV, Google Calendar, and Google Tasks.</li>
+          <li>Import and export .ics files, pick time slots, and customise event repeats.</li>
+          <li>Sync and edit contacts with CardDAV and Google Contacts.</li>
+          <li>Forward mail with rules and customise the conversation footer.</li>
+          <li>Mark mail as spam with a shortcut and mark the unified inbox as read.</li>
+          <li>Simplify remote content controls, cache avatars, and fix composer shortcuts and pasting.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.5.5" date="2026-11-19">
       <description>
         <ul>

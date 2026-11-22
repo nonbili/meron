@@ -1,0 +1,6 @@
+- Sync calendars and tasks with CalDAV, Google Calendar, and Google Tasks.
+- Import and export .ics files, pick time slots, and customise event repeats.
+- Sync and edit contacts with CardDAV and Google Contacts.
+- Forward mail with rules and customise the conversation footer.
+- Mark mail as spam with a shortcut and mark the unified inbox as read.
+- Simplify remote content controls, cache avatars, and fix composer shortcuts and pasting.
