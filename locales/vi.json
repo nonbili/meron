@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Đăng nhập bằng {provider}",
   "accounts.oauth.signInWithProvider": "Đăng nhập bằng %1$s",
   "accounts.oauth.waitingForSignIn": "Đang chờ hoàn tất đăng nhập bằng {provider}...",
+  "accounts.oauth.wrongGoogleAccount": "Đăng nhập bằng tài khoản Google hiển thị trong Meron",
   "accounts.providers.customDescription": "Bất kỳ máy chủ thư nào",
   "accounts.providers.gmailDescription": "Tài khoản Google",
   "accounts.providers.gmailName": "Gmail",

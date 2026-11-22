@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Aanmelden met {provider}",
   "accounts.oauth.signInWithProvider": "Aanmelden met %1$s",
   "accounts.oauth.waitingForSignIn": "Wachten tot aanmelden bij {provider} is voltooid...",
+  "accounts.oauth.wrongGoogleAccount": "Meld je aan met het Google-account dat in Meron wordt getoond",
   "accounts.providers.customDescription": "Elke mailserver",
   "accounts.providers.gmailDescription": "Google-account",
   "accounts.providers.gmailName": "Gmail",

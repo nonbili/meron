@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "使用 {provider} 登入",
   "accounts.oauth.signInWithProvider": "使用 %1$s 登入",
   "accounts.oauth.waitingForSignIn": "正在等待 {provider} 登入完成...",
+  "accounts.oauth.wrongGoogleAccount": "請使用 Meron 中顯示的 Google 帳號登入",
   "accounts.providers.customDescription": "任何郵件伺服器",
   "accounts.providers.gmailDescription": "Google 帳戶",
   "accounts.providers.gmailName": "Gmail",

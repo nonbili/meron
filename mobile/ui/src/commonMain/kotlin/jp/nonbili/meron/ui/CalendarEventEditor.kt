@@ -21,6 +21,8 @@ import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Schedule
@@ -80,6 +82,21 @@ internal sealed interface CalendarEditorTarget {
     ) : CalendarEditorTarget
 }
 
+/** A synced event's own rule, which none of the editor's choices says: the
+ *  core keeps it when this goes back. */
+private const val SERVER_REPEAT = "custom"
+
+/** The Repeat choice that opens the custom repeat editor. */
+private const val CUSTOMIZE = "\u0000customize"
+
+/** A repeating event made elsewhere whose rule the core cannot say as one. */
+private fun hasServerRepeat(item: CalendarItem): Boolean = item.source == "event" && item.recurring && item.repeat.isBlank()
+
+/** A calendar as the picker names it: with its account, since two accounts
+ *  can each have a "Personal". A primary calendar already goes by its
+ *  account's name. */
+private fun calendarLabel(calendar: SyncedCalendar): String = if (calendar.accountName.isNotBlank() && calendar.name != calendar.accountName) "${calendar.name} (${calendar.accountName})" else calendar.name
+
 private val repeats =
     listOf(
         "" to "calendar.repeat.none",
@@ -119,21 +136,29 @@ internal fun CalendarEventEditor(
     onSave: (CalendarEventParams) -> Unit,
     onDelete: (eventId: String) -> Unit,
     onOpenMail: (CalendarItem) -> Unit,
+    /** Synced calendars, for the picker; the writable ones take events. */
+    calendars: List<SyncedCalendar> = emptyList(),
+    /** The calendar the last new event went in, offered first for the next. */
+    lastCalendar: String = "",
+    onExport: (eventId: String) -> Unit = {},
 ) {
     val item = (target as? CalendarEditorTarget.Edit)?.item
     val invite = item?.source == "invite"
+    val synced = item?.calendar?.takeIf { it.isNotBlank() }?.let { id -> calendars.firstOrNull { it.id == id } }
+    // A subscription or a calendar shared read-only: shown, not changed.
+    val readOnly = synced != null && !synced.writable
+    val writableCalendars = calendars.filter { it.writable }
+    var calendar by remember {
+        mutableStateOf(
+            item?.calendar ?: lastCalendar.takeIf { last -> calendars.any { it.id == last && it.writable } }.orEmpty(),
+        )
+    }
+    var customizing by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf(item?.title.orEmpty()) }
     var notes by remember { mutableStateOf(item?.notes.orEmpty()) }
     var location by remember { mutableStateOf(item?.location.orEmpty()) }
     var allDay by remember { mutableStateOf(item?.allDay ?: false) }
-    var repeat by remember { mutableStateOf(item?.repeat.orEmpty()) }
-    // A rule desktop's custom repeat editor made (an RRULE) is kept as it is
-    // unless another choice replaces it.
-    val repeatOptions =
-        remember(item?.repeat) {
-            val own = item?.repeat.orEmpty()
-            if (repeats.any { it.first == own }) repeats else repeats + (own to "calendar.repeat.custom")
-        }
+    var repeat by remember { mutableStateOf(if (item != null && hasServerRepeat(item)) SERVER_REPEAT else item?.repeat.orEmpty()) }
     // An all-day item's bounds are UTC midnights with an exclusive end; here
     // the end is the last day, as the user names it.
     var startDay by remember {
@@ -157,6 +182,31 @@ internal fun CalendarEventEditor(
     var startMinutes by remember { mutableStateOf(item?.takeUnless { it.allDay }?.let { minutesOf(it.start) } ?: (9 * 60)) }
     var endMinutes by remember { mutableStateOf(item?.takeUnless { it.allDay }?.let { minutesOf(maxOf(it.start, it.end)) } ?: (10 * 60)) }
     var picking by remember { mutableStateOf<Picking?>(null) }
+    // What a custom repeat's days and end are counted from: the series' first
+    // day, moved by as many days as the start has been moved here.
+    val openedStartDay = remember { startDay }
+    val openedSeriesDay = remember { item?.seriesDate?.let(::parseIsoDate) }
+
+    fun seriesDayOf(day: CivilDate): CivilDate = openedSeriesDay?.plusDays(day.epochDay - openedStartDay.epochDay) ?: day
+
+    // A rule chosen in this edit, and the first day it was chosen for: each
+    // move of the start moves it, so moving back restores it exactly. The
+    // event's own rule is left as it was for the core to move: it knows the
+    // series' zone, where a time change can cross midnight.
+    var anchor by remember { mutableStateOf<Pair<String, CivilDate>?>(null) }
+
+    /** Move the start's day, a custom repeat chosen here moving with it. */
+    fun moveStartDay(day: CivilDate) {
+        startDay = day
+        anchor?.let { (rule, from) -> repeat = alignRepeat(rule, from, seriesDayOf(day)) }
+    }
+
+    fun chooseRepeat(value: String) {
+        // The event's own rule picked again is the one left as it was: the
+        // core moves it with the series, wherever the start now is.
+        anchor = if (item != null && value == item.repeat) null else value to seriesDayOf(startDay)
+        repeat = value
+    }
     var alert by remember { mutableStateOf(firstAlert(item?.alerts)) }
     var secondAlert by remember { mutableStateOf(item?.alerts?.getOrNull(1) ?: NO_ALERT) }
 
@@ -187,6 +237,7 @@ internal fun CalendarEventEditor(
             repeat = repeat,
             occurrenceStart = item?.takeIf { it.recurring }?.start ?: 0,
             alerts = alerts(),
+            calendar = calendar,
         )
     }
 
@@ -213,7 +264,9 @@ internal fun CalendarEventEditor(
         containerColor = colors.surface,
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 12.dp)) {
-            if (item != null && invite) {
+            // An invitation, or an event on a calendar this device may not
+            // change: what it is, not fields to edit.
+            if (item != null && (invite || readOnly)) {
                 Column(
                     modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -224,6 +277,9 @@ internal fun CalendarEventEditor(
                         color = colors.onSurfaceVariant,
                     )
                     if (item.location.isNotBlank()) InviteLocation(item.location)
+                    if (readOnly && synced != null) {
+                        Text("${calendarLabel(synced)} · ${tr("calendar.readOnly")}", color = colors.onSurfaceVariant)
+                    }
                 }
             } else {
                 TextField(
@@ -264,13 +320,61 @@ internal fun CalendarEventEditor(
                     onPickDate = { picking = Picking.EndDate },
                     onPickTime = { picking = Picking.EndTime },
                 )
+                // The plain choices, then the event's own rule and the one
+                // being made, and last the way to make one.
+                val repeatLabels =
+                    buildList {
+                        repeats.forEach { (value, key) -> add(value to tr(key)) }
+                        if (item != null && hasServerRepeat(item)) {
+                            add(SERVER_REPEAT to tr(if (item.calendar.isNotBlank()) "calendar.repeat.serverRule" else "calendar.repeat.custom"))
+                        }
+                        // The event's own rule as it opened only while its first
+                        // day has not moved; moved, the rule shown is it moved along.
+                        // The event's own rule, which the core moves with the series.
+                        val ownRule = item?.repeat.orEmpty()
+                        val locale = LocalAppLocale.current
+                        for (value in setOf(ownRule, repeat)) {
+                            // The event's own rule is named as the core will save
+                            // it, moved with the start; its value stays the rule
+                            // as it opened, for the core to move.
+                            val shown =
+                                if (value == ownRule && anchor == null && openedSeriesDay != null) {
+                                    alignRepeat(value, openedSeriesDay, seriesDayOf(startDay))
+                                } else {
+                                    value
+                                }
+                            val rule = if (isPlainRepeat(shown)) null else parseRepeat(shown)
+                            if (rule != null) add(value to describeRepeat(rule) { key, args -> localizedString(locale, key, args) })
+                        }
+                        add(CUSTOMIZE to tr("calendar.repeat.customize"))
+                    }.distinctBy { it.first }
                 PickerRow(
                     icon = Icons.Filled.Repeat,
-                    value = tr(repeatOptions.first { it.first == repeat }.second),
-                    options = repeatOptions,
-                    optionLabel = { tr(it.second) },
-                    onPick = { repeat = it.first },
+                    value = repeatLabels.firstOrNull { it.first == repeat }?.second.orEmpty(),
+                    options = repeatLabels,
+                    optionLabel = { it.second },
+                    onPick = { if (it.first == CUSTOMIZE) customizing = true else chooseRepeat(it.first) },
                 )
+                if (writableCalendars.isNotEmpty() || synced != null) {
+                    val picked = calendars.firstOrNull { it.id == calendar }
+                    val calendarOptions =
+                        if (readOnly && synced != null) {
+                            listOf(synced.id to "${calendarLabel(synced)} · ${tr("calendar.readOnly")}")
+                        } else {
+                            // A server's own rule cannot be kept on this device.
+                            (if (item?.calendar.isNullOrBlank() || repeat != SERVER_REPEAT) listOf("" to tr("calendar.onThisDevice")) else emptyList()) +
+                                writableCalendars.map { it.id to calendarLabel(it) }
+                        }
+                    PickerRow(
+                        icon = Icons.Filled.Event,
+                        iconTint = picked?.let { calendarColor(it.id, it.color) },
+                        value = calendarOptions.firstOrNull { it.first == calendar }?.second ?: tr("calendar.onThisDevice"),
+                        options = if (readOnly) emptyList() else calendarOptions,
+                        optionLabel = { it.second },
+                        // Choosing another calendar moves the event there on save.
+                        onPick = { calendar = it.first },
+                    )
+                }
                 FieldRow(
                     icon = Icons.Outlined.Place,
                     value = location,
@@ -291,7 +395,7 @@ internal fun CalendarEventEditor(
             PickerRow(
                 icon = Icons.Filled.Notifications,
                 value = first?.let { alertLabel(it, alertsAllDay) } ?: defaultLabel,
-                options = listOf<Int?>(null, NO_ALERT) + alertOptions(alertsAllDay),
+                options = if (readOnly) emptyList() else listOf<Int?>(null, NO_ALERT) + alertOptions(alertsAllDay),
                 optionLabel = { it?.let { lead -> alertLabel(lead, alertsAllDay) } ?: defaultLabel },
                 onPick = { alert = it },
             )
@@ -300,7 +404,7 @@ internal fun CalendarEventEditor(
                     icon = null,
                     label = tr("calendar.alert.second"),
                     value = alertLabel(secondAlert, alertsAllDay),
-                    options = listOf<Int?>(NO_ALERT) + alertOptions(alertsAllDay).filter { it != first },
+                    options = if (readOnly) emptyList() else listOf<Int?>(NO_ALERT) + alertOptions(alertsAllDay).filter { it != first },
                     optionLabel = { alertLabel(it ?: NO_ALERT, alertsAllDay) },
                     onPick = { secondAlert = it ?: NO_ALERT },
                 )
@@ -310,17 +414,26 @@ internal fun CalendarEventEditor(
                 onNotesChange = { notes = it },
                 minLines = if (invite) 6 else 2,
                 maxLines = if (invite) 12 else 6,
+                editable = !readOnly,
             )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 20.dp, top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (item != null) {
-                    IconButton(onClick = { onDelete(item.id) }) {
+                    if (!readOnly) {
+                        IconButton(onClick = { onDelete(item.id) }) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = if (invite) tr("calendar.removeFromCalendar") else tr("buttons.delete"),
+                                tint = colors.error,
+                            )
+                        }
+                    }
+                    IconButton(onClick = { onExport(item.id) }) {
                         Icon(
-                            Icons.Filled.Delete,
-                            contentDescription = if (invite) tr("calendar.removeFromCalendar") else tr("buttons.delete"),
-                            tint = colors.error,
+                            Icons.Filled.Download,
+                            contentDescription = tr(if (item.recurring) "calendar.file.exportSeries" else "calendar.file.exportEvent"),
                         )
                     }
                     if (item.threadId.isNotBlank()) {
@@ -332,7 +445,21 @@ internal fun CalendarEventEditor(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                Button(onClick = { onSave(params()) }, enabled = !saving) { Text(tr("buttons.save")) }
+                Button(
+                    onClick = {
+                        onSave(
+                            params().copy(
+                                original = if (item != null) opened else null,
+                                // Only a rule chosen here was moved with the start.
+                                repeatAsShown = if (item != null) anchor != null else null,
+                                // The series' first day a chosen rule was placed
+                                // for: the core moves it on in the series' zone.
+                                repeatFrom = if (item != null && anchor != null) seriesDayOf(startDay).isoString() else null,
+                            ),
+                        )
+                    },
+                    enabled = !saving && !readOnly,
+                ) { Text(tr("buttons.save")) }
             }
         }
     }
@@ -367,7 +494,7 @@ internal fun CalendarEventEditor(
                             if (current == Picking.StartDate) {
                                 // Moving the start moves the end with it, keeping the length.
                                 endDay = endDay.plusDays(day.epochDay - startDay.epochDay)
-                                startDay = day
+                                moveStartDay(day)
                             } else {
                                 endDay = maxOf(day, startDay)
                             }
@@ -409,6 +536,26 @@ internal fun CalendarEventEditor(
 
         null -> {}
     }
+
+    if (customizing) {
+        CustomRepeatDialog(
+            // A server's rule cannot be opened; the editor starts afresh. The
+            // event's own rule opens moved with the start, as the core would
+            // move it; Done makes it one chosen here.
+            value =
+                when {
+                    repeat == SERVER_REPEAT -> ""
+                    anchor == null && openedSeriesDay != null -> alignRepeat(repeat, openedSeriesDay, seriesDayOf(startDay))
+                    else -> repeat
+                },
+            first = seriesDayOf(startDay),
+            onDone = {
+                chooseRepeat(it)
+                customizing = false
+            },
+            onDismiss = { customizing = false },
+        )
+    }
 }
 
 /** The editor's text fields sit bare on the sheet, as the task editor's do. */
@@ -431,6 +578,7 @@ private val EditorIconColumn = 38.dp
 private fun EditorRow(
     icon: ImageVector?,
     modifier: Modifier = Modifier,
+    iconTint: Color? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     Row(
@@ -438,7 +586,7 @@ private fun EditorRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(EditorIconColumn)) {
-            if (icon != null) Icon(icon, contentDescription = null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (icon != null) Icon(icon, contentDescription = null, Modifier.size(22.dp), tint = iconTint ?: MaterialTheme.colorScheme.onSurfaceVariant)
         }
         content()
     }
@@ -484,8 +632,9 @@ private fun NotesRow(
     onNotesChange: (String) -> Unit,
     minLines: Int,
     maxLines: Int,
+    editable: Boolean = true,
 ) {
-    var editing by remember { mutableStateOf(notes.isBlank()) }
+    var editing by remember { mutableStateOf(editable && notes.isBlank()) }
     // Only a tap on the read view moves focus into the field.
     var focusOnEdit by remember { mutableStateOf(false) }
     if (editing) {
@@ -516,7 +665,7 @@ private fun NotesRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clickable {
+                .clickable(enabled = editable) {
                     focusOnEdit = true
                     editing = true
                 }.padding(start = 24.dp, end = 4.dp),
@@ -540,9 +689,10 @@ private fun <T> PickerRow(
     optionLabel: @Composable (T) -> String,
     onPick: (T) -> Unit,
     label: String? = null,
+    iconTint: Color? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
-    EditorRow(icon, modifier = Modifier.clickable { menu = true }) {
+    EditorRow(icon, iconTint = iconTint, modifier = Modifier.clickable(enabled = options.isNotEmpty()) { menu = true }) {
         Box(Modifier.weight(1f)) {
             Column {
                 if (label != null) {

@@ -61,6 +61,17 @@ pub struct EventInput {
     /// field still equal to them was not edited, so a synced event keeps
     /// whatever its server changed it to meanwhile instead of the stale value.
     pub original: Option<Box<EventInput>>,
+    /// Whether `repeat` is the rule as the editor showed it for the start
+    /// being saved, the editor having moved it with that start itself. Left
+    /// unsaid, an editor that sends `original` is taken to; one that cannot
+    /// place a series' days in its own zone (mobile's) says it does not, and
+    /// a rule left as it was is then moved here, in the series' zone.
+    pub repeat_as_shown: Option<bool>,
+    /// The series' first day (`YYYY-MM-DD`) the editor placed a rule it
+    /// chose for. The core moves that rule to the first day as saved, in the
+    /// series' own zone, where a time change can cross midnight that the
+    /// editor's own calendar does not show.
+    pub repeat_from: Option<String>,
 }
 
 /// Alerts an event can carry on its own, like Apple Calendar's "Alert" and
@@ -128,6 +139,11 @@ impl EventInput {
                 .get("original")
                 .filter(|original| original.is_object())
                 .map(|original| Box::new(Self::from_params(original))),
+            repeat_as_shown: params.get("repeat_as_shown").and_then(Value::as_bool),
+            repeat_from: params
+                .get("repeat_from")
+                .and_then(Value::as_str)
+                .map(str::to_string),
         }
     }
 }
@@ -192,11 +208,15 @@ pub fn create_event(conn: &Connection, input: &EventInput) -> Result<Value> {
     };
     apply_input(&mut event, input)?;
     settle_rule(&CalendarEvent::default(), &mut event, true)?;
+    // The event and its upload together: a sync on another connection (on
+    // mobile, one an earlier edit started) must not find one without the other.
+    let tx = conn.unchecked_transaction()?;
     if let Some(calendar) = input.calendar.as_deref().filter(|c| !c.is_empty()) {
-        let calendar = writable_calendar(conn, calendar)?;
-        caldav::queue_new_event(conn, &calendar, &mut event)?;
+        let calendar = writable_calendar(&tx, calendar)?;
+        caldav::queue_new_event(&tx, &calendar, &mut event)?;
     }
-    let saved = store::save_event(conn, &event)?;
+    let saved = store::save_event(&tx, &event)?;
+    tx.commit()?;
     Ok(json!({ "event": event_json(&saved) }))
 }
 
@@ -212,14 +232,32 @@ fn writable_calendar(conn: &Connection, id: &str) -> Result<caldav::store::DavCa
 }
 
 /// Change an event made here. An accepted invitation's time and title are the
-/// organizer's, so only its notes and alerts are the user's to edit.
+/// organizer's, so only its notes and alerts are the user's to edit. Read and
+/// written in one transaction: a sync on another connection (mobile's) must
+/// not change or remove the event between the two.
 pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<Value> {
+    let tx = conn.unchecked_transaction()?;
+    let result = update_event_in(&tx, id, input)?;
+    tx.commit()?;
+    Ok(result)
+}
+
+fn update_event_in(conn: &Connection, id: &str, input: &EventInput) -> Result<Value> {
+    let repeat_from = input
+        .repeat_from
+        .as_deref()
+        .and_then(|day| NaiveDate::parse_from_str(day, "%Y-%m-%d").ok());
     let mut event = store::event(conn, id)?.ok_or_else(|| anyhow!("no such event: {id}"))?;
     // An editor that says what it opened with (desktop's) shows a repeat as
     // of the start being saved, and moves it with that start itself; so is
     // one chosen in this edit. Otherwise a series' own rule is moved here.
-    let rule_as_shown = input.original.is_some()
-        || super::rrule::from_editor(&input.repeat).is_ok_and(|rule| rule != event.rrule);
+    // An editor that says outright is taken at its word: one that left the
+    // rule as it was wants the latest stored rule moved here, even when a
+    // sync changed it while the editor was open.
+    let rule_as_shown = input.repeat_as_shown.unwrap_or_else(|| {
+        input.original.is_some()
+            || super::rrule::from_editor(&input.repeat).is_ok_and(|rule| rule != event.rrule)
+    });
     // A picker left as it opened is not a move, even if the event has since
     // moved elsewhere (another window, a sync).
     let opened_in = input
@@ -274,6 +312,7 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
         if keep_custom || same_timing || still_a_timed_series {
             event.tzid = before.tzid.clone();
         }
+        place_rule(&mut event, repeat_from);
         settle_rule(&before, &mut event, rule_as_shown)?;
         event.ics = caldav::ics::patch(&before.ics, &before, &event);
         if !moving {
@@ -283,8 +322,6 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
             }
             return Ok(json!({ "event": event_json(&saved) }));
         }
-        let tx = conn.unchecked_transaction()?;
-        let conn = &tx;
         if !synced {
             let calendar = destination
                 .as_ref()
@@ -292,7 +329,6 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
             event.calendar = calendar.id.clone();
             caldav::requeue_restored_event(conn, calendar, &mut event)?;
             let saved = store::save_event(conn, &event)?;
-            tx.commit()?;
             return Ok(json!({ "event": event_json(&saved) }));
         }
         // Moving: deleted from the calendar it leaves, created (with the same
@@ -335,7 +371,6 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
             }
         }
         let saved = store::save_event(conn, &event)?;
-        tx.commit()?;
         // The calendar it left has a deletion to send.
         return Ok(json!({ "event": event_json(&saved), "moved_from": before.calendar }));
     }
@@ -348,6 +383,7 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
         if before.recurring && !before.all_day && event.recurring && !event.all_day {
             event.tzid = before.tzid.clone();
         }
+        place_rule(&mut event, repeat_from);
         settle_rule(&before, &mut event, rule_as_shown)?;
     } else {
         event.notes = input.notes.trim().to_string();
@@ -384,7 +420,14 @@ fn unedited_from_store(input: &EventInput, stored: &CalendarEvent) -> EventInput
         // The series' own times, not an occurrence's.
         out.occurrence_start = 0;
     }
-    if input.repeat == original.repeat {
+    // Alerts left as they opened (for the same kind of event) keep what a
+    // sync brought meanwhile.
+    if input.alerts == original.alerts && input.all_day == original.all_day {
+        out.alerts = None;
+    }
+    // A rule the editor says it chose stays, even one that moved back to
+    // the text it opened with.
+    if input.repeat == original.repeat && input.repeat_as_shown != Some(true) {
         out.repeat = if stored.recurring && stored.rrule.is_empty() {
             CUSTOM_REPEAT.to_string()
         } else {
@@ -456,12 +499,14 @@ fn shift_series_start(event: &CalendarEvent, input: &EventInput) -> Option<i64> 
 /// Remove an event. Returns it whole, so the caller can offer an undo that
 /// hands it straight back to [`restore_event`].
 pub fn delete_event(conn: &Connection, id: &str) -> Result<Value> {
-    let event = store::event(conn, id)?;
+    let tx = conn.unchecked_transaction()?;
+    let event = store::event(&tx, id)?;
     if let Some(synced) = event.as_ref().filter(|e| !e.calendar.is_empty()) {
-        writable_calendar(conn, &synced.calendar)?;
-        caldav::store::mark_deleted(conn, id)?;
+        writable_calendar(&tx, &synced.calendar)?;
+        caldav::store::mark_deleted(&tx, id)?;
     }
-    store::delete_event(conn, id)?;
+    store::delete_event(&tx, id)?;
+    tx.commit()?;
     Ok(json!({
         "ok": true,
         "restore": event.map(|event| serde_json::to_value(event).unwrap_or(Value::Null)),
@@ -475,15 +520,17 @@ pub fn restore_event(conn: &Connection, restore: &Value) -> Result<Value> {
         return Err(anyhow!("not an event to restore"));
     }
     let mut event = event;
+    let tx = conn.unchecked_transaction()?;
     if !event.calendar.is_empty() {
-        match caldav::store::calendar(conn, &event.calendar)?.filter(|c| c.enabled) {
-            Some(calendar) => caldav::requeue_restored_event(conn, &calendar, &mut event)?,
+        match caldav::store::calendar(&tx, &event.calendar)?.filter(|c| c.enabled) {
+            Some(calendar) => caldav::requeue_restored_event(&tx, &calendar, &mut event)?,
             // Its calendar went away meanwhile: keep the event on this device.
             // Its `ics` still describes it, repeats and all.
             None => event.calendar.clear(),
         }
     }
-    let saved = store::save_event(conn, &event)?;
+    let saved = store::save_event(&tx, &event)?;
+    tx.commit()?;
     Ok(json!({ "event": event_json(&saved) }))
 }
 
@@ -1295,6 +1342,19 @@ fn repeat_ics(event: &CalendarEvent) -> String {
 /// moves with a series whose first day moved; either is refused when it ends
 /// before that day or leaves it out. A rule kept as it was on a series that
 /// has not moved is left as it is, the server's own reading of it included.
+/// Move a rule the editor placed for the series starting on `from` to the
+/// first day as saved, in the series' zone. No-op without one.
+fn place_rule(event: &mut CalendarEvent, from: Option<NaiveDate>) {
+    let Some(from) = from else { return };
+    if !event.recurring || event.rrule.is_empty() {
+        return;
+    }
+    let to = first_day(event);
+    if from != to {
+        event.rrule = super::rrule::align(&event.rrule, from, to);
+    }
+}
+
 fn settle_rule(before: &CalendarEvent, event: &mut CalendarEvent, as_shown: bool) -> Result<()> {
     if !event.recurring || event.rrule.is_empty() {
         return Ok(());

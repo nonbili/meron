@@ -399,6 +399,39 @@ internal class MeronMobileState(
     var calendarMonth by mutableStateOf(localDateParts(currentTimeMillis()).month)
     var calendarItems by mutableStateOf(emptyList<CalendarItem>())
 
+    /** CalDAV (and Google Calendar) accounts, for the Calendars & tasks page. */
+    var calendarAccounts by mutableStateOf(emptyList<DavAccount>())
+
+    /** Synced calendars shown, for colours, the filter and the editor's picker. */
+    var syncedCalendars by mutableStateOf(emptyList<SyncedCalendar>())
+
+    /** Calendars left out of the views ([LOCAL_CALENDAR] for this device's
+     *  events). Only what is drawn: hidden events stay synced and alert. */
+    var hiddenCalendars by mutableStateOf(loadAppStringSet(prefs, HIDDEN_CALENDARS_PREF))
+
+    /** The calendar the last new event went in, offered first for the next. */
+    var lastCalendar by mutableStateOf("")
+
+    /** A sync asked for from the calendar is running. */
+    var calendarSyncing by mutableStateOf(false)
+
+    /** An account just added, whose card opens to show its calendars. */
+    var newCalendarAccountId by mutableStateOf("")
+    var googleTasksAccounts by mutableStateOf(emptyList<GoogleTasksAccount>())
+
+    /** A Google Calendar, Contacts or Tasks sign-in under way, and why the
+     *  last one failed (empty when it did not). */
+    var googleSignIn by mutableStateOf<GoogleServiceSignIn?>(null)
+    var googleSignInError by mutableStateOf("")
+
+    /** Bumped by each Google service sign-in and by Cancel, so a late answer
+     *  to an older one is ignored. */
+    internal var googleSignInAttempt = 0
+
+    /** Bumped when address books change outside the Contacts screen (a
+     *  Google Contacts sign-in finishing), so it re-reads them. */
+    var addressBooksVersion by mutableStateOf(0)
+
     /** Lists and items for the Tasks screen; empty until it is first opened. */
     var taskLists by mutableStateOf(emptyList<TaskListSummary>())
     var pendingTaskThread by mutableStateOf<ThreadSummary?>(null)

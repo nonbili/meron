@@ -26,6 +26,8 @@ private const val APP_LANGUAGE_PREF = "app_language_v1"
 internal const val INBOX_FOLDER = "inbox"
 internal const val LIVE_MAIL_PUSH_PREF = "live_mail_push_v1"
 internal const val BACKGROUND_SYNC_ENABLED_PREF = "background_sync_enabled_v1"
+internal const val CALENDAR_ENABLED_PREF = "calendar_enabled_v1"
+internal const val TASKS_ENABLED_PREF = "tasks_enabled_v1"
 
 // Which buttons a new-mail notification carries, as the settings screen stores
 // it: same key and ids as the shared UI's NOTIFICATION_ACTIONS_PREF (mobile/ui

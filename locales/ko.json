@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "{provider} 계정으로 로그인",
   "accounts.oauth.signInWithProvider": "%1$s(으)로 로그인",
   "accounts.oauth.waitingForSignIn": "{provider} 로그인 완료 대기 중...",
+  "accounts.oauth.wrongGoogleAccount": "Meron에 표시된 Google 계정으로 로그인하세요",
   "accounts.providers.customDescription": "기타 메일 서버",
   "accounts.providers.gmailDescription": "Google 계정",
   "accounts.providers.gmailName": "Gmail",

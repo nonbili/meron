@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Logga in med {provider}",
   "accounts.oauth.signInWithProvider": "Logga in med %1$s",
   "accounts.oauth.waitingForSignIn": "Väntar på att inloggning med {provider} ska slutföras...",
+  "accounts.oauth.wrongGoogleAccount": "Logga in med det Google-konto som visas i Meron",
   "accounts.providers.customDescription": "Valfri e-postserver",
   "accounts.providers.gmailDescription": "Google-konto",
   "accounts.providers.gmailName": "Gmail",

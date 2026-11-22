@@ -1000,6 +1000,14 @@ data class CalendarItem(
     /** Whether [alerts] count all-day days rather than minutes: the series'
      *  kind, which one occurrence of an invitation can differ from. */
     val alertsAllDay: Boolean? = null,
+    /** The synced calendar it comes from; empty for one on this device. */
+    val calendar: String = "",
+    /** A repeating event's first date (`YYYY-MM-DD`), in the zone its
+     *  repeat's dates are counted in; empty for one that does not repeat. */
+    val seriesDate: String = "",
+    /** The zone [seriesDate] is in: an IANA name, `UTC`, or empty for this
+     *  device's own (a floating series) or for whole days. */
+    val seriesZone: String = "",
 )
 
 fun parseCalendarEventsResponse(responseJson: String): List<CalendarItem> =
@@ -1040,6 +1048,9 @@ fun parseCalendarEventsResponse(responseJson: String): List<CalendarItem> =
                         ?.jsonArrayElements()
                         ?.mapNotNull { it.trim().toIntOrNull() },
                 alertsAllDay = entries["alerts_all_day"]?.let { it == "true" },
+                calendar = string("calendar"),
+                seriesDate = string("series_date"),
+                seriesZone = string("series_zone"),
             )
         }.orEmpty()
 
@@ -1056,6 +1067,15 @@ fun parseCalendarRestorePayload(responseJson: String): String? = responseJson.fi
 data class TaskListSummary(
     val id: String,
     val title: String,
+    /** `caldav` or `google` for a synced list; empty for one on this device. */
+    val provider: String = "",
+    /** The address of the account a synced list belongs to. */
+    val account: String = "",
+    /** CalDAV only: the account, as one username may sign in to two servers. */
+    val accountId: String = "",
+    val server: String = "",
+    /** A synced list the server will not let this device change. */
+    val readOnly: Boolean = false,
 )
 
 /**
@@ -1090,7 +1110,19 @@ fun parseTaskListsResponse(responseJson: String): TaskListsResponse {
             ?.jsonArrayElements()
             ?.mapNotNull { item ->
                 val id = item.findJsonStringProperty("id").orEmpty()
-                if (id.isBlank()) null else TaskListSummary(id, item.findJsonStringProperty("title").orEmpty())
+                if (id.isBlank()) {
+                    null
+                } else {
+                    TaskListSummary(
+                        id = id,
+                        title = item.findJsonStringProperty("title").orEmpty(),
+                        provider = item.findJsonStringProperty("provider").orEmpty(),
+                        account = item.findJsonStringProperty("account").orEmpty(),
+                        accountId = item.findJsonStringProperty("account_id").orEmpty(),
+                        server = item.findJsonStringProperty("server").orEmpty(),
+                        readOnly = item.findJsonBooleanProperty("read_only") ?: false,
+                    )
+                }
             }.orEmpty()
     return TaskListsResponse(lists, responseJson.findJsonStringProperty("default_list_id").orEmpty())
 }

@@ -33,6 +33,8 @@ class DateFormatTest {
                     when (style) {
                         DateStyle.Time -> "09:05"
                         DateStyle.Weekday -> "Tue"
+                        DateStyle.WeekdayNarrow -> "T"
+                        DateStyle.WeekdayLong -> "Tuesday"
                         DateStyle.MonthDay -> "Jun 9"
                         DateStyle.MonthDayYear -> "Dec 31, 2025"
                         DateStyle.WeekdayDate -> "Wed, Jun 10, 2026"
@@ -60,6 +62,8 @@ class DateFormatTest {
                 when (style) {
                     DateStyle.Time -> "09:05"
                     DateStyle.Weekday -> "Tue"
+                    DateStyle.WeekdayNarrow -> "T"
+                    DateStyle.WeekdayLong -> "Tuesday"
                     DateStyle.MonthDay -> "Jun 9"
                     DateStyle.MonthDayYear -> "Dec 31, 2025"
                     DateStyle.WeekdayDate -> "Wed, Jun 10, 2026"

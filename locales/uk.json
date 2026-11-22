@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Увійти через {provider}",
   "accounts.oauth.signInWithProvider": "Увійти через %1$s",
   "accounts.oauth.waitingForSignIn": "Очікування завершення входу через {provider}…",
+  "accounts.oauth.wrongGoogleAccount": "Увійдіть в обліковий запис Google, показаний у Meron",
   "accounts.providers.customDescription": "Будь-який поштовий сервер",
   "accounts.providers.gmailDescription": "Обліковий запис Google",
   "accounts.providers.gmailName": "Gmail",

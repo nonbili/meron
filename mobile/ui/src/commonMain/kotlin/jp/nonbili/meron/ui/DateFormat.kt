@@ -2,7 +2,7 @@ package jp.nonbili.meron.ui
 
 /** [IsoDate] is the machine-readable `YYYY-MM-DD` a typed due date uses; every
  *  other style is for display and follows the device's locale. */
-internal enum class DateStyle { Time, Weekday, MonthDay, MonthDayYear, WeekdayDate, MonthYear, FullTimestamp, IsoDate }
+internal enum class DateStyle { Time, Weekday, WeekdayNarrow, WeekdayLong, MonthDay, MonthDayYear, WeekdayDate, MonthYear, FullTimestamp, IsoDate }
 
 /** Locale-aware short date; only this piece needs platform date formatting. */
 internal expect fun formatDate(

@@ -740,6 +740,8 @@ data class ContactSuggestParams(
     // frequent (autocomplete default), name, or recent.
     val sort: String = "frequent",
     val directory: Boolean = false,
+    /** Only addresses no synced address book holds: "Other contacts". */
+    val unsaved: Boolean = false,
 ) {
     fun toJson(): String =
         jsonObject(
@@ -748,6 +750,7 @@ data class ContactSuggestParams(
             "limit" to limit.toString(),
             "sort" to if (sort == "frequent") null else sort.jsonString(),
             "directory" to if (directory) "true" else null,
+            "unsaved" to if (unsaved) "true" else null,
         )
 }
 
@@ -1993,10 +1996,27 @@ data class CalendarEventParams(
     /** Minutes before start, at most two; null follows the app-wide default
      *  and an empty list means none. */
     val alerts: List<Int>? = null,
+    /** The synced calendar it goes in; empty for this device. On update, a
+     *  different calendar moves it there; null leaves it where it is. */
+    val calendar: String? = null,
+    /** On update, the event as the editor first showed it: fields left as
+     *  they were keep what a sync brought in meanwhile. */
+    val original: CalendarEventParams? = null,
+    /** Whether [repeat] was moved with the start here. Mobile cannot place a
+     *  series' days in the series' own zone, so it says false and leaves
+     *  moving a rule left as it was to the core. Null when not editing. */
+    val repeatAsShown: Boolean? = null,
+    /** The series' first day (`YYYY-MM-DD`) a rule chosen here was placed
+     *  for; the core moves it to the first day in the series' own zone. */
+    val repeatFrom: String? = null,
 ) {
     fun toJson(): String =
         jsonObject(
             "event_id" to eventId.takeIf { it.isNotEmpty() }?.jsonString(),
+            "calendar" to calendar?.jsonString(),
+            "original" to original?.copy(eventId = "", original = null, repeatAsShown = null, repeatFrom = null)?.toJson(),
+            "repeat_from" to repeatFrom?.jsonString(),
+            "repeat_as_shown" to repeatAsShown?.toString(),
             "alerts" to (alerts?.joinToString(separator = ",", prefix = "[", postfix = "]") ?: "null"),
             "occurrence_start" to occurrenceStart.takeIf { it > 0 }?.toString(),
             "title" to title.jsonString(),

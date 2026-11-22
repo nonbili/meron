@@ -101,7 +101,7 @@ internal fun SettingsAccountColorRow(
 }
 
 @Composable
-private fun ColorSwatch(
+internal fun ColorSwatch(
     label: String,
     fill: Color?,
     selected: Boolean,

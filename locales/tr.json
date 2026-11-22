@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "{provider} ile oturum aç",
   "accounts.oauth.signInWithProvider": "%1$s ile oturum açın",
   "accounts.oauth.waitingForSignIn": "{provider} oturum açma işleminin tamamlanması bekleniyor...",
+  "accounts.oauth.wrongGoogleAccount": "Meron’da gösterilen Google hesabıyla oturum açın",
   "accounts.providers.customDescription": "Herhangi bir e-posta sunucusu",
   "accounts.providers.gmailDescription": "Google hesabı",
   "accounts.providers.gmailName": "Gmail",

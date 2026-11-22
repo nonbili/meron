@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Logi sisse teenusega {provider}",
   "accounts.oauth.signInWithProvider": "Logi sisse %1$s",
   "accounts.oauth.waitingForSignIn": "Oodatakse sisselogimise lõpuleviimist teenuses {provider}...",
+  "accounts.oauth.wrongGoogleAccount": "Logi sisse Meronis näidatud Google’i kontoga",
   "accounts.providers.customDescription": "Mis tahes meiliserver",
   "accounts.providers.gmailDescription": "Google konto",
   "accounts.providers.gmailName": "Gmail",

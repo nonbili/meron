@@ -19,6 +19,7 @@ mod mail;
 mod media;
 mod oauth;
 mod prefs;
+mod services;
 mod tasks;
 
 pub(crate) use accounts::*;
@@ -31,6 +32,7 @@ pub(crate) use mail::*;
 pub(crate) use media::*;
 pub(crate) use oauth::*;
 pub(crate) use prefs::*;
+pub(crate) use services::*;
 pub(crate) use tasks::*;
 
 #[cfg(test)]
@@ -66,6 +68,8 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "account.list" => Ok(json!({ "accounts": [] })),
         "account.autodiscover" => autodiscover_mobile_account(&req.params),
         "oauth.authorizeUrl" => mobile_oauth_authorize_url(&req.params),
+        "oauth.configure" => configure_mobile_oauth(&req.params),
+        "oauth.exchangeCode" => exchange_mobile_service_code(&req.params),
         "account.addOAuth" => Ok(json!({ "account": Value::Null })),
         "account.exchangeOAuthCode" => Ok(json!({ "account": Value::Null })),
         "account.updateOAuthToken" => Ok(json!({ "ok": true, "account": Value::Null })),
@@ -140,7 +144,10 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "rss.thread" => Ok(json!({ "messages": [] })),
         "rss.markRead" => Ok(json!({ "ok": true })),
         "rss.markStarred" => Ok(json!({ "ok": true })),
-        method => match stub_mobile_tasks(method).or_else(|| stub_mobile_calendar(method)) {
+        method => match stub_mobile_tasks(method)
+            .or_else(|| stub_mobile_calendar(method))
+            .or_else(|| stub_mobile_services(method))
+        {
             Some(value) => Ok(value),
             None => Err(format!("unknown method: {method}")),
         },
@@ -148,10 +155,8 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
 }
 
 pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result<Value, String> {
-    if req.method.starts_with("caldav.") {
-        let engine = crate::ffi::engine_for(data_dir)?;
-        return crate::caldav::service::dispatch(&engine, &req.method, &req.params)
-            .map_err(|err| format!("{err:#}"));
+    if let Some(result) = dispatch_mobile_services(data_dir, &req.method, &req.params) {
+        return result;
     }
     if req.method.starts_with("pgp.") {
         let engine = crate::ffi::engine_for(data_dir)?;
@@ -187,6 +192,8 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "account.setCertPin" => set_mobile_account_cert_pin(data_dir, &req.params),
         "account.autodiscover" => autodiscover_mobile_account(&req.params),
         "oauth.authorizeUrl" => mobile_oauth_authorize_url(&req.params),
+        "oauth.configure" => configure_mobile_oauth(&req.params),
+        "oauth.exchangeCode" => exchange_mobile_service_code(&req.params),
         "account.addOAuth" => add_mobile_oauth_account(data_dir, &req.params),
         "account.exchangeOAuthCode" => exchange_mobile_oauth_code(data_dir, &req.params),
         "account.updateOAuthToken" => update_mobile_oauth_token(data_dir, &req.params),

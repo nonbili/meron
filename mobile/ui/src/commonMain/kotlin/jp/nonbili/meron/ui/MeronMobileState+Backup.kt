@@ -372,6 +372,10 @@ internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
                 hiddenNavigationAccountIds = loadAppStringSet(prefs, HIDDEN_NAV_ACCOUNTS_PREF)
             }
 
+            settingKeyFor(HIDDEN_CALENDARS_PREF) -> {
+                hiddenCalendars = loadAppStringSet(prefs, HIDDEN_CALENDARS_PREF)
+            }
+
             settingKeyFor(KANBAN_BOARDS_PREF, PrefStore.Kanban) -> {
                 kanbanBoards = parseKanbanBoards(kanbanPrefs.getString(KANBAN_BOARDS_PREF, ""))
             }

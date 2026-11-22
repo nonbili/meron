@@ -2,6 +2,7 @@ package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,18 +25,32 @@ internal fun MailTaskListPicker(state: MeronMobileState) {
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         ListItem(headlineContent = { Text(tr("tasks.addFromMessage")) })
+        // Only lists this device may change; synced ones under their account.
+        val groups = taskListGroups(state.taskLists.filterNot { it.readOnly })
         LazyColumn(Modifier.heightIn(max = 400.dp)) {
-            items(state.taskLists, key = { it.id }) { list ->
-                ListItem(
-                    headlineContent = { Text(list.title) },
-                    trailingContent = {
-                        RadioButton(selected = list.id == state.activeTaskListId, onClick = null)
-                    },
-                    modifier =
-                        Modifier.clickable {
-                            state.scope.launch { state.pickMailTaskList(list.id) }
+            groups.forEach { group ->
+                if (group.label.isNotBlank()) {
+                    item(key = "group:${group.key}") {
+                        Text(
+                            group.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                        )
+                    }
+                }
+                items(group.lists, key = { it.id }) { list ->
+                    ListItem(
+                        headlineContent = { Text(list.title) },
+                        trailingContent = {
+                            RadioButton(selected = list.id == state.activeTaskListId, onClick = null)
                         },
-                )
+                        modifier =
+                            Modifier.clickable {
+                                state.scope.launch { state.pickMailTaskList(list.id) }
+                            },
+                    )
+                }
             }
         }
     }

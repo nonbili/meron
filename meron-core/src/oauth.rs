@@ -91,6 +91,36 @@ pub struct Photo {
     pub bytes: Vec<u8>,
 }
 
+/// Whether `provider` names one of the Google services that share an
+/// account's grant (Calendar, Contacts, Tasks).
+pub fn is_google_service(provider: &str) -> bool {
+    matches!(
+        provider,
+        GOOGLE_CALENDAR_PROVIDER | GOOGLE_CONTACTS_PROVIDER | GOOGLE_TASKS_PROVIDER
+    )
+}
+
+/// The `scopes` a sign-in request names that belong to Google services
+/// sharing a grant: what [`authorize_url`] takes as `also`. Anything else is
+/// dropped, so a caller cannot widen a sign-in beyond those services.
+pub fn service_scopes(params: &serde_json::Value) -> Vec<&'static str> {
+    let named: Vec<&str> = params
+        .get("scopes")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .collect();
+    [
+        GOOGLE_CALENDAR_SCOPE,
+        GOOGLE_CONTACTS_SCOPE,
+        GOOGLE_TASKS_SCOPE,
+    ]
+    .into_iter()
+    .filter(|scope| named.contains(scope))
+    .collect()
+}
+
 /// The provider's authorization URL for a PKCE (S256) sign-in. Microsoft is
 /// asked for the photo scope too, so one consent covers both resources.
 /// A Google Calendar or Contacts sign-in also asks for `also`: the scopes of

@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Войти через {provider}",
   "accounts.oauth.signInWithProvider": "Войти через %1$s",
   "accounts.oauth.waitingForSignIn": "Ожидание завершения входа через {provider}…",
+  "accounts.oauth.wrongGoogleAccount": "Войдите в аккаунт Google, указанный в Meron",
   "accounts.providers.customDescription": "Любой почтовый сервер",
   "accounts.providers.gmailDescription": "Аккаунт Google",
   "accounts.providers.gmailName": "Gmail",

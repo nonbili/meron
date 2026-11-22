@@ -29,15 +29,20 @@ import platform.Foundation.NSURL
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.NSUserDomainMask
 import platform.Foundation.create
+import platform.Foundation.dataWithContentsOfURL
 import platform.Foundation.stringWithContentsOfFile
 import platform.Foundation.writeToFile
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UIKit.UIApplicationWillEnterForegroundNotification
+import platform.UIKit.UIDocumentPickerDelegateProtocol
+import platform.UIKit.UIDocumentPickerViewController
 import platform.UIKit.UIModalPresentationFullScreen
 import platform.UIKit.UIViewController
 import platform.UIKit.UIWindow
+import platform.UniformTypeIdentifiers.UTType
+import platform.UniformTypeIdentifiers.UTTypeItem
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionBadge
 import platform.UserNotifications.UNAuthorizationOptionSound
@@ -46,7 +51,12 @@ import platform.UserNotifications.UNAuthorizationStatusEphemeral
 import platform.UserNotifications.UNAuthorizationStatusNotDetermined
 import platform.UserNotifications.UNAuthorizationStatusProvisional
 import platform.UserNotifications.UNUserNotificationCenter
+import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
 import platform.darwin.NSObject
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_global_queue
+import platform.darwin.dispatch_get_main_queue
+import platform.posix.memcpy
 
 @OptIn(ExperimentalFoundationApi::class)
 fun MainViewController(
@@ -276,18 +286,89 @@ private fun writeIosTextFile(
 @OptIn(ExperimentalForeignApi::class)
 private fun presentDiagnosticLogShareSheet(text: String) = presentShareSheet(listOf(text))
 
+/** The view controller on top, to present a sheet over. */
 @OptIn(ExperimentalForeignApi::class)
-private fun presentShareSheet(items: List<Any>) {
-    val rootViewController =
-        (UIApplication.sharedApplication.windows.firstOrNull() as? UIWindow)?.rootViewController ?: return
-    var presenter = rootViewController
+private fun topViewController(): UIViewController? {
+    var presenter =
+        (UIApplication.sharedApplication.windows.firstOrNull() as? UIWindow)?.rootViewController ?: return null
     while (true) {
         presenter = presenter.presentedViewController ?: break
     }
+    return presenter
+}
+
+/** Present the share sheet; [onComplete] hears whether the user finished
+ *  an action (saved the file, say) or dismissed it. */
+private fun presentShareSheet(
+    items: List<Any>,
+    onComplete: ((Boolean) -> Unit)? = null,
+) {
+    val presenter =
+        topViewController() ?: run {
+            onComplete?.invoke(false)
+            return
+        }
     val activityController = UIActivityViewController(activityItems = items, applicationActivities = null)
     // Avoids the iPad requirement to set a popover sourceView/sourceRect.
     activityController.modalPresentationStyle = UIModalPresentationFullScreen
+    if (onComplete != null) {
+        activityController.completionWithItemsHandler = { _, completed, _, _ -> onComplete(completed) }
+    }
     presenter.presentViewController(activityController, animated = true, completion = null)
+}
+
+/** Write [bytes] to a temporary file to share, or null when that fails. */
+@OptIn(ExperimentalForeignApi::class)
+private fun stageShareFile(
+    bytes: ByteArray,
+    fileName: String,
+): NSURL? {
+    val safeName = fileName.replace('/', '_').ifBlank { "attachment" }
+    val dir = NSTemporaryDirectory() + "meron-share/"
+    NSFileManager.defaultManager.createDirectoryAtPath(dir, withIntermediateDirectories = true, attributes = null, error = null)
+    val path = dir + safeName
+    val data =
+        bytes.usePinned { pinned ->
+            NSData.create(bytes = if (bytes.isNotEmpty()) pinned.addressOf(0) else null, length = bytes.size.toULong())
+        }
+    if (!data.writeToFile(path, atomically = true)) return null
+    return NSURL.fileURLWithPath(path)
+}
+
+/** The picked document's bytes, read from the copy the picker made. */
+@OptIn(ExperimentalForeignApi::class)
+private fun readPickedFile(url: NSURL): PickedFile? {
+    val data = NSData.dataWithContentsOfURL(url) ?: return null
+    val length = data.length.toInt()
+    val bytes = ByteArray(length)
+    if (length > 0) bytes.usePinned { memcpy(it.addressOf(0), data.bytes, data.length) }
+    return PickedFile(name = url.lastPathComponent ?: "file", bytes = bytes, mimeType = "application/octet-stream")
+}
+
+/** The document picker's answer, held while it is on screen (UIKit keeps
+ *  only a weak reference to its delegate). */
+private class DocumentPickerDelegate(
+    private val onPicked: (PickedFile?) -> Unit,
+    private val onDone: () -> Unit,
+) : NSObject(),
+    UIDocumentPickerDelegateProtocol {
+    override fun documentPicker(
+        controller: UIDocumentPickerViewController,
+        didPickDocumentsAtURLs: List<*>,
+    ) {
+        onDone()
+        val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
+        // A large file is read off the main thread, and answered back on it.
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
+            val picked = url?.let(::readPickedFile)
+            dispatch_async(dispatch_get_main_queue()) { onPicked(picked) }
+        }
+    }
+
+    override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
+        onDone()
+        onPicked(null)
+    }
 }
 
 private class IosPlatformServices : PlatformServices {
@@ -349,16 +430,8 @@ private class IosPlatformServices : PlatformServices {
         fileName: String,
         mimeType: String,
     ) {
-        val safeName = fileName.replace('/', '_').ifBlank { "attachment" }
-        val dir = NSTemporaryDirectory() + "meron-share/"
-        NSFileManager.defaultManager.createDirectoryAtPath(dir, withIntermediateDirectories = true, attributes = null, error = null)
-        val path = dir + safeName
-        val data =
-            bytes.usePinned { pinned ->
-                NSData.create(bytes = if (bytes.isNotEmpty()) pinned.addressOf(0) else null, length = bytes.size.toULong())
-            }
-        if (!data.writeToFile(path, atomically = true)) return
-        presentShareSheet(listOf(NSURL.fileURLWithPath(path)))
+        val url = stageShareFile(bytes, fileName) ?: return
+        presentShareSheet(listOf(url))
     }
 
     override fun saveFile(
@@ -369,11 +442,46 @@ private class IosPlatformServices : PlatformServices {
         shareFile(bytes, fileName, mimeType)
     }
 
+    /** Saving goes through the share sheet ("Save to Files"): done only
+     *  once the user finished there, and failed when the file could not be
+     *  staged. */
+    override fun saveFile(
+        bytes: ByteArray,
+        fileName: String,
+        mimeType: String,
+        onComplete: (Result<Boolean>) -> Unit,
+    ) {
+        val url =
+            stageShareFile(bytes, fileName) ?: run {
+                onComplete(Result.failure(IllegalStateException("Could not write $fileName")))
+                return
+            }
+        presentShareSheet(listOf(url)) { completed -> onComplete(Result.success(completed)) }
+    }
+
+    private var documentPickerDelegate: DocumentPickerDelegate? = null
+
     override fun pickFile(
         mimeTypes: List<String>,
         onPicked: (PickedFile?) -> Unit,
     ) {
-        onPicked(null)
+        val presenter =
+            topViewController() ?: run {
+                onPicked(null)
+                return
+            }
+        // The asked-for types, or anything for a wildcard.
+        val types =
+            if (mimeTypes.isEmpty() || mimeTypes.any { it.endsWith("/*") }) {
+                listOf(UTTypeItem)
+            } else {
+                mimeTypes.mapNotNull { UTType.typeWithMIMEType(it) }.ifEmpty { listOf(UTTypeItem) }
+            }
+        val picker = UIDocumentPickerViewController(forOpeningContentTypes = types, asCopy = true)
+        val delegate = DocumentPickerDelegate(onPicked) { documentPickerDelegate = null }
+        documentPickerDelegate = delegate
+        picker.delegate = delegate
+        presenter.presentViewController(picker, animated = true, completion = null)
     }
 
     override fun pickImage(onPicked: (PickedFile?) -> Unit) {

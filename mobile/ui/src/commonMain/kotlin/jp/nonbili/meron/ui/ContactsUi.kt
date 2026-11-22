@@ -13,6 +13,8 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,12 +41,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -64,6 +68,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -114,13 +119,15 @@ import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.formatContactSuggestion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.put
 import kotlin.math.roundToInt
 
 @Composable
 internal fun rememberContactsScreenState(core: MeronCore): ContactsScreenState = remember(core) { ContactsScreenState(core) }
 
 /** Local directory; it never changes the mailbox's current query or folder. */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun ContactsScreen(
     core: MeronCore,
@@ -136,17 +143,38 @@ internal fun ContactsScreen(
     accounts: List<AccountSummary> = emptyList(),
     foldersByAccount: Map<String, List<FolderSummary>> = emptyMap(),
     showSenderImages: Boolean = true,
+    /** The app, for managing address books (which signs in to Google and
+     *  finds servers from mail accounts); without it they are not offered. */
+    mobile: MeronMobileState? = null,
 ) {
     val scope = rememberCoroutineScope()
     val query = state.query
+    // Address books: which one the list shows, the editor and the page that
+    // manages them. Bumped to read the books, lists and cards again.
+    var bookRefresh by remember { mutableStateOf(0) }
+    var managingBooks by remember { mutableStateOf(false) }
+    var bookMenu by remember { mutableStateOf(false) }
+    var editor by remember { mutableStateOf<ContactEditorTarget?>(null) }
+    val shownBook = state.shownBook
+    val book = state.books.firstOrNull { it.id == shownBook }
+    val otherOnly = shownBook == OTHER_CONTACTS
+    val refreshWarning = tr("contacts.editorRefreshWarning")
+    val snackbar = mobile?.snackbarHost
     val sort = state.sort
     val limit = state.limit
     var retry by remember { mutableStateOf(0) }
     var sortOpen by remember { mutableStateOf(false) }
     val selected = state.selected
-    val goBack = { if (state.selected != null) state.select(null) else onBack() }
+    val goBack = {
+        when {
+            managingBooks -> managingBooks = false
+            state.selected != null -> state.select(null)
+            else -> onBack()
+        }
+    }
     val colors = MaterialTheme.colorScheme
-    BackHandler(enabled = active && selected != null) { state.select(null) }
+    BackHandler(enabled = active && (selected != null || managingBooks)) { goBack() }
+    LaunchedEffect(mobile?.addressBooksVersion, bookRefresh) { state.loadBooks() }
     LaunchedEffect(core) { state.loadPins() }
     LaunchedEffect(initialContact) {
         if (initialContact != null) {
@@ -154,9 +182,15 @@ internal fun ContactsScreen(
             onInitialContactConsumed()
         }
     }
-    LaunchedEffect(query, sort, limit, retry) {
+    LaunchedEffect(query, sort, limit, retry, otherOnly, mobile?.addressBooksVersion, bookRefresh) {
         delay(150)
-        state.loadDirectory(query, sort, limit)
+        state.loadDirectory(query, sort, limit, unsaved = otherOnly)
+    }
+    // An address book lists its own cards, by name.
+    LaunchedEffect(book?.id, query, mobile?.addressBooksVersion, bookRefresh) {
+        if (book == null) return@LaunchedEffect
+        delay(150)
+        state.loadBookCards(query)
     }
     LaunchedEffect(selected?.addr) {
         if (selected != null) {
@@ -164,18 +198,79 @@ internal fun ContactsScreen(
             launch { state.loadNote(selected.addr) }
         }
     }
+    LaunchedEffect(selected?.addr, mobile?.addressBooksVersion, bookRefresh) {
+        if (selected != null) state.loadCards(selected.addr)
+    }
     Scaffold(
         containerColor = colors.surface,
+        // Saving to an address book reports here.
+        snackbarHost = { snackbar?.let { SnackbarHost(it) } },
         topBar = {
             Column(Modifier.background(colors.surface)) {
                 TopAppBar(
                     title = {
-                        Text(
-                            tr("contacts.title"),
-                            fontSize = 18.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        when {
+                            managingBooks -> {
+                                Text(tr("contacts.addressBooks"), fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+
+                            selected != null || (state.books.isEmpty() && mobile == null) -> {
+                                Text(tr("contacts.title"), fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+
+                            else -> {
+                                // The title switches address books, as desktop's does.
+                                Box {
+                                    Row(
+                                        Modifier.clickable { bookMenu = true },
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            when {
+                                                book != null -> bookLabel(book.name, book.account)
+                                                otherOnly -> tr("contacts.otherContacts")
+                                                state.books.isNotEmpty() -> tr("contacts.allContacts")
+                                                else -> tr("contacts.title")
+                                            },
+                                            fontSize = 18.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false),
+                                        )
+                                        Icon(Icons.Filled.ArrowDropDown, contentDescription = tr("contacts.showBook"))
+                                    }
+                                    DropdownMenu(expanded = bookMenu, onDismissRequest = { bookMenu = false }) {
+                                        val options =
+                                            buildList {
+                                                add("" to tr("contacts.allContacts"))
+                                                state.books.forEach { add(it.id to bookLabel(it.name, it.account)) }
+                                                // With no address book every contact is an other one.
+                                                if (state.books.isNotEmpty()) add(OTHER_CONTACTS to tr("contacts.otherContacts"))
+                                            }
+                                        options.forEach { (id, label) ->
+                                            DropdownMenuItem(
+                                                text = { Text(label) },
+                                                trailingIcon = { if (id == shownBook) Icon(Icons.Filled.Check, contentDescription = null) },
+                                                onClick = {
+                                                    bookMenu = false
+                                                    scope.launch { state.chooseBook(id) }
+                                                },
+                                            )
+                                        }
+                                        if (mobile != null) {
+                                            HorizontalDivider()
+                                            DropdownMenuItem(
+                                                text = { Text(tr("contacts.manageAddressBooks")) },
+                                                onClick = {
+                                                    bookMenu = false
+                                                    managingBooks = true
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.surface),
                     navigationIcon = {
@@ -184,6 +279,11 @@ internal fun ContactsScreen(
                         }
                     },
                     actions = {
+                        if (selected == null && !managingBooks && state.books.isNotEmpty()) {
+                            IconButton(onClick = { editor = ContactEditorTarget(bookId = book?.id.orEmpty()) }) {
+                                Icon(Icons.Filled.PersonAdd, contentDescription = tr("contacts.newContact"))
+                            }
+                        }
                         if (selected != null) {
                             val pinned = state.isPinned(selected)
                             val pinLabel = tr(if (pinned) "contacts.unpin" else "contacts.pin")
@@ -200,7 +300,7 @@ internal fun ContactsScreen(
                         }
                     },
                 )
-                if (selected == null) {
+                if (selected == null && !managingBooks) {
                     ContactsSearchBar(
                         query = query,
                         onQueryChange = {
@@ -210,7 +310,8 @@ internal fun ContactsScreen(
                         sort = sort,
                         sortOpen = sortOpen,
                         onSortOpenChange = { sortOpen = it },
-                        sortEnabled = state.pinsLoaded && !state.sortSaving,
+                        // An address book lists by name.
+                        sortEnabled = state.pinsLoaded && !state.sortSaving && book == null,
                         onSelectSort = { option ->
                             scope.launch { state.setSort(option) }
                             sortOpen = false
@@ -243,13 +344,24 @@ internal fun ContactsScreen(
                 )
             }
             if (state.sortError) ContactFailure { scope.launch { state.retrySort() } }
-            if (selected == null) {
+            if (managingBooks && mobile != null) {
+                AddressBooksPage(mobile, onChange = { bookRefresh++ }, modifier = Modifier.fillMaxSize())
+            } else if (selected == null && book != null) {
+                BookCardList(
+                    state = state,
+                    query = query,
+                    onSelect = { card, addr -> state.select(ContactSuggestion(card.name, addr)) },
+                    onCompose = if (canCompose) onCompose else null,
+                    onRetry = { bookRefresh++ },
+                    onMore = { scope.launch { state.loadBookCards(query, more = true) } },
+                )
+            } else if (selected == null) {
                 val matchingPins =
-                    state.pins
+                    (if (otherOnly) emptyList() else state.pins)
                         .filter {
                             "${it.name} ${it.addr}".contains(query.trim(), ignoreCase = true)
                         }.sortedBy { it.name.ifBlank { it.addr }.lowercase() }
-                val others = state.contacts.filterNot(state::isPinned)
+                val others = if (otherOnly) state.contacts else state.contacts.filterNot(state::isPinned)
                 val directoryListState = rememberLazyListState()
                 LazyColumn(
                     Modifier.fillMaxSize().appScrollbar(directoryListState),
@@ -320,6 +432,45 @@ internal fun ContactsScreen(
                 ContactDetails(
                     state = state,
                     contact = selected,
+                    onEditCard = { editor = ContactEditorTarget(card = it) },
+                    onSaveToBook = { note ->
+                        editor =
+                            ContactEditorTarget(
+                                name = selected.name,
+                                email = selected.addr,
+                                note = note.ifBlank { null },
+                                movesLocalNote = note.isNotBlank(),
+                                bookId = book?.id.orEmpty(),
+                            )
+                    },
+                    onMoveNote = { card, note ->
+                        scope.launch {
+                            runCatching {
+                                // Always written, version-checked: the copy here may
+                                // be behind the server, and a repeated note is better
+                                // than a lost one.
+                                val answer =
+                                    state.mutateCard(
+                                        "carddav.updateContact",
+                                        kotlinx.serialization.json.buildJsonObject {
+                                            put("book_id", card.bookId)
+                                            put("contact_id", card.id)
+                                            put("version", card.version)
+                                            put("name", card.name)
+                                            put("emails", kotlinx.serialization.json.JsonArray(card.emails.map(::JsonPrimitive)))
+                                            put("note", if (card.note.isBlank()) note else "${card.note.trim()}\n\n$note")
+                                        },
+                                    )
+                                if (answer.text("sync_error").isNotBlank()) scope.launch { snackbar?.showSnackbar(refreshWarning) }
+                                state.clearNoteIfUnchanged(selected.addr, note)
+                            }.onFailure {
+                                if (it is kotlinx.coroutines.CancellationException) throw it
+                                val reason = it.message.orEmpty()
+                                scope.launch { snackbar?.showSnackbar(reason) }
+                            }
+                            bookRefresh++
+                        }
+                    },
                     onCompose = onCompose,
                     onOpenThread = onOpenThread,
                     onCopy = onCopy,
@@ -329,6 +480,40 @@ internal fun ContactsScreen(
                     showSenderImages = showSenderImages,
                 )
             }
+        }
+        editor?.let { target ->
+            ContactEditorSheet(
+                contacts = state,
+                target = target,
+                onDismiss = { editor = null },
+                onRefreshWarning = { scope.launch { snackbar?.showSnackbar(refreshWarning) } },
+                onDone = { result ->
+                    val editing = target.card
+                    // The device's copy goes only once the card holds it: a note
+                    // taken out in the editor stays here.
+                    val moved = target.note?.trim().orEmpty()
+                    if (result != null && target.movesLocalNote && moved.isNotBlank() && moved in result.note) {
+                        scope.launch { state.clearNoteIfUnchanged(state.selected?.addr ?: target.email, moved) }
+                    }
+                    editor = null
+                    bookRefresh++
+                    // Deleted: stay, as the address may still be in mail. Saved:
+                    // show the contact under an address it still has.
+                    if (result != null) {
+                        val addr = state.selected?.addr?.takeIf { editing != null || it.isNotBlank() } ?: result.emails.first()
+                        if (result.emails.any { contactAddressKey(it) == contactAddressKey(addr) }) {
+                            // The same address keeps its history; only the name changes.
+                            if (state.selected?.addr == contactAddressKey(addr)) {
+                                state.rename(result.name)
+                            } else {
+                                state.select(ContactSuggestion(result.name, contactAddressKey(addr)))
+                            }
+                        } else if (editing != null) {
+                            state.select(null)
+                        }
+                    }
+                },
+            )
         }
     }
 }
@@ -622,6 +807,123 @@ private fun ContactPinMenuItem(
     )
 }
 
+/** One contact as an address book holds it: where, the name, the addresses
+ *  and the shared note, with Edit. */
+@Composable
+private fun BookCardSection(
+    card: BookCard,
+    onEdit: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colors.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Contacts, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+                Text(
+                    bookLabel(card.bookName, card.account),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                )
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Filled.Edit, contentDescription = tr("contacts.editContact"), modifier = Modifier.size(18.dp))
+                }
+            }
+            if (card.name.isNotBlank()) Text(card.name, fontWeight = FontWeight.SemiBold)
+            card.emails.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
+            if (card.note.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                ContactMarkdown(card.note)
+            }
+        }
+    }
+}
+
+/** An address book's own list: its cards by name, a page at a time. */
+@Composable
+private fun BookCardList(
+    state: ContactsScreenState,
+    query: String,
+    onSelect: (ListedCard, String) -> Unit,
+    onCompose: ((String) -> Unit)?,
+    onRetry: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val listState = rememberLazyListState()
+    val loaded = state.bookCardsFor?.first == state.shownBook
+    LazyColumn(
+        Modifier.fillMaxSize().appScrollbar(listState),
+        state = listState,
+        contentPadding = PaddingValues(top = 6.dp, bottom = 6.dp + navigationBarInset()),
+    ) {
+        when {
+            state.bookError -> {
+                item(key = "error") { ContactFailure(onRetry) }
+            }
+
+            !loaded -> {
+                item(key = "loading") { ContactLoading() }
+            }
+
+            else -> {
+                items(state.bookCards, key = { it.id }) { card ->
+                    val addr = card.emails.firstOrNull().orEmpty()
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = addr.isNotBlank()) { onSelect(card, contactAddressKey(addr)) }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(card.name.ifBlank { addr }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (card.emails.isNotEmpty()) {
+                                Text(
+                                    card.emails.joinToString(", "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        if (onCompose != null && addr.isNotBlank()) {
+                            IconButton(onClick = { onCompose(if (card.name.isBlank()) addr else "${card.name} <$addr>") }) {
+                                Icon(Icons.Outlined.Email, contentDescription = tr("composer.actions.newMessage"), modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+                if (state.bookCards.isEmpty()) {
+                    item(key = "empty") {
+                        Text(
+                            tr(if (query.isBlank()) "contacts.bookEmpty" else "contacts.empty"),
+                            color = colors.onSurfaceVariant,
+                            modifier = Modifier.padding(24.dp),
+                        )
+                    }
+                }
+                // Only for the rows on screen: a search still loading has none yet.
+                if (state.bookMore && state.bookCardsFor?.second == query) {
+                    item(key = "more") {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                            OutlinedButton(onClick = onMore, enabled = !state.bookLoading) { Text(tr("threads.actions.loadMore")) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ContactDetails(
     state: ContactsScreenState,
@@ -633,6 +935,9 @@ private fun ContactDetails(
     accounts: List<AccountSummary>,
     foldersByAccount: Map<String, List<FolderSummary>>,
     showSenderImages: Boolean,
+    onEditCard: (BookCard) -> Unit = {},
+    onSaveToBook: (note: String) -> Unit = {},
+    onMoveNote: (BookCard, String) -> Unit = { _, _ -> },
 ) {
     val scope = rememberCoroutineScope()
     val colors = MaterialTheme.colorScheme
@@ -757,7 +1062,39 @@ private fun ContactDetails(
                 }
             }
         }
+        // Saved in address books: each card, shared with other clients.
+        if (state.cardsFailed == contact.addr) {
+            item(key = "cards:failed") {
+                TextButton(onClick = { scope.launch { state.loadCards(contact.addr) } }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    Text(tr("contacts.addressBookRetry"))
+                }
+            }
+        }
+        val cards = if (state.cardsAddr == contact.addr) state.cards else emptyList()
+        items(cards, key = { "card:${it.bookId}\n${it.id}" }) { card -> BookCardSection(card, onEdit = { onEditCard(card) }) }
         item(key = "note:${contact.addr}") { ContactNotes(state, contact.addr) }
+        // The note kept only on this device can move to a card, or go with a
+        // new one: the user's choice, as anyone with the book will see it.
+        if (state.cardsAddr == contact.addr && state.books.isNotEmpty()) {
+            item(key = "note-actions:${contact.addr}") {
+                val note = state.note(contact.addr)
+                val localNote = if (note.loaded) note.saved.trim() else ""
+                FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (cards.isEmpty()) {
+                        OutlinedButton(
+                            enabled = note.loaded || note.error,
+                            onClick = { onSaveToBook(localNote) },
+                        ) { Text(tr("contacts.saveToAddressBook")) }
+                    } else if (localNote.isNotBlank()) {
+                        cards.forEach { card ->
+                            OutlinedButton(onClick = { onMoveNote(card, localNote) }) {
+                                Text(tr("contacts.moveNote", mapOf("book" to card.bookName)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         item(key = "section:conversations") {
             HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
             ContactSectionTitle(tr("contacts.recentConversations"))

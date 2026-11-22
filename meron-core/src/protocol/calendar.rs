@@ -86,6 +86,48 @@ pub(crate) fn dispatch_mobile_calendar(
                 )
             })
         }
+        // The host reads the file (a picker's) and saves the export (a share
+        // sheet or save dialog); the core only turns iCalendar text into
+        // events and back. A preview says what an import would bring in.
+        "calendar.previewImport" | "calendar.importIcs" => {
+            let ics = match req_str(params, "ics") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let preview = method == "calendar.previewImport";
+            let result = with_mobile_db(data_dir, |mut conn| {
+                err_str(
+                    crate::calendar::transfer::import(&mut conn, &ics, preview)
+                        .map_err(anyhow::Error::from)
+                        .and_then(|summary| Ok(serde_json::to_value(summary)?)),
+                )
+            });
+            // Nothing changed for a preview, or an import that took nothing.
+            let imported = result
+                .as_ref()
+                .ok()
+                .and_then(|summary| summary.get("imported"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if preview || imported == 0 {
+                return Some(result);
+            }
+            result
+        }
+        "calendar.exportIcs" => {
+            let event_id = opt_str(params, "event_id");
+            let calendar = opt_str(params, "calendar");
+            return Some(with_mobile_db(data_dir, |conn| {
+                err_str(
+                    crate::calendar::transfer::export(
+                        &conn,
+                        (!event_id.is_empty()).then_some(event_id.as_str()),
+                        &calendar,
+                    )
+                    .map(|ics| json!({ "ics": ics })),
+                )
+            }));
+        }
         "calendar.restore" => {
             let restore = params.get("restore").cloned().unwrap_or(Value::Null);
             with_mobile_db(data_dir, |conn| {
@@ -94,8 +136,21 @@ pub(crate) fn dispatch_mobile_calendar(
         }
         _ => return None,
     };
-    if result.is_ok() {
+    if let Ok(value) = &result {
         crate::ffi::emit_event("calendar.changed", json!({ "method": method }));
+        // An edit to a synced event goes to its server straight away: only
+        // the calendars it touched.
+        let calendars = [
+            &value["event"]["calendar"],
+            &value["restore"]["calendar"],
+            &value["moved_from"],
+        ]
+        .iter()
+        .filter_map(|calendar| calendar.as_str())
+        .filter(|calendar| !calendar.is_empty())
+        .map(str::to_string)
+        .collect();
+        push_soon(data_dir, calendars, false);
     }
     Some(result)
 }
@@ -109,6 +164,10 @@ pub(crate) fn stub_mobile_calendar(method: &str) -> Option<Value> {
             json!({ "event": Value::Null })
         }
         "calendar.delete" => json!({ "ok": true, "restore": Value::Null }),
+        "calendar.previewImport" | "calendar.importIcs" => {
+            json!({ "imported": 0, "duplicates": 0, "skipped": 0 })
+        }
+        "calendar.exportIcs" => json!({ "ics": "" }),
         "invite.removeFromCalendar" | "invite.addToCalendar" => json!({ "ok": true }),
         _ => return None,
     })

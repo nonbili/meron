@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "تسجيل الدخول باستخدام {provider}",
   "accounts.oauth.signInWithProvider": "تسجيل الدخول باستخدام %1$s",
   "accounts.oauth.waitingForSignIn": "في انتظار اكتمال تسجيل الدخول عبر {provider}...",
+  "accounts.oauth.wrongGoogleAccount": "سجّل الدخول بحساب Google المعروض في Meron",
   "accounts.providers.customDescription": "أي خادم بريد",
   "accounts.providers.gmailDescription": "حساب Google",
   "accounts.providers.gmailName": "Gmail",

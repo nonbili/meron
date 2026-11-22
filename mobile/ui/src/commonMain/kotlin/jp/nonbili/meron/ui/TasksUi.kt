@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -114,6 +116,9 @@ internal fun TasksScreen(
     onOpenMessage: (TaskSummary) -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
+    /** A synced list the server will not let this device change: shown, not
+     *  edited. */
+    readOnly: Boolean = false,
 ) {
     var draft by remember { mutableStateOf("") }
     // Collapsed by default: done work is there to be found, not to crowd the
@@ -148,12 +153,16 @@ internal fun TasksScreen(
     }
 
     Column(modifier.fillMaxSize()) {
-        AddTaskField(
-            draft = draft,
-            onDraftChange = { draft = it },
-            onSubmit = ::submit,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = ViewCardMargin).padding(vertical = 12.dp),
-        )
+        if (readOnly) {
+            Spacer(Modifier.height(12.dp))
+        } else {
+            AddTaskField(
+                draft = draft,
+                onDraftChange = { draft = it },
+                onSubmit = ::submit,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = ViewCardMargin).padding(vertical = 12.dp),
+            )
+        }
 
         when {
             loading && tasks.isEmpty() -> {
@@ -164,7 +173,7 @@ internal fun TasksScreen(
                 EmptyState(
                     icon = Icons.Filled.Checklist,
                     title = tr("tasks.empty"),
-                    text = tr("tasks.emptyHint"),
+                    text = if (readOnly) "" else tr("tasks.emptyHint"),
                 )
             }
 
@@ -195,6 +204,7 @@ internal fun TasksScreen(
                                         shadowElevation = if (dragging) 6.dp else 0.dp,
                                         modifier =
                                             Modifier.longPressDraggableHandle(
+                                                enabled = !readOnly,
                                                 onDragStarted = {
                                                     haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
                                                 },
@@ -211,6 +221,7 @@ internal fun TasksScreen(
                                                 onEdit = { onEditTask(task) },
                                                 onDelete = { onDeleteTask(task) },
                                                 onOpenMessage = { onOpenMessage(task) },
+                                                readOnly = readOnly,
                                             )
                                         }
                                     }
@@ -247,6 +258,7 @@ internal fun TasksScreen(
                                                     onEdit = { onEditTask(task) },
                                                     onDelete = { onDeleteTask(task) },
                                                     onOpenMessage = { onOpenMessage(task) },
+                                                    readOnly = readOnly,
                                                 )
                                             }
                                         }
@@ -337,10 +349,11 @@ private fun CompletedHeader(
 private fun TaskCheck(
     done: Boolean,
     onToggle: (Boolean) -> Unit,
+    enabled: Boolean = true,
 ) {
     val colors = MaterialTheme.colorScheme
     Box(
-        Modifier.size(48.dp).clip(CircleShape).toggleable(value = done, role = Role.Checkbox, onValueChange = onToggle),
+        Modifier.size(48.dp).clip(CircleShape).toggleable(value = done, enabled = enabled, role = Role.Checkbox, onValueChange = onToggle),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -374,8 +387,15 @@ private fun TaskRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onOpenMessage: () -> Unit,
+    readOnly: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
+    if (readOnly) {
+        Box(Modifier.background(color)) {
+            TaskRowContent(task = task, onToggleDone = onToggleDone, onEdit = onEdit, onOpenMessage = onOpenMessage, readOnly = true)
+        }
+        return
+    }
     val dismissState = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
     SwipeToDismissBox(
@@ -433,6 +453,7 @@ private fun TaskRowContent(
     onToggleDone: (Boolean) -> Unit,
     onEdit: () -> Unit,
     onOpenMessage: () -> Unit,
+    readOnly: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
     val overdue = taskIsOverdue(task.dueAt, hasTime = task.dueHasTime) && !task.done
@@ -441,12 +462,12 @@ private fun TaskRowContent(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit)
+            .clickable(enabled = !readOnly, onClick = onEdit)
             .heightIn(min = 56.dp)
             .padding(start = 4.dp, end = if (task.threadId.isNotBlank()) 4.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TaskCheck(done = task.done, onToggle = onToggleDone)
+        TaskCheck(done = task.done, onToggle = onToggleDone, enabled = !readOnly)
 
         Column(
             Modifier.weight(1f).padding(vertical = 12.dp),

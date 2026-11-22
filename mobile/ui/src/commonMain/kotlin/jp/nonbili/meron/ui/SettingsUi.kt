@@ -113,6 +113,8 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun SettingsScreen(
     rulesPage: @Composable (Modifier, (RuleEditorBar?) -> Unit) -> Unit,
+    /** Settings › Calendars & tasks (CalendarsTasksPage), given its modifier. */
+    calendarsPage: @Composable (Modifier) -> Unit,
     onOpenTags: () -> Unit,
     onBack: () -> Unit,
     initialGeneral: Boolean,
@@ -183,13 +185,6 @@ internal fun SettingsScreen(
     onToggleUnreadBadges: () -> Unit,
     showUnifiedInboxNav: Boolean,
     onToggleUnifiedInboxNav: () -> Unit,
-    tasksEnabled: Boolean,
-    onToggleTasks: () -> Unit,
-    calendarEnabled: Boolean,
-    onToggleCalendar: () -> Unit,
-    reminderLeadMinutes: Int,
-    reminderAllDayDays: Int,
-    onAlertDefaultChange: (allDay: Boolean, lead: Int) -> Unit,
     sendShortcutMode: SendShortcutMode,
     onToggleSendShortcut: () -> Unit,
     quoteReplies: Boolean,
@@ -262,6 +257,7 @@ internal fun SettingsScreen(
             SettingsRoutes.SyncLog -> SettingsPage.SyncLog
             SettingsRoutes.RemoteSenders -> SettingsPage.RemoteSenders
             SettingsRoutes.Encryption -> SettingsPage.Encryption
+            SettingsRoutes.Calendars -> SettingsPage.Calendars
             SettingsRoutes.Theme -> SettingsPage.Theme
             else -> SettingsPage.Root
         }
@@ -344,6 +340,7 @@ internal fun SettingsScreen(
                             SettingsPage.SyncLog -> tr("settings.viewSyncLog")
                             SettingsPage.RemoteSenders -> tr("settings.privacy.remoteSenders")
                             SettingsPage.Encryption -> tr("crypto.peers.nav")
+                            SettingsPage.Calendars -> tr("settings.calendars.nav")
                             SettingsPage.Theme -> tr("common.theme")
                         },
                     )
@@ -390,13 +387,6 @@ internal fun SettingsScreen(
                     onToggleUnreadBadges = onToggleUnreadBadges,
                     showUnifiedInboxNav = showUnifiedInboxNav,
                     onToggleUnifiedInboxNav = onToggleUnifiedInboxNav,
-                    tasksEnabled = tasksEnabled,
-                    onToggleTasks = onToggleTasks,
-                    calendarEnabled = calendarEnabled,
-                    onToggleCalendar = onToggleCalendar,
-                    reminderLeadMinutes = reminderLeadMinutes,
-                    reminderAllDayDays = reminderAllDayDays,
-                    onAlertDefaultChange = onAlertDefaultChange,
                     kanbanColumnWidth = kanbanColumnWidth,
                     onCycleKanbanColumnWidth = onCycleKanbanColumnWidth,
                     appProxy = appProxy,
@@ -490,6 +480,10 @@ internal fun SettingsScreen(
 
             composable(SettingsRoutes.Encryption) {
                 EncryptionSettingsPage(Modifier.fillMaxSize())
+            }
+
+            composable(SettingsRoutes.Calendars) {
+                calendarsPage(Modifier.fillMaxSize())
             }
 
             composable(SettingsRoutes.Account) {
@@ -690,6 +684,14 @@ internal fun SettingsScreen(
                             onClick = { settingsNavController.navigate(SettingsRoutes.Encryption) },
                         )
                     }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.Event,
+                            title = tr("settings.calendars.nav"),
+                            subtitle = null,
+                            onClick = { settingsNavController.navigate(SettingsRoutes.Calendars) },
+                        )
+                    }
                     section(tr("settings.sections.kanbanBoards"))
                     items(kanbanBoards, key = { it.id }) { board ->
                         SettingsRow(
@@ -832,6 +834,8 @@ private sealed class SettingsPage {
 
     data object Encryption : SettingsPage()
 
+    data object Calendars : SettingsPage()
+
     data object Theme : SettingsPage()
 
     data class AccountDetail(
@@ -866,6 +870,7 @@ private object SettingsRoutes {
     const val SyncLog = "settings/sync-log"
     const val RemoteSenders = "settings/remote-senders"
     const val Encryption = "settings/encryption"
+    const val Calendars = "settings/calendars"
     const val Theme = "settings/theme"
 }
 
@@ -886,13 +891,6 @@ internal fun SettingsGeneralPage(
     onToggleUnreadBadges: () -> Unit,
     showUnifiedInboxNav: Boolean,
     onToggleUnifiedInboxNav: () -> Unit,
-    tasksEnabled: Boolean,
-    onToggleTasks: () -> Unit,
-    calendarEnabled: Boolean,
-    onToggleCalendar: () -> Unit,
-    reminderLeadMinutes: Int,
-    reminderAllDayDays: Int,
-    onAlertDefaultChange: (allDay: Boolean, lead: Int) -> Unit,
     kanbanColumnWidth: Int,
     onCycleKanbanColumnWidth: () -> Unit,
     appProxy: ProxySpec,
@@ -922,9 +920,8 @@ internal fun SettingsGeneralPage(
     modifier: Modifier = Modifier,
 ) {
     // The Network label: Appearance (label + 4 rows), Side navigation (label +
-    // 4 rows, plus the 2 alert defaults while the calendar is on) and Kanban
-    // (2) come before it on every platform.
-    val proxyIndex = if (calendarEnabled) 13 else 11
+    // 2 rows) and Kanban (2) come before it on every platform.
+    val proxyIndex = 9
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = if (focusProxy) proxyIndex else 0)
     SettingsList(modifier.appScrollbar(listState), state = listState) {
         section(tr("settings.pages.appearance"))
@@ -1012,44 +1009,6 @@ internal fun SettingsGeneralPage(
                 checked = showUnreadBadges,
                 onToggle = onToggleUnreadBadges,
             )
-        }
-        item {
-            SettingsToggleRow(
-                icon = Icons.Filled.Checklist,
-                title = tr("settings.tasks.enable"),
-                hint = tr("settings.tasks.enableHint"),
-                checked = tasksEnabled,
-                onToggle = onToggleTasks,
-            )
-        }
-        item {
-            SettingsToggleRow(
-                icon = Icons.Filled.Event,
-                title = tr("settings.calendar.enable"),
-                hint = tr("settings.calendar.enableHint"),
-                checked = calendarEnabled,
-                onToggle = onToggleCalendar,
-            )
-        }
-        if (calendarEnabled) {
-            item {
-                AlertDefaultRow(
-                    title = tr("settings.calendar.reminderLead"),
-                    hint = tr("settings.calendar.reminderLeadHint"),
-                    allDay = false,
-                    lead = reminderLeadMinutes,
-                    onChange = { onAlertDefaultChange(false, it) },
-                )
-            }
-            item {
-                AlertDefaultRow(
-                    title = tr("settings.calendar.allDayAlert"),
-                    hint = tr("settings.calendar.allDayAlertHint"),
-                    allDay = true,
-                    lead = reminderAllDayDays,
-                    onChange = { onAlertDefaultChange(true, it) },
-                )
-            }
         }
 
         section(tr("settings.sections.kanban"))
@@ -1391,7 +1350,7 @@ private fun ConversationFooterRow(
 
 /** A default event alert, picked from a menu. */
 @Composable
-private fun AlertDefaultRow(
+internal fun AlertDefaultRow(
     title: String,
     hint: String,
     allDay: Boolean,

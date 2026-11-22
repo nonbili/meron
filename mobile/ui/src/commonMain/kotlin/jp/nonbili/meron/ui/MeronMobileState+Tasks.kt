@@ -229,6 +229,25 @@ internal suspend fun MeronMobileState.deleteTaskList(listId: String) {
     offerTaskUndo(trs("tasks.listDeleted", mapOf("name" to name)), response)
 }
 
+/**
+ * Re-read after a `tasks.changed` from elsewhere. A sync can add, rename or
+ * take away synced lists, so those re-read the lists too, and move off one
+ * that is gone; a task filed from mail re-reads the open list.
+ */
+internal suspend fun MeronMobileState.refreshTasksAfterChange(method: String) {
+    if (method.startsWith("caldav.") || method.startsWith("googleTasks.")) {
+        val response = onCore { requireCoreOk(it.taskLists()) } ?: return
+        val parsed = parseTaskListsResponse(response)
+        taskLists = parsed.lists
+        if (parsed.lists.none { it.id == activeTaskListId }) {
+            activeTaskListId = parsed.defaultListId
+        }
+        loadTasks()
+    } else if (method == "tasks.create") {
+        loadTasks()
+    }
+}
+
 private suspend fun MeronMobileState.refreshTaskLists() {
     val response = onCore { requireCoreOk(it.taskLists()) } ?: return
     taskLists = parseTaskListsResponse(response).lists
@@ -393,9 +412,11 @@ internal suspend fun MeronMobileState.requestAddMailToTasks(thread: jp.nonbili.m
         }
         val response = onCore { requireCoreOk(it.taskLists()) } ?: return
         taskLists = parseTaskListsResponse(response).lists
-        if (taskLists.size == 1) {
-            addTaskFromMessage(thread.subject, thread.accountId, thread.id, listId = taskLists.single().id)
-        } else if (taskLists.size > 1) {
+        // Mail can only be filed in a list this device may change.
+        val writable = taskLists.filterNot { it.readOnly }
+        if (writable.size == 1) {
+            addTaskFromMessage(thread.subject, thread.accountId, thread.id, listId = writable.single().id)
+        } else if (writable.size > 1) {
             pendingTaskThread = thread
         }
     } finally {

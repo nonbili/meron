@@ -172,6 +172,18 @@ pub(crate) fn dispatch_mobile_tasks(
 
     if mutates && result.is_ok() {
         crate::ffi::emit_event("tasks.changed", json!({ "method": method }));
+        // An edit to a synced list goes to its server straight away.
+        if matches!(
+            method,
+            "tasks.create"
+                | "tasks.update"
+                | "tasks.setDone"
+                | "tasks.delete"
+                | "tasks.clearCompleted"
+                | "tasks.restore"
+        ) {
+            push_task_edits(data_dir);
+        }
     }
     Some(result)
 }

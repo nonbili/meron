@@ -15,6 +15,8 @@ import jp.nonbili.meron.shared.parseCalendarRestorePayload
 import jp.nonbili.meron.shared.requireCoreOk
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 private suspend fun <T> MeronMobileState.onCalendarCore(block: suspend (MobileMailCommandClient) -> T): Result<T> = runCatching { withContext(ioDispatcher) { block(MobileMailCommandClient(core)) } }
 
@@ -28,6 +30,18 @@ internal fun MeronMobileState.calendarGrid(): List<CivilDate> = monthGrid(calend
 internal suspend fun MeronMobileState.openCalendar() {
     screen = Screen.Calendar
     loadCalendar()
+    syncCalendarsInBackground()
+}
+
+/** Ask the core to sync calendar accounts now, without waiting: changes
+ *  arrive as `calendar.changed`. Only when there is something to sync, and
+ *  not accounts set to sync only when asked: opening the calendar is not
+ *  asking. */
+internal fun MeronMobileState.syncCalendarsInBackground() {
+    if (syncedCalendars.isEmpty()) return
+    scope.launch {
+        runCatching { coreCall("caldav.sync", buildJsonObject { put("automatic", true) }) }
+    }
 }
 
 /** Re-read the month on show. A read that finishes after the month moved on
@@ -36,6 +50,7 @@ internal suspend fun MeronMobileState.loadCalendar() {
     if (!coreLoaded) return
     val month = calendarYear to calendarMonth
     val (from, to) = gridRange(calendarGrid(), ::localMidnight)
+    loadSyncedCalendars()
     onCalendarCore { requireCoreOk(it.calendarEvents(CalendarRangeParams(from, to, includeTasks = tasksEnabled))) }
         .onSuccess { if (calendarYear to calendarMonth == month) calendarItems = parseCalendarEventsResponse(it) }
         .onFailure { status = trsError("calendar.loadFailed", it) }
@@ -63,6 +78,8 @@ internal suspend fun MeronMobileState.saveCalendarEvent(params: CalendarEventPar
             requireCoreOk(if (params.eventId.isEmpty()) it.createCalendarEvent(params) else it.updateCalendarEvent(params))
         }
     result.onFailure { status = trsError("calendar.saveFailed", it) }
+    // The calendar a new event went in is offered first for the next.
+    if (result.isSuccess && params.eventId.isEmpty()) lastCalendar = params.calendar.orEmpty()
     loadCalendar()
     return result.isSuccess
 }

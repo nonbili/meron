@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Σύνδεση με {provider}",
   "accounts.oauth.signInWithProvider": "Συνδεθείτε με %1$s",
   "accounts.oauth.waitingForSignIn": "Αναμονή για την ολοκλήρωση της σύνδεσης με {provider}...",
+  "accounts.oauth.wrongGoogleAccount": "Συνδεθείτε με τον λογαριασμό Google που εμφανίζεται στο Meron",
   "accounts.providers.customDescription": "Οποιοσδήποτε διακομιστής αλληλογραφίας",
   "accounts.providers.gmailDescription": "Λογαριασμός Google",
   "accounts.providers.gmailName": "Gmail",

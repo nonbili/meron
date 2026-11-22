@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Pierakstīties ar {provider}",
   "accounts.oauth.signInWithProvider": "Pierakstīties ar %1$s",
   "accounts.oauth.waitingForSignIn": "Gaida, kamēr pabeigs pierakstīšanos ar {provider}...",
+  "accounts.oauth.wrongGoogleAccount": "Pierakstieties ar Meron parādīto Google kontu",
   "accounts.providers.customDescription": "Jebkurš pasta serveris",
   "accounts.providers.gmailDescription": "Google konts",
   "accounts.providers.gmailName": "Gmail",

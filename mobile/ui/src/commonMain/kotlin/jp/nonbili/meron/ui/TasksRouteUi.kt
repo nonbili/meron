@@ -36,6 +36,7 @@ import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
@@ -99,10 +100,12 @@ internal fun TasksRouteContent(
         LaunchedEffect(pendingTaskEditId, tasks) {
             val task = tasks.firstOrNull { it.id == pendingTaskEditId } ?: return@LaunchedEffect
             pendingTaskEditId = ""
-            editing = task
+            // A read-only list's tasks are shown, not edited.
+            if (taskLists.firstOrNull { it.id == task.listId }?.readOnly != true) editing = task
         }
 
         val activeList = taskLists.firstOrNull { it.id == activeTaskListId }
+        val readOnly = activeList?.readOnly == true
         val listState = rememberLazyListState()
         val scrolled by remember { derivedStateOf { listState.canScrollBackward } }
 
@@ -144,17 +147,33 @@ internal fun TasksRouteContent(
                                     expanded = listSwitcherOpen,
                                     onDismissRequest = { listSwitcherOpen = false },
                                 ) {
-                                    taskLists.forEach { list ->
-                                        DropdownMenuItem(
-                                            text = { Text(list.title) },
-                                            trailingIcon = {
-                                                if (list.id == activeTaskListId) Icon(Icons.Filled.Check, contentDescription = null)
-                                            },
-                                            onClick = {
-                                                listSwitcherOpen = false
-                                                scope.launch { selectTaskList(list.id) }
-                                            },
-                                        )
+                                    // The lists kept here first, then each synced
+                                    // account's under its address: every Google
+                                    // account has a "My Tasks".
+                                    taskListGroups(taskLists).forEach { group ->
+                                        if (group.label.isNotBlank()) {
+                                            HorizontalDivider()
+                                            Text(
+                                                group.label,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                            )
+                                        }
+                                        group.lists.forEach { list ->
+                                            DropdownMenuItem(
+                                                text = { Text(list.title) },
+                                                trailingIcon = {
+                                                    if (list.id == activeTaskListId) Icon(Icons.Filled.Check, contentDescription = null)
+                                                },
+                                                onClick = {
+                                                    listSwitcherOpen = false
+                                                    scope.launch { selectTaskList(list.id) }
+                                                },
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -183,16 +202,19 @@ internal fun TasksRouteContent(
                                             scope.launch { createTaskList(trs("tasks.newList")) }
                                         },
                                     )
-                                    DropdownMenuItem(
-                                        text = { Text(tr("tasks.renameList")) },
-                                        leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
-                                        onClick = {
-                                            listMenuOpen = false
-                                            listNameDraft = activeList?.title.orEmpty()
-                                            renamingList = true
-                                        },
-                                    )
-                                    if (tasks.any { it.done }) {
+                                    // A synced list is named and removed on its server.
+                                    if (activeList?.provider.isNullOrBlank()) {
+                                        DropdownMenuItem(
+                                            text = { Text(tr("tasks.renameList")) },
+                                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                                            onClick = {
+                                                listMenuOpen = false
+                                                listNameDraft = activeList?.title.orEmpty()
+                                                renamingList = true
+                                            },
+                                        )
+                                    }
+                                    if (!readOnly && tasks.any { it.done }) {
                                         DropdownMenuItem(
                                             text = { Text(tr("tasks.clearCompleted")) },
                                             onClick = {
@@ -201,14 +223,16 @@ internal fun TasksRouteContent(
                                             },
                                         )
                                     }
-                                    DropdownMenuItem(
-                                        text = { Text(tr("tasks.deleteList")) },
-                                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
-                                        onClick = {
-                                            listMenuOpen = false
-                                            deletingList = true
-                                        },
-                                    )
+                                    if (activeList?.provider.isNullOrBlank()) {
+                                        DropdownMenuItem(
+                                            text = { Text(tr("tasks.deleteList")) },
+                                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                                            onClick = {
+                                                listMenuOpen = false
+                                                deletingList = true
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         },
@@ -226,6 +250,7 @@ internal fun TasksRouteContent(
                     onOpenMessage = ::openTaskThread,
                     modifier = Modifier.fillMaxSize().padding(padding.withoutBottom()),
                     listState = listState,
+                    readOnly = readOnly,
                 )
             }
         }
@@ -276,6 +301,8 @@ internal fun TasksRouteContent(
         editing?.let { task ->
             TaskEditSheet(
                 task = task,
+                // Google Tasks keeps a due date without its time.
+                dateOnly = taskLists.firstOrNull { it.id == task.listId }?.provider == "google",
                 onDismiss = { editing = null },
                 onDelete = {
                     editing = null
@@ -302,6 +329,7 @@ internal fun TasksRouteContent(
 @Composable
 private fun TaskEditSheet(
     task: TaskSummary,
+    dateOnly: Boolean,
     onDismiss: () -> Unit,
     onSave: (title: String, notes: String, dueAt: Long, dueHasTime: Boolean) -> Unit,
     onDelete: () -> Unit,
@@ -379,7 +407,7 @@ private fun TaskEditSheet(
                             null
                         },
                 )
-                if (dueAt > 0) {
+                if (dueAt > 0 && !dateOnly) {
                     InputChip(
                         selected = dueHasTime,
                         onClick = { pickingTime = true },

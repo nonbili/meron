@@ -142,6 +142,7 @@
   "accounts.oauth.signInWith": "Sign in with {provider}",
   "accounts.oauth.signInWithProvider": "Sign in with %1$s",
   "accounts.oauth.waitingForSignIn": "Waiting for {provider} Sign-in to complete...",
+  "accounts.oauth.wrongGoogleAccount": "Sign in with the Google account shown in Meron",
   "accounts.providers.customDescription": "Any mail server",
   "accounts.providers.gmailDescription": "Google account",
   "accounts.providers.gmailName": "Gmail",

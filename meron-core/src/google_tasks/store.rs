@@ -104,6 +104,18 @@ pub(super) fn record_sync(
     Ok(())
 }
 
+/// When an account last synced cleanly, epoch seconds; 0 for never.
+pub(super) fn last_sync_at(conn: &Connection, email: &str) -> Result<i64> {
+    Ok(conn
+        .query_row(
+            "SELECT last_sync_at FROM google_task_accounts WHERE email = ?1",
+            [email],
+            |row| row.get(0),
+        )
+        .optional()?
+        .unwrap_or(0))
+}
+
 /// The accounts with edits waiting to be sent.
 pub fn pending_emails(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(

@@ -351,6 +351,36 @@ internal fun MeronMobileState.handleOAuthCallback(rawUrl: String) {
         Log.w("Meron.OAuth", "callback ignored without a pending flow")
         return
     }
+    // A Google Calendar, Contacts or Tasks sign-in adds no mail account: it
+    // goes back to the page that started it, which shows how it went.
+    if (GoogleService.ofProvider(pending.provider) != null) {
+        val result =
+            runCatching {
+                parseOAuthCallbackUrlForRedirect(rawUrl = rawUrl, expectedState = pending.state, redirectUri = pending.redirectUri)
+            }
+        val code = result.getOrNull()?.code
+        // A redirect from an older sign-in (one cancelled, its tab still
+        // open) is not this one's to end.
+        val state =
+            rawUrl
+                .substringAfter('?', "")
+                .split('&')
+                .firstOrNull { it.startsWith("state=") }
+                ?.substringAfter('=')
+        if (code.isNullOrBlank() && state != pending.state) {
+            Log.w("Meron.OAuth", "service callback for an older sign-in ignored")
+            return
+        }
+        if (code.isNullOrBlank()) {
+            Log.w("Meron.OAuth", "service callback did not match its sign-in")
+            clearPendingOAuthFlow(prefs)
+            googleSignIn = null
+            googleSignInError = result.exceptionOrNull()?.let { trsError("mobile.status.oauthCallbackFailed", it) } ?: trs("mobile.status.oauthCallbackMismatch")
+            return
+        }
+        finishGoogleServiceSignIn(pending, code)
+        return
+    }
     Log.i(
         "Meron.OAuth",
         "pending flow provider=${pending.provider} redirectUri=${pending.redirectUri} emailPresent=${pending.email.isNotBlank()}",

@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Iniciar sesión con {provider}",
   "accounts.oauth.signInWithProvider": "Iniciar sesión con %1$s",
   "accounts.oauth.waitingForSignIn": "Esperando a que se complete el inicio de sesión con {provider}...",
+  "accounts.oauth.wrongGoogleAccount": "Inicia sesión con la cuenta de Google que se muestra en Meron",
   "accounts.providers.customDescription": "Cualquier servidor de correo",
   "accounts.providers.gmailDescription": "Cuenta de Google",
   "accounts.providers.gmailName": "Gmail",

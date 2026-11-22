@@ -560,10 +560,38 @@ enum IosBackgroundRefresh {
             }
         }
 
+        syncCalendarsAndTasks()
+
         IosSyncDiagnosticLog.append(
             "background refresh done: refreshed=\(refreshed) skipped=\(skipped) failed=\(failed)"
         )
         return RefreshResult(refreshed: refreshed, skipped: skipped, failed: failed)
+    }
+
+    /// Synced calendars and task lists, as the app's foreground poll keeps
+    /// them: CalDAV accounts with an interval, and Google Tasks while Tasks is
+    /// on, so their events alert while the app is closed. Google grants
+    /// refresh with the app's own client, which this process names first.
+    private static func syncCalendarsAndTasks() {
+        let defaults = UserDefaults.standard
+        let calendar = defaults.bool(forKey: "meron_app.calendar_enabled_v1")
+        let tasks = defaults.bool(forKey: "meron_app.tasks_enabled_v1")
+        guard calendar || tasks else { return }
+        _ = invoke(id: 8999, method: "oauth.configure", params: [
+            "google_client_id": Bundle.main.object(forInfoDictionaryKey: "MERON_GOOGLE_CLIENT_ID") as? String ?? "",
+            "outlook_client_id": Bundle.main.object(forInfoDictionaryKey: "MERON_OUTLOOK_CLIENT_ID") as? String ?? "",
+        ])
+        var methods = ["caldav.sync"]
+        if tasks { methods.append("googleTasks.sync") }
+        for (index, method) in methods.enumerated() {
+            let response = invoke(id: Int64(9000 + index), method: method, params: ["automatic": true, "due": true])
+            // A call that failed, or accounts that did (recorded on them too).
+            let message = (response["error"] as? [String: Any])?["message"] as? String
+                ?? ((response["result"] as? [String: Any])?["error"] as? String ?? "")
+            if !message.isEmpty {
+                IosSyncDiagnosticLog.append("\(method) failed: " + IosSyncLogRedaction.redactMessage(message))
+            }
+        }
     }
 
     private static func notifyArrivals(_ response: [String: Any]) {

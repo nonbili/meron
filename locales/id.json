@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "Masuk dengan {provider}",
   "accounts.oauth.signInWithProvider": "Masuk dengan %1$s",
   "accounts.oauth.waitingForSignIn": "Menunggu proses masuk {provider} selesai...",
+  "accounts.oauth.wrongGoogleAccount": "Masuk dengan akun Google yang ditampilkan di Meron",
   "accounts.providers.customDescription": "Sembarang server email",
   "accounts.providers.gmailDescription": "Akun Google",
   "accounts.providers.gmailName": "Gmail",

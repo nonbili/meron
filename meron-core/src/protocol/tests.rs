@@ -4356,3 +4356,126 @@ fn mobile_protocol_move_honors_explicit_message_ids() {
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn mobile_protocol_serves_the_sync_services() {
+    let data_dir = unique_data_dir("services");
+    let dir = data_dir.to_str().unwrap().to_string();
+    let call = |id: u64, method: &str, params: &str| {
+        invoke_mobile_protocol_json(
+            &format!(r#"{{"id":{id},"method":"{method}","params":{params}}}"#),
+            Some(&dir),
+        )
+    };
+
+    // Each service answers on mobile, not only CalDAV.
+    for (id, method) in [
+        (400, "caldav.accounts"),
+        (401, "carddav.accounts"),
+        (402, "googleTasks.accounts"),
+    ] {
+        let answer = call(id, method, "{}");
+        assert_eq!(
+            answer["result"]["accounts"],
+            json!([]),
+            "{method}: {answer}"
+        );
+    }
+
+    let poll = call(403, "googleTasks.pollState", "{}");
+    assert_eq!(poll["result"]["enabled"], true, "{poll}");
+    assert_eq!(poll["result"]["pending"], json!([]));
+    assert_eq!(poll["result"]["accounts"], json!([]));
+
+    // An automatic sync rests while Tasks is off.
+    call(
+        404,
+        "app.prefsSet",
+        r#"{"key":"tasks_enabled","value":false}"#,
+    );
+    let poll = call(405, "googleTasks.pollState", "{}");
+    assert_eq!(poll["result"]["enabled"], false, "{poll}");
+    let synced = call(406, "googleTasks.sync", r#"{"automatic":true}"#);
+    assert_eq!(synced["result"]["changed"], false, "{synced}");
+    // A background refresh syncs only the calendar accounts that are due.
+    let due = call(408, "caldav.sync", r#"{"automatic":true,"due":true}"#);
+    assert_eq!(due["result"]["pulled"], 0, "{due}");
+
+    // Before a data dir is bound, the read-only ones still answer.
+    let stub = invoke_mobile_protocol_json(
+        r#"{"id":407,"method":"carddav.accounts","params":{}}"#,
+        None,
+    );
+    assert_eq!(stub["result"]["accounts"], json!([]), "{stub}");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn mobile_protocol_imports_and_exports_icalendar() {
+    let data_dir = unique_data_dir("ics");
+    let dir = data_dir.to_str().unwrap().to_string();
+    let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Example//EN\r\nBEGIN:VEVENT\r\nUID:launch@example.test\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260310T090000Z\r\nDTEND:20260310T100000Z\r\nSUMMARY:Launch review\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    let call = |id: u64, method: &str| {
+        invoke_mobile_protocol_json(
+            &json!({ "id": id, "method": method, "params": { "ics": ics } }).to_string(),
+            Some(&dir),
+        )
+    };
+
+    let preview = call(410, "calendar.previewImport");
+    assert_eq!(preview["result"]["imported"], 1, "{preview}");
+    let imported = call(411, "calendar.importIcs");
+    assert_eq!(imported["result"]["imported"], 1, "{imported}");
+    // The same file again brings in nothing new.
+    let again = call(412, "calendar.previewImport");
+    assert_eq!(again["result"]["imported"], 0, "{again}");
+    assert_eq!(again["result"]["duplicates"], 1, "{again}");
+
+    let exported = invoke_mobile_protocol_json(
+        r#"{"id":413,"method":"calendar.exportIcs","params":{}}"#,
+        Some(&dir),
+    );
+    let document = exported["result"]["ics"].as_str().unwrap_or_default();
+    assert!(document.contains("SUMMARY:Launch review"), "{exported}");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn mobile_oauth_sign_in_keeps_every_service_sharing_the_grant() {
+    let answer = invoke_mobile_protocol_json(
+        &json!({
+            "id": 420,
+            "method": "oauth.authorizeUrl",
+            "params": {
+                "provider": "google_calendar",
+                "client_id": "client.apps.example.test",
+                "redirect_uri": "test.example:/oauth",
+                "state": "s",
+                "code_challenge": "c",
+                "login_hint": "mira@example.test",
+                "scopes": [
+                    crate::oauth::GOOGLE_CALENDAR_SCOPE,
+                    crate::oauth::GOOGLE_TASKS_SCOPE,
+                    "https://mail.google.com/",
+                ],
+            },
+        })
+        .to_string(),
+        None,
+    );
+    let url = url::Url::parse(answer["result"]["url"].as_str().unwrap()).unwrap();
+    let scope = url
+        .query_pairs()
+        .find(|(key, _)| key == "scope")
+        .map(|(_, value)| value.into_owned())
+        .unwrap_or_default();
+    assert!(
+        scope.contains(crate::oauth::GOOGLE_CALENDAR_SCOPE),
+        "{scope}"
+    );
+    assert!(scope.contains(crate::oauth::GOOGLE_TASKS_SCOPE), "{scope}");
+    // Only the services that share a grant can be added to a sign-in.
+    assert!(!scope.contains("mail.google.com"), "{scope}");
+}

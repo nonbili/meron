@@ -14,6 +14,8 @@ internal actual fun formatDate(
         when (style) {
             DateStyle.Time -> "HH:mm"
             DateStyle.Weekday -> "EEE"
+            DateStyle.WeekdayNarrow -> "EEEEE"
+            DateStyle.WeekdayLong -> "EEEE"
             DateStyle.MonthDay -> "MMM d"
             DateStyle.MonthDayYear -> "MMM d, yyyy"
             DateStyle.WeekdayDate -> "EEE, MMM d, yyyy"

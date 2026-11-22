@@ -145,6 +145,7 @@
   "accounts.oauth.signInWith": "{provider} でサインイン",
   "accounts.oauth.signInWithProvider": "%1$sでサインイン",
   "accounts.oauth.waitingForSignIn": "{provider} のサインイン完了を待機中...",
+  "accounts.oauth.wrongGoogleAccount": "Meron に表示されている Google アカウントでログインしてください",
   "accounts.providers.customDescription": "任意のメールサーバー",
   "accounts.providers.gmailDescription": "Googleアカウント",
   "accounts.providers.gmailName": "Gmail",

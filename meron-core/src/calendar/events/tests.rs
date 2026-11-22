@@ -1952,6 +1952,39 @@ fn a_stale_editor_keeps_what_the_server_changed_since() {
 }
 
 #[test]
+fn a_stale_editor_keeps_alerts_a_sync_brought() {
+    let conn = conn();
+    let id = synced_custom_repeat(&conn);
+    let opened = store::event(&conn, &id).unwrap().unwrap();
+    let shown = EventInput {
+        title: opened.title.clone(),
+        start: opened.start_at,
+        end: opened.end_at,
+        repeat: CUSTOM_REPEAT.into(),
+        alerts: Some(None),
+        ..Default::default()
+    };
+    // Another client sets an alert while the editor is open.
+    let mut synced = opened.clone();
+    synced.alerts = Some(vec![30]);
+    store::save_event(&conn, &synced).unwrap();
+
+    update_event(
+        &conn,
+        &id,
+        &EventInput {
+            title: "Daily sync".into(),
+            original: Some(Box::new(shown.clone())),
+            ..shown
+        },
+    )
+    .unwrap();
+    let saved = store::event(&conn, &id).unwrap().unwrap();
+    assert_eq!(saved.title, "Daily sync");
+    assert_eq!(saved.alerts, Some(vec![30]));
+}
+
+#[test]
 fn a_rename_keeps_a_utc_series_in_utc() {
     let conn = conn();
     let calendars = crate::caldav::store::reconcile_calendars(
@@ -2482,6 +2515,115 @@ fn a_repeat_chosen_with_a_move_is_saved_as_chosen() {
     assert_eq!(
         store::event(&conn, &id).unwrap().unwrap().rrule,
         "FREQ=WEEKLY;BYDAY=TU,FR"
+    );
+}
+
+#[test]
+fn a_rule_left_as_it_was_moves_here_when_the_editor_says_it_did_not() {
+    let conn = conn();
+    let monday = OCT_1 + 4 * DAY;
+    let made = create_event(
+        &conn,
+        &EventInput {
+            title: "Review".into(),
+            start: monday,
+            end: monday + DAY,
+            all_day: true,
+            repeat: "FREQ=WEEKLY;BYDAY=MO,TH".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let id = made["event"]["id"].as_str().unwrap().to_string();
+    let opened = EventInput {
+        title: "Review".into(),
+        start: monday,
+        end: monday + DAY,
+        all_day: true,
+        repeat: "FREQ=WEEKLY;BYDAY=MO,TH".into(),
+        ..Default::default()
+    };
+    // Mobile's editor cannot place the series' days in its own zone, so it
+    // sends the rule as it opened and leaves moving it to the core.
+    let input = EventInput {
+        start: monday + DAY,
+        end: monday + 2 * DAY,
+        original: Some(Box::new(opened.clone())),
+        repeat_as_shown: Some(false),
+        ..opened
+    };
+    update_event(&conn, &id, &input).unwrap();
+    assert_eq!(
+        store::event(&conn, &id).unwrap().unwrap().rrule,
+        "FREQ=WEEKLY;BYDAY=TU,FR"
+    );
+}
+
+#[test]
+fn a_rule_left_as_it_was_moves_the_one_a_sync_brought_meanwhile() {
+    let conn = conn();
+    // The server now says Monday and Friday; the editor opened on Monday
+    // and Thursday, before that sync.
+    let id = synced_event(
+        &conn,
+        "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:r\r\nDTSTART;VALUE=DATE:20261005\r\nDTEND;VALUE=DATE:20261006\r\n\
+         RRULE:FREQ=WEEKLY;BYDAY=MO,FR\r\nSUMMARY:Review\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+    );
+    let event = store::event(&conn, &id).unwrap().unwrap();
+    let opened = EventInput {
+        title: "Review".into(),
+        start: event.start_at,
+        end: event.end_at,
+        all_day: true,
+        repeat: "FREQ=WEEKLY;BYDAY=MO,TH".into(),
+        ..Default::default()
+    };
+    let input = EventInput {
+        start: event.start_at + DAY,
+        end: event.end_at + DAY,
+        original: Some(Box::new(opened.clone())),
+        repeat_as_shown: Some(false),
+        ..opened
+    };
+    update_event(&conn, &id, &input).unwrap();
+    assert_eq!(
+        store::event(&conn, &id).unwrap().unwrap().rrule,
+        "FREQ=WEEKLY;BYDAY=TU,SA"
+    );
+}
+
+#[test]
+fn a_rule_chosen_for_one_day_follows_the_series_into_the_next() {
+    let conn = conn();
+    // Monday 23:00 UTC. An editor further east picks Monday and Wednesday
+    // for the series, then moves it two hours later: a time change on its
+    // own calendar, but Tuesday in the series' zone.
+    let id = synced_event(
+        &conn,
+        "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:z\r\nDTSTART:20261005T230000Z\r\nDTEND:20261005T233000Z\r\n\
+         RRULE:FREQ=WEEKLY;BYDAY=MO\r\nSUMMARY:Late\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+    );
+    let event = store::event(&conn, &id).unwrap().unwrap();
+    let opened = EventInput {
+        title: "Late".into(),
+        start: event.start_at,
+        end: event.end_at,
+        repeat: event.rrule.clone(),
+        ..Default::default()
+    };
+    let input = EventInput {
+        start: event.start_at + 2 * 3600,
+        end: event.end_at + 2 * 3600,
+        repeat: "FREQ=WEEKLY;BYDAY=MO,WE".into(),
+        original: Some(Box::new(opened.clone())),
+        repeat_as_shown: Some(true),
+        repeat_from: Some("2026-10-05".into()),
+        ..opened
+    };
+    update_event(&conn, &id, &input).unwrap();
+    assert_eq!(
+        store::event(&conn, &id).unwrap().unwrap().rrule,
+        "FREQ=WEEKLY;BYDAY=TU,TH"
     );
 }
 

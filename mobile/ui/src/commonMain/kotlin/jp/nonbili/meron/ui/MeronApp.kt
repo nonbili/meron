@@ -115,6 +115,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -596,6 +597,33 @@ private fun MeronMobileScreenContent(
                                     }
                                 }
 
+                                // Synced calendars, task lists and address books
+                                // changed: whatever shows them reads again.
+                                "calendar.changed", "caldav.changed" -> {
+                                    scope.launch {
+                                        if (event.name == "caldav.changed") loadCalendarAccounts()
+                                        loadSyncedCalendars()
+                                        if (screen == Screen.Calendar) loadCalendar()
+                                    }
+                                }
+
+                                "tasks.changed" -> {
+                                    val method = event.detailJson.jsonStringValue("method")
+                                    scope.launch {
+                                        if (screen == Screen.Tasks) refreshTasksAfterChange(method)
+                                        // The calendar shows tasks due, too.
+                                        if (screen == Screen.Calendar && tasksEnabled) loadCalendar()
+                                    }
+                                }
+
+                                "googleTasks.changed" -> {
+                                    scope.launch { loadGoogleTasksAccounts() }
+                                }
+
+                                "carddav.changed" -> {
+                                    addressBooksVersion++
+                                }
+
                                 "account.needsReconnect" -> {
                                     refreshAccountReconnectState(event.detailJson.jsonStringValue("account"))
                                 }
@@ -632,6 +660,35 @@ private fun MeronMobileScreenContent(
                         null
                     }
                 onDispose { handle?.close() }
+            }
+            // Before anything syncs: Google grants refresh with the app's
+            // own client, and task-list sync follows the Tasks switch.
+            LaunchedEffect(coreLoaded) {
+                if (!coreLoaded) return@LaunchedEffect
+                configureCoreOAuth()
+                loadSyncedCalendars()
+            }
+            // The core's Tasks switch pauses task-list sync: kept in step with
+            // the app's however it changes, a restored backup included.
+            LaunchedEffect(coreLoaded, tasksEnabled) {
+                if (coreLoaded) mirrorTasksEnabled()
+            }
+            // Calendars, task lists and Google Tasks at their own intervals while
+            // the app is open, as desktop's sidecar polls them. The first round
+            // waits for the screen's own reads.
+            // Only while the app is on screen: in the background the platform's
+            // refresh worker syncs, if the user allows it.
+            val pollLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+            LaunchedEffect(coreLoaded, calendarEnabled, tasksEnabled, pollLifecycle) {
+                if (!coreLoaded || (!calendarEnabled && !tasksEnabled)) return@LaunchedEffect
+                val lastRun = mutableMapOf<String, Long>()
+                pollLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    delay(5_000)
+                    while (true) {
+                        pollSyncServices(lastRun)
+                        delay(60_000)
+                    }
+                }
             }
             LaunchedEffect(liveMailPushEnabled) {
                 mobileHost.syncLiveMailPush(liveMailPushEnabled)
@@ -1188,6 +1245,7 @@ private fun MeronMobileScreenContent(
                         LaunchedEffect(Unit) { loadStorageUsage() }
                         SettingsScreen(
                             rulesPage = { modifier, onEditor -> RulesPage(modifier, onEditor) },
+                            calendarsPage = { modifier -> CalendarsTasksPage(this@with, modifier) },
                             onOpenTags = { showTagsDialog = true },
                             onBack = popAppBack,
                             initialGeneral = settingsGeneralTarget,
@@ -1323,21 +1381,6 @@ private fun MeronMobileScreenContent(
                                 showUnifiedInboxNav = !showUnifiedInboxNav
                                 saveAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
                             },
-                            tasksEnabled = tasksEnabled,
-                            onToggleTasks = {
-                                tasksEnabled = !tasksEnabled
-                                saveAppBoolean(prefs, TASKS_ENABLED_PREF, tasksEnabled)
-                                if (!tasksEnabled && screen == Screen.Tasks) screen = Screen.Mail
-                            },
-                            calendarEnabled = calendarEnabled,
-                            onToggleCalendar = {
-                                calendarEnabled = !calendarEnabled
-                                saveAppBoolean(prefs, CALENDAR_ENABLED_PREF, calendarEnabled)
-                                if (!calendarEnabled && screen == Screen.Calendar) screen = Screen.Mail
-                            },
-                            reminderLeadMinutes = reminderLeadMinutes,
-                            reminderAllDayDays = reminderAllDayDays,
-                            onAlertDefaultChange = ::saveAlertDefault,
                             sendShortcutMode = sendShortcutMode,
                             onToggleSendShortcut = {
                                 val next = sendShortcutMode.next()
@@ -1494,6 +1537,7 @@ private fun MeronMobileScreenContent(
                             onCompose = { address -> openComposeTo(address, defaultSendAccountId(), returnScreen = Screen.Contacts) },
                             onOpenThread = { thread -> readCoreThread(thread) },
                             onCopy = { label, value -> services.copyText(label, value) },
+                            mobile = this@with,
                         )
                     }
 

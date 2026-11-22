@@ -57,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -97,7 +98,20 @@ internal fun CalendarRouteContent(
             selectedDay?.takeIf { it in days }
                 ?: today.takeIf { it.year == calendarYear && it.month == calendarMonth }
                 ?: CivilDate(calendarYear, calendarMonth, 1)
-        val dayItems = calendarItems.filter { occursOn(it, visibleDay, ::localMidnight) }
+        // Hidden calendars are left out of the views, not out of sync.
+        val shown = remember(calendarItems, hiddenCalendars) { visibleCalendarItems(calendarItems, hiddenCalendars) }
+        val dayItems = shown.filter { occursOn(it, visibleDay, ::localMidnight) }
+        val colors = MaterialTheme.colorScheme
+        val calendarColors = remember(syncedCalendars) { syncedCalendars.associate { it.id to calendarColor(it.id, it.color) } }
+
+        // Each item in its calendar's colour: tasks in their own, events on
+        // this device in the app's.
+        fun tintOf(item: CalendarItem) =
+            when {
+                item.source == "task" -> colors.tertiary
+                item.calendar.isNotBlank() -> calendarColors[item.calendar] ?: calendarColor(item.calendar, "")
+                else -> colors.primary
+            }
 
         // Also covers a process restart straight onto the remembered route, and
         // a rebuilt state, which starts with no items.
@@ -106,8 +120,13 @@ internal fun CalendarRouteContent(
         // Days with something on: the kinds, tasks apart from events, so the
         // grid can mark them in their own colors.
         val marks =
-            remember(calendarItems) {
-                { day: CivilDate -> calendarItems.filter { occursOn(it, day, ::localMidnight) }.map { it.source == "task" } }
+            remember(shown, calendarColors, colors) {
+                { day: CivilDate ->
+                    shown
+                        .filter { occursOn(it, day, ::localMidnight) }
+                        .sortedBy { it.source == "task" }
+                        .map(::tintOf)
+                }
             }
 
         val listState = rememberLazyListState()
@@ -157,6 +176,7 @@ internal fun CalendarRouteContent(
                             IconButton(onClick = { pageMonth(1) }) {
                                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = tr("calendar.nextMonth"))
                             }
+                            CalendarActionsMenu(state)
                         },
                     )
                 },
@@ -235,6 +255,7 @@ internal fun CalendarRouteContent(
                             Column {
                                 CalendarItemRow(
                                     item = item,
+                                    tint = tintOf(item),
                                     onClick = {
                                         if (item.source == "task") {
                                             scope.launch { openCalendarTask(item) }
@@ -277,6 +298,9 @@ internal fun CalendarRouteContent(
                     editor = null
                     openLinkedThread(item.threadId, item.account)
                 },
+                calendars = syncedCalendars,
+                lastCalendar = lastCalendar,
+                onExport = ::exportCalendarEvent,
             )
         }
     }
@@ -293,7 +317,7 @@ private fun MonthCard(
     weekStart: Int,
     today: CivilDate,
     selected: CivilDate,
-    marks: (CivilDate) -> List<Boolean>,
+    marks: (CivilDate) -> List<Color>,
     onSelect: (CivilDate) -> Unit,
     onShiftMonth: (Int) -> Unit,
 ) {
@@ -347,7 +371,7 @@ private fun MonthGrid(
     month: Int,
     today: CivilDate,
     selected: CivilDate,
-    marks: (CivilDate) -> List<Boolean>,
+    marks: (CivilDate) -> List<Color>,
     onSelect: (CivilDate) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -415,12 +439,12 @@ private fun MonthGrid(
                             modifier = Modifier.padding(top = 3.dp).height(4.dp),
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                         ) {
-                            marks(day).sorted().take(3).forEach { task ->
+                            marks(day).take(3).forEach { tint ->
                                 Box(
                                     Modifier
                                         .size(4.dp)
                                         .clip(CircleShape)
-                                        .background((if (task) colors.tertiary else colors.primary).copy(alpha = if (outside) 0.4f else 1f)),
+                                        .background(tint.copy(alpha = if (outside) 0.4f else 1f)),
                                 )
                             }
                         }
@@ -438,12 +462,13 @@ private fun MonthGrid(
 @Composable
 private fun CalendarItemRow(
     item: CalendarItem,
+    tint: Color,
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val muted = colors.onSurfaceVariant
     val task = item.source == "task"
-    val tint = if (task) colors.tertiary else colors.primary.copy(alpha = if (item.response == "tentative") 0.4f else 1f)
+    val tint = tint.copy(alpha = if (!task && item.response == "tentative") 0.4f else 1f)
     Row(
         modifier =
             Modifier

@@ -284,6 +284,7 @@ internal fun savePendingOAuthFlow(
     prefs.putString(OAUTH_PENDING_VERIFIER_PREF, flow.verifier)
     prefs.putString(OAUTH_PENDING_REDIRECT_URI_PREF, flow.redirectUri)
     prefs.putString(OAUTH_PENDING_EMAIL_PREF, flow.email)
+    prefs.putString(OAUTH_PENDING_SERVICE_ACCOUNT_PREF, flow.serviceAccountId)
 }
 
 internal fun loadPendingOAuthFlow(prefs: AppPreferences): PendingOAuthFlow? {
@@ -293,7 +294,8 @@ internal fun loadPendingOAuthFlow(prefs: AppPreferences): PendingOAuthFlow? {
     val redirectUri = prefs.getString(OAUTH_PENDING_REDIRECT_URI_PREF, "")
     val email = prefs.getString(OAUTH_PENDING_EMAIL_PREF, "")
     if (provider.isBlank() || state.isBlank() || verifier.isBlank() || redirectUri.isBlank()) return null
-    return PendingOAuthFlow(provider, state, verifier, redirectUri, email)
+    val serviceAccountId = prefs.getString(OAUTH_PENDING_SERVICE_ACCOUNT_PREF, "")
+    return PendingOAuthFlow(provider, state, verifier, redirectUri, email, serviceAccountId)
 }
 
 internal fun clearPendingOAuthFlow(prefs: AppPreferences) {
@@ -302,4 +304,5 @@ internal fun clearPendingOAuthFlow(prefs: AppPreferences) {
     prefs.remove(OAUTH_PENDING_VERIFIER_PREF)
     prefs.remove(OAUTH_PENDING_REDIRECT_URI_PREF)
     prefs.remove(OAUTH_PENDING_EMAIL_PREF)
+    prefs.remove(OAUTH_PENDING_SERVICE_ACCOUNT_PREF)
 }

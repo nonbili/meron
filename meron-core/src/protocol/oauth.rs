@@ -168,8 +168,10 @@ pub(crate) fn update_mobile_oauth_token(data_dir: &str, params: &Value) -> Resul
     Ok(result)
 }
 
-/// `{provider, client_id, redirect_uri, state, code_challenge, login_hint}` →
-/// `{url}`, the authorization URL the host opens.
+/// `{provider, client_id, redirect_uri, state, code_challenge, login_hint,
+/// scopes}` → `{url}`, the authorization URL the host opens. `scopes` names
+/// the Google services sharing the account's grant, for a Calendar, Contacts
+/// or Tasks sign-in (as the `needs_sign_in` answer listed them).
 pub(crate) fn mobile_oauth_authorize_url(params: &Value) -> Result<Value, String> {
     let client = oauth::Client {
         provider: req_str(params, "provider")?.to_lowercase(),
@@ -182,9 +184,60 @@ pub(crate) fn mobile_oauth_authorize_url(params: &Value) -> Result<Value, String
         &req_str(params, "state")?,
         &req_str(params, "code_challenge")?,
         &opt_str(params, "login_hint"),
-        &[],
+        &oauth::service_scopes(params),
     )?;
     Ok(json!({ "url": url }))
+}
+
+/// `oauth.configure`: the app's own OAuth clients, as the mobile build bakes
+/// them in. Google grants shared by Calendar, Contacts and Tasks refresh with
+/// these, as desktop's do with its own; mail accounts keep their client on
+/// the account and do not need them.
+pub(crate) fn configure_mobile_oauth(params: &Value) -> Result<Value, String> {
+    crate::engine::set_oauth_defaults(crate::engine::OAuthDefaults {
+        google_client_id: opt_str(params, "google_client_id").trim().to_string(),
+        google_client_secret: opt_str(params, "google_client_secret").trim().to_string(),
+        google_token_url: opt_str(params, "google_token_url").trim().to_string(),
+        outlook_client_id: opt_str(params, "outlook_client_id").trim().to_string(),
+    });
+    Ok(json!({ "ok": true }))
+}
+
+/// `oauth.exchangeCode` for a Google service sign-in (Calendar, Contacts,
+/// Tasks): `{provider, code, code_verifier, redirect_uri}` → the tokens and
+/// the address they are for, which the host hands straight to the service's
+/// `*.addGoogle`/`googleTasks.add`. Nothing is stored here: the service keeps
+/// the grant only once it has connected. The client is the one
+/// `oauth.configure` set, so the grant later refreshes with the client that
+/// was granted it.
+pub(crate) fn exchange_mobile_service_code(params: &Value) -> Result<Value, String> {
+    let provider = req_str(params, "provider")?.to_lowercase();
+    if !oauth::is_google_service(&provider) {
+        return Err("unsupported oauth provider".to_string());
+    }
+    let client = crate::engine::default_oauth_client(&provider);
+    if client.client_id.trim().is_empty() {
+        return Err("Google sign-in is not configured".to_string());
+    }
+    let tokens = oauth::exchange_code(
+        &client,
+        &req_str(params, "code")?,
+        &opt_str(params, "redirect_uri"),
+        &opt_str(params, "code_verifier"),
+    )?;
+    let refresh_token = tokens.refresh_token.clone().unwrap_or_default();
+    if refresh_token.trim().is_empty() {
+        return Err("OAuth response did not include a refresh token".to_string());
+    }
+    let profile = oauth::fetch_profile(&client, &tokens)?;
+    Ok(json!({
+        "email": profile.email,
+        "display_name": profile.name,
+        "access_token": tokens.access_token,
+        "refresh_token": refresh_token,
+        "expires_in": tokens.expires_in.unwrap_or(3600),
+        "scope": tokens.scope.unwrap_or_default(),
+    }))
 }
 
 pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Result<Value, String> {

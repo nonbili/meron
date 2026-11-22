@@ -113,6 +113,46 @@ fn connect(engine: &Engine, email: &str, params: &Value) -> Result<Value> {
 /// Run queued writes and refresh tasks. A background trigger skips a sync in
 /// progress. The next poll picks up any edits made while that sync was running.
 pub fn sync(engine: &Engine, email: Option<&str>, background: bool) -> Result<bool> {
+    sync_where(engine, background, |_conn, known| {
+        Ok(email.is_none_or(|email| email == known))
+    })
+}
+
+/// A background sync of the accounts a poll would sync now: those with an
+/// interval, and those with edits waiting. One set to sync only when asked
+/// is left alone. Chosen inside one run, so a sync already under way skips
+/// the whole batch rather than some of it.
+pub fn sync_due(engine: &Engine, now: i64) -> Result<bool> {
+    sync_where(engine, true, |conn, known| {
+        if pending_emails(conn)?.iter().any(|email| email == known) {
+            return Ok(true);
+        }
+        let Some(minutes) = sync_intervals(conn)?
+            .into_iter()
+            .find(|(email, _)| email == known)
+            .map(|(_, minutes)| minutes)
+            .filter(|minutes| *minutes > 0)
+        else {
+            return Ok(false);
+        };
+        // Due once its interval has run out since it last synced cleanly.
+        Ok(store::last_sync_at(conn, known)? + minutes * 60 <= now)
+    })
+}
+
+/// A background sync of just the accounts with edits waiting to go out:
+/// what an edit here asks for, without refreshing the others early.
+pub fn sync_pending(engine: &Engine) -> Result<bool> {
+    sync_where(engine, true, |conn, known| {
+        Ok(pending_emails(conn)?.iter().any(|email| email == known))
+    })
+}
+
+fn sync_where(
+    engine: &Engine,
+    background: bool,
+    due: impl Fn(&Connection, &str) -> Result<bool>,
+) -> Result<bool> {
     let _operation = if background {
         match engine.google_tasks_operation.try_lock() {
             Ok(guard) => guard,
@@ -125,12 +165,18 @@ pub fn sync(engine: &Engine, email: Option<&str>, background: bool) -> Result<bo
             .lock()
             .map_err(|_| anyhow!("Google Tasks lock poisoned"))?
     };
-    let emails = store::emails(&*lock(&engine.db)?)?;
+    let emails = {
+        let conn = lock(&engine.db)?;
+        let mut due_emails = Vec::new();
+        for email in store::emails(&conn)? {
+            if due(&conn, &email)? {
+                due_emails.push(email);
+            }
+        }
+        due_emails
+    };
     let mut changed = false;
-    for email in emails
-        .iter()
-        .filter(|known| email.is_none_or(|email| email == *known))
-    {
+    for email in &emails {
         let result = (|| {
             let access = google_grant::access_token(engine, email, GOOGLE_TASKS_SCOPE)?
                 .ok_or_else(|| anyhow!("Reconnect Google Tasks to resume syncing"))?;

@@ -502,9 +502,15 @@ pub(crate) fn suggest_mobile_contacts(data_dir: &str, params: &Value) -> Result<
         .get("directory")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    // Only addresses no address book holds ("Other contacts").
+    let unsaved = params
+        .get("unsaved")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     with_mobile_db(data_dir, |conn| {
-        let contacts = store::list_contacts(&conn, &account, &query, limit, sort, directory)
-            .map_err(|err| err.to_string())?;
+        let contacts =
+            store::list_contacts_in(&conn, &account, &query, limit, sort, directory, unsaved)
+                .map_err(|err| err.to_string())?;
         Ok(json!({ "contacts": contacts }))
     })
 }

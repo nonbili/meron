@@ -134,6 +134,8 @@ class AndroidBackgroundSyncWorker(
             }
         }
 
+        syncCalendarsAndTasks()
+
         logEvent(
             applicationContext,
             "background refresh done: refreshed=$refreshed skipped=$skipped failed=$failed hasTransient=$hasTransientNetworkError",
@@ -155,6 +157,32 @@ class AndroidBackgroundSyncWorker(
             Result.retry()
         } else {
             Result.success()
+        }
+    }
+
+    /**
+     * Synced calendars and task lists, as the app's foreground poll keeps
+     * them: CalDAV accounts with an interval (not those set to sync only when
+     * asked), and Google Tasks while Tasks is on. Their events then alert
+     * while the app is closed. Failures are logged; the accounts record them.
+     */
+    private fun syncCalendarsAndTasks() {
+        val calendar = loadAppBoolean(applicationContext, CALENDAR_ENABLED_PREF, false)
+        val tasks = loadAppBoolean(applicationContext, TASKS_ENABLED_PREF, false)
+        if (!calendar && !tasks) return
+        // Only accounts whose interval has run out, as the foreground poll keeps them.
+        val automatic = JSONObject().put("automatic", true).put("due", true)
+        for ((id, method) in listOf(9_000L to "caldav.sync", 9_001L to "googleTasks.sync")) {
+            if (method == "googleTasks.sync" && !tasks) continue
+            val response = JSONObject(MeronCoreNative.invokeJson(requestJson(id, method, automatic)))
+            // A call that failed, or accounts that did (recorded on them too).
+            val error =
+                response.optJSONObject("error")?.optString("message").orEmpty().ifEmpty {
+                    response.optJSONObject("result")?.optString("error").orEmpty()
+                }
+            if (error.isNotEmpty()) {
+                logEvent(applicationContext, "$method failed: ${redactMessage(error)}", warning = true)
+            }
         }
     }
 

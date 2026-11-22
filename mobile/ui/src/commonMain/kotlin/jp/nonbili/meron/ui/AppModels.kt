@@ -150,6 +150,7 @@ internal const val TASKS_ENABLED_PREF = "tasks_enabled_v1"
 
 /** Whether the optional Calendar screen is offered, like Tasks. */
 internal const val CALENDAR_ENABLED_PREF = "calendar_enabled_v1"
+internal const val HIDDEN_CALENDARS_PREF = "hidden_calendars_v1"
 internal const val SHOW_SENDER_IMAGES_PREF = "show_sender_images_v1"
 
 /** Whether thread rows show the sender avatar; off gives denser rows. */
@@ -210,6 +211,7 @@ internal const val OAUTH_PENDING_STATE_PREF = "oauth_pending_state_v1"
 internal const val OAUTH_PENDING_VERIFIER_PREF = "oauth_pending_verifier_v1"
 internal const val OAUTH_PENDING_REDIRECT_URI_PREF = "oauth_pending_redirect_uri_v1"
 internal const val OAUTH_PENDING_EMAIL_PREF = "oauth_pending_email_v1"
+internal const val OAUTH_PENDING_SERVICE_ACCOUNT_PREF = "oauth_pending_service_account_v1"
 
 internal data class PendingOAuthFlow(
     val provider: String,
@@ -217,6 +219,9 @@ internal data class PendingOAuthFlow(
     val verifier: String,
     val redirectUri: String,
     val email: String,
+    /** A Google Calendar or Contacts account being reconnected; empty for a
+     *  new one, and for a mailbox sign-in. */
+    val serviceAccountId: String = "",
 )
 
 internal const val KANBAN_COLUMN_MIN_WIDTH = 240
