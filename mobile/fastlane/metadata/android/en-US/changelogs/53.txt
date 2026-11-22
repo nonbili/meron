@@ -1,0 +1,6 @@
+- Add a conversation footer setting (reply box, buttons, or none)
+- Add a mark as spam action in mail views
+- Add forwarding to mail rules
+- Make remote content controls easier to access in messages
+- Persist sender avatars and show account avatars in the folder switcher
+- Update translations across all locales
