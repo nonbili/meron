@@ -466,6 +466,58 @@ describe('Composer', () => {
     expect(body.innerHTML).toContain('<br')
   })
 
+  it.each([
+    ['at the end', ''],
+    ['between paragraphs', '<p>Second paragraph</p>'],
+  ] as const)('leaves the quote on a second Enter %s', (_position, remainingParagraphs) => {
+    const quoted = 'First paragraph'
+    const quote = (content: string) => `<blockquote type="cite">${content}</blockquote>`
+    const firstParagraph = `<p>${quoted}</p>`
+    const id = openComposeTab({ rich: true, html: quote(firstParagraph + remainingParagraphs), noSignature: true })!
+    const { result } = renderHook(() => useComposer(id))
+    const editor = result.current.editor!
+    const pressEnter = () => fireEvent.keyDown(editor.view.dom, { key: 'Enter', code: 'Enter' })
+
+    act(() => {
+      editor.commands.setTextSelection(2 + quoted.length)
+      pressEnter()
+    })
+    const withBlankLine = quote(`${firstParagraph}<p></p>${remainingParagraphs}`)
+    expect(editor.getHTML()).toBe(`${withBlankLine}<p></p>`)
+
+    act(() => {
+      pressEnter()
+      editor.commands.insertContent('My reply')
+    })
+    const afterReply = remainingParagraphs ? quote(remainingParagraphs) : ''
+    const expected = `${quote(firstParagraph)}<p>My reply</p>${afterReply}<p></p>`
+    expect(editor.getHTML()).toBe(expected)
+    expect(draftOf(id)?.html).toBe(expected)
+  })
+
+  it.each([
+    ['a soft line', '<p>First<br><br>Second</p>', 8, '<p>First</p>', '<p>Second</p>'],
+    ['a space on a soft line', '<p>First<br>&nbsp;<br>Second</p>', 9, '<p>First</p>', '<p>Second</p>'],
+    ['a paragraph with a break', '<p>First</p><p><br></p><p>Second</p>', 9, '<p>First</p>', '<p>Second</p>'],
+    ['a leading soft line', '<p><br>Second</p>', 2, '', '<p>Second</p>'],
+    ['a trailing soft line', '<p>First<br></p>', 8, '<p>First</p>', ''],
+  ] as const)('leaves the quote on Enter from %s', (_line, initial, caret, before, after) => {
+    const quote = (content: string) => (content ? `<blockquote type="cite">${content}</blockquote>` : '')
+    const id = openComposeTab({ rich: true, html: `${quote(initial)}<p>After quote</p>`, noSignature: true })!
+    const { result } = renderHook(() => useComposer(id))
+    const editor = result.current.editor!
+
+    act(() => {
+      editor.commands.setTextSelection(caret)
+      fireEvent.keyDown(editor.view.dom, { key: 'Enter', code: 'Enter' })
+      editor.commands.insertContent('My reply')
+    })
+
+    const expected = `${quote(before)}<p>My reply</p>${quote(after)}<p>After quote</p>`
+    expect(editor.getHTML()).toBe(expected)
+    expect(draftOf(id)?.html).toBe(expected)
+  })
+
   it('notes a changed recipient key and asks before sending to it', async () => {
     const base = (window as any).go.main.App.Invoke
     ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) =>

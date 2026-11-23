@@ -5,6 +5,7 @@ import { encryptionBlocksSend, recipientAddresses, useRecipientKeys } from '../c
 import { confirmKeyChanges } from '../../states/crypto'
 import { Extension, useEditor } from '@tiptap/react'
 import { Plugin, TextSelection } from '@tiptap/pm/state'
+import { liftTarget } from '@tiptap/pm/transform'
 import { StarterKit } from '@tiptap/starter-kit'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -92,12 +93,48 @@ const ExitPastedLink = Extension.create({
   },
 })
 
-// A quoted reply's `<blockquote type="cite">` (see replyQuote) keeps its type
-// through the editor, which would otherwise drop it: that attribute is what
-// tells the conversation view the blockquote is a quote to fold.
-const CiteBlockquote = Extension.create({
-  name: 'citeBlockquote',
+const ComposerBlockquote = Extension.create({
+  name: 'composerBlockquote',
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        const { state, view } = this.editor
+        const { empty, $from } = state.selection
+        const paragraph = $from.parent
+        if (!empty || paragraph.type.name !== 'paragraph') return false
+        if ($from.node(-1).type.name !== 'blockquote') return false
+
+        // Quoted email can have multiple visual lines in one paragraph.
+        let lineStart = 0
+        let lineEnd = paragraph.content.size
+        paragraph.forEach((node, offset) => {
+          if (node.type.name !== 'hardBreak') return
+          if (offset < $from.parentOffset) lineStart = offset + node.nodeSize
+          else lineEnd = Math.min(lineEnd, offset)
+        })
+        if (paragraph.textBetween(lineStart, lineEnd, '', '\ufffc').trim()) return false
+
+        // Replace this line and its adjacent breaks with a paragraph that can be lifted.
+        const from = Math.max(0, lineStart - 1)
+        const to = Math.min(paragraph.content.size, lineEnd + 1)
+        let caret = $from.start() + from
+        const tr = state.tr.delete(caret, $from.start() + to)
+        if (from > 0) {
+          tr.split(caret)
+          caret += 2
+        }
+        if (to < paragraph.content.size) tr.split(caret)
+
+        const range = tr.doc.resolve(caret).blockRange()
+        const target = range && liftTarget(range)
+        if (!range || target == null) return false
+        view.dispatch(tr.setSelection(TextSelection.create(tr.doc, caret)).lift(range, target).scrollIntoView())
+        return true
+      },
+    }
+  },
   addGlobalAttributes() {
+    // Keep the cite type so the conversation view can fold quoted replies.
     return [
       {
         types: ['blockquote'],
@@ -254,7 +291,7 @@ export function useComposer(tabId: string) {
       // No HTMLAttributes: the node view does the styling on screen, and class
       // names would only go out in the mail, meaning nothing to its recipient.
       ResizableImage.configure({ allowBase64: true }),
-      CiteBlockquote,
+      ComposerBlockquote,
       SendShortcutKey,
     ],
     content: initialHtml,
