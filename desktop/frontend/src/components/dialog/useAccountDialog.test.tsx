@@ -37,6 +37,7 @@ describe('account setup, reconnect and edit', () => {
   let connectedCalendar: CalendarAccount | undefined
   let discoveredServer: string | null
   let discoveryRequests: unknown[]
+  let pollError: string
 
   beforeEach(() => {
     saved = null
@@ -49,6 +50,7 @@ describe('account setup, reconnect and edit', () => {
     caldav$.accounts.set([])
     discoveredServer = null
     discoveryRequests = []
+    pollError = ''
     previousGo = Object.getOwnPropertyDescriptor(window, 'go')
     accounts$.set([account])
     ui$.setupMode.set('custom')
@@ -76,16 +78,18 @@ describe('account setup, reconnect and edit', () => {
             if (command === 'oauth.gmailBegin' || command === 'oauth.outlookBegin')
               return { url: 'https://example.com/oauth', needs_external_browser: true }
             if (command === 'oauth.gmailPollProfile' || command === 'oauth.outlookPollProfile')
-              return {
-                exchanged: true,
-                profile: {
-                  email: profileEmail,
-                  display_name: 'User',
-                  access_token: 'access',
-                  refresh_token: 'refresh',
-                  expires_in: 3600,
-                },
-              }
+              return pollError
+                ? { exchanged: false, error: pollError }
+                : {
+                    exchanged: true,
+                    profile: {
+                      email: profileEmail,
+                      display_name: 'User',
+                      access_token: 'access',
+                      refresh_token: 'refresh',
+                      expires_in: 3600,
+                    },
+                  }
             if (command === 'account.list') return { accounts: listedAccounts }
             if (command === 'caldav.discoverServer') {
               discoveryRequests.push(payload)
@@ -209,6 +213,23 @@ describe('account setup, reconnect and edit', () => {
       })
     }
   }
+
+  it('stops waiting and shows why a Google sign-in failed', async () => {
+    jest.useFakeTimers()
+    ui$.setupMode.set('gmail')
+    pollError = 'Allow Meron to access Gmail when signing in to Google'
+    const hook = renderHook(() => useAccountDialog())
+    await act(async () => {
+      await hook.result.current.beginOAuth('gmail')
+    })
+    expect(hook.result.current.waitingForGoogle).toBe(true)
+    await act(async () => {
+      jest.advanceTimersByTime(1000)
+    })
+    expect(hook.result.current.waitingForGoogle).toBe(false)
+    expect(hook.result.current.error).toBe(pollError)
+    expect(saved).toBeNull()
+  })
 
   function prepareGmailSetup() {
     jest.useFakeTimers()

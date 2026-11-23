@@ -10,6 +10,7 @@ use std::time::Duration;
 pub const GOOGLE_AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 pub const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 pub const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v3/userinfo";
+pub const GOOGLE_MAIL_SCOPE: &str = "https://mail.google.com/";
 pub const GOOGLE_SCOPES: &str = "openid email profile https://mail.google.com/";
 pub const GOOGLE_CALENDAR_PROVIDER: &str = "google_calendar";
 // Google CalDAV uses the full Calendar scope for event sync.
@@ -203,7 +204,22 @@ pub fn exchange_code(
     if client.provider == "outlook" {
         form.push(("scope", OUTLOOK_SCOPES));
     }
-    post_token(client.token_url(), form, "oauth code exchange")
+    let tokens = post_token(client.token_url(), form, "oauth code exchange")?;
+    if client.provider == "gmail" && !grants_gmail(&tokens) {
+        return Err("Allow Meron to access Gmail when signing in to Google".to_string());
+    }
+    Ok(tokens)
+}
+
+/// Whether a Gmail sign-in covers IMAP and SMTP. Google's consent screen lets
+/// the mail permission be left unticked; the token then still reads the
+/// profile, so the account would add fine and every sync be refused. A token
+/// response without a `scope` field grants what was asked (RFC 6749 §5.1).
+fn grants_gmail(tokens: &Tokens) -> bool {
+    tokens
+        .scope
+        .as_deref()
+        .is_none_or(|scope| scope.split_whitespace().any(|s| s == GOOGLE_MAIL_SCOPE))
 }
 
 /// Refresh a desktop Google DAV grant without requesting additional scopes.
@@ -541,6 +557,29 @@ mod tests {
             parse_id_token_claims("garbage"),
             (String::new(), String::new())
         );
+    }
+
+    #[test]
+    fn gmail_sign_in_without_the_mail_scope_is_refused() {
+        let (base, _rx) = serve(vec![
+            (
+                "application/json",
+                br#"{"access_token":"a","refresh_token":"r","scope":"openid https://www.googleapis.com/auth/userinfo.email"}"#.to_vec(),
+            ),
+            (
+                "application/json",
+                br#"{"access_token":"a","refresh_token":"r","scope":"openid https://mail.google.com/"}"#.to_vec(),
+            ),
+        ]);
+        let client = Client {
+            provider: "gmail".to_string(),
+            client_id: "client".to_string(),
+            token_url: format!("{base}/token"),
+            ..Client::default()
+        };
+        let err = exchange_code(&client, "code", "", "").unwrap_err();
+        assert!(err.contains("access Gmail"), "{err}");
+        assert!(exchange_code(&client, "code", "", "").is_ok());
     }
 
     #[test]

@@ -161,24 +161,39 @@ func (a *App) beginOAuth(provider string) (any, error) {
 	a.oauthState = state
 	a.oauthProvider = provider
 	a.oauthProfile = nil
+	a.oauthErr = ""
 	a.oauthMu.Unlock()
 	return a.startOAuth(provider, state, "", nil, func(profile *ExchangedProfile, err error) {
 		if err != nil {
 			a.logf("oauth callback failed (provider=%s): %v", provider, err)
-			return
 		}
 		a.oauthMu.Lock()
 		defer a.oauthMu.Unlock()
-		if a.oauthState == state {
+		if a.oauthState != state {
+			return
+		}
+		if err != nil {
+			a.oauthErr = err.Error()
+		} else {
 			a.oauthProfile = profile
 		}
 	})
 }
 
+// oauthPollProfile reports the mailbox sign-in in flight: its profile once
+// exchanged, or the error that ended it, each handed out once.
 func (a *App) oauthPollProfile(provider string) any {
 	a.oauthMu.Lock()
 	defer a.oauthMu.Unlock()
-	if a.oauthProvider != provider || a.oauthProfile == nil {
+	if a.oauthProvider != provider {
+		return map[string]any{"exchanged": false}
+	}
+	if a.oauthErr != "" {
+		err := a.oauthErr
+		a.oauthErr = ""
+		return map[string]any{"exchanged": false, "error": err}
+	}
+	if a.oauthProfile == nil {
 		return map[string]any{"exchanged": false}
 	}
 	profile := a.oauthProfile

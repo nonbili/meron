@@ -220,6 +220,7 @@ export function useAccountDialog() {
     try {
       const res = await invoke<{
         exchanged: boolean
+        error?: string
         profile?: {
           email: string
           display_name: string
@@ -230,6 +231,16 @@ export function useAccountDialog() {
         }
       }>(`oauth.${provider}PollProfile`)
 
+      if (res.error) {
+        clearInterval(intervalId)
+        ;(window as any)._oauthPollInterval = null
+        setWaitingForGoogle(false)
+        // The user may have moved to another form while the browser was open;
+        // Google and Microsoft share the one OAuth form.
+        const oauthForm = ui$.setupMode.peek()
+        if (oauthForm === 'gmail' || oauthForm === 'outlook') setError(res.error)
+        return
+      }
       if (res.exchanged && res.profile) {
         const before = new Set(accounts$.peek().map((acc) => acc.id))
         clearInterval(intervalId)

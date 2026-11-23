@@ -82,6 +82,8 @@ type App struct {
 	oauthState    string
 	oauthProvider string
 	oauthProfile  *ExchangedProfile
+	// oauthErr is why the mailbox sign-in in flight failed, for the poll.
+	oauthErr string
 
 	mailtoMu      sync.Mutex
 	pendingMailto []string
