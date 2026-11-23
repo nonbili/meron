@@ -26,97 +26,159 @@ private func localizedCatalogTemplate(
     return localizedBundle.localizedString(forKey: key, value: nil, table: nil)
 }
 
+/// Minimal ICU MessageFormat: `{name}`, `{name, number}` and
+/// `{name, plural, =0 {…} one {…} other {…}}` anywhere in the message, any
+/// number of times, nested, with `#` inside a plural branch replaced by its count.
+/// Anything else in braces is kept literally.
 private func formatLocalizedCatalogTemplate(
     _ template: String,
     args: [String: Any],
     localeIdentifier: String
 ) -> String {
-    if let plural = parseLocalizedCatalogPlural(template) {
-        let count = localizedCatalogInt(args[plural.argument]) ?? 0
-        let language = localeIdentifier.replacingOccurrences(of: "_", with: "-").components(separatedBy: "-")[0].lowercased()
-        let category = (language == "ru" || language == "uk") ? slavicPluralCategory(count) : (count == 1 ? "one" : "other")
-        let selected = plural.variants[category]
-            ?? plural.variants["other"]
-            ?? template
-        return replaceLocalizedCatalogPlaceholders(selected, args: args)
+    let language = localeIdentifier.replacingOccurrences(of: "_", with: "-").lowercased()
+    return formatLocalizedCatalogMessage(Array(template), args: args, language: language, pound: nil)
+}
+
+private func formatLocalizedCatalogMessage(
+    _ chars: [Character],
+    args: [String: Any],
+    language: String,
+    pound: String?
+) -> String {
+    var out = ""
+    var index = 0
+    while index < chars.count {
+        let char = chars[index]
+        if char == "{" {
+            guard let end = localizedCatalogMatchingBrace(chars, start: index) else {
+                out += String(chars[index...])
+                return out
+            }
+            let body = String(chars[(index + 1) ..< end])
+            out += formatLocalizedCatalogArgument(body, args: args, language: language)
+                ?? String(chars[index ... end])
+            index = end + 1
+        } else if char == "#", let pound {
+            out += pound
+            index += 1
+        } else {
+            out.append(char)
+            index += 1
+        }
     }
-    return replaceLocalizedCatalogPlaceholders(template, args: args)
+    return out
 }
 
-private func slavicPluralCategory(_ count: Int) -> String {
-    let lastTwo = abs(count % 100)
-    let last = lastTwo % 10
-    if last == 1, lastTwo != 11 { return "one" }
-    if (2 ... 4).contains(last), !(12 ... 14).contains(lastTwo) { return "few" }
-    return "many"
-}
+private let localizedCatalogArgumentRegex = try? NSRegularExpression(
+    pattern: #"^\s*([A-Za-z][A-Za-z0-9_]*)\s*(?:,\s*([A-Za-z]+)\s*(?:,([\s\S]*))?)?$"#
+)
 
-private struct LocalizedCatalogPlural {
-    let argument: String
-    let variants: [String: String]
-}
-
-private func parseLocalizedCatalogPlural(_ template: String) -> LocalizedCatalogPlural? {
-    guard template.hasPrefix("{") else { return nil }
-    let prefixPattern = #"^\{([A-Za-z][A-Za-z0-9_]*)\s*,\s*plural\s*,"#
+/// Format the inside of one `{…}`, or nil when it is not an argument we understand.
+private func formatLocalizedCatalogArgument(
+    _ body: String,
+    args: [String: Any],
+    language: String
+) -> String? {
     guard
-        let regex = try? NSRegularExpression(pattern: prefixPattern),
-        let match = regex.firstMatch(in: template, range: NSRange(template.startIndex..., in: template)),
-        let argumentRange = Range(match.range(at: 1), in: template),
-        let matchRange = Range(match.range, in: template)
+        let regex = localizedCatalogArgumentRegex,
+        let match = regex.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)),
+        let nameRange = Range(match.range(at: 1), in: body)
     else {
         return nil
     }
+    let name = String(body[nameRange])
+    let type = Range(match.range(at: 2), in: body).map { String(body[$0]) } ?? ""
+    switch type {
+    case "", "number":
+        return args[name].map { "\($0)" } ?? ""
+    case "plural":
+        let source = Range(match.range(at: 3), in: body).map { String(body[$0]) } ?? ""
+        let variants = parseLocalizedCatalogPluralVariants(Array(source))
+        let value = args[name]
+        let count = localizedCatalogInt(value) ?? 0
+        guard let branch = variants["=\(count)"]
+            ?? variants[localizedCatalogPluralCategory(language, count)]
+            ?? variants["other"]
+        else {
+            return nil
+        }
+        return formatLocalizedCatalogMessage(Array(branch), args: args, language: language, pound: value.map { "\($0)" } ?? "\(count)")
+    default:
+        return nil
+    }
+}
 
-    var index = matchRange.upperBound
+private func parseLocalizedCatalogPluralVariants(_ chars: [Character]) -> [String: String] {
     var variants: [String: String] = [:]
-    while index < template.endIndex {
-        while index < template.endIndex, template[index].isWhitespace {
-            index = template.index(after: index)
+    var index = 0
+    while index < chars.count {
+        while index < chars.count, chars[index].isWhitespace {
+            index += 1
         }
-        let categoryStart = index
-        while index < template.endIndex, template[index].isLetter {
-            index = template.index(after: index)
+        let selectorStart = index
+        while index < chars.count, chars[index].isLetter || chars[index].isNumber || chars[index] == "=" || chars[index] == "-" {
+            index += 1
         }
-        guard categoryStart < index else { break }
-        let category = String(template[categoryStart ..< index])
-        while index < template.endIndex, template[index].isWhitespace {
-            index = template.index(after: index)
+        guard selectorStart < index else { break }
+        let selector = String(chars[selectorStart ..< index])
+        while index < chars.count, chars[index].isWhitespace {
+            index += 1
         }
-        guard index < template.endIndex, template[index] == "{" else { break }
-        let branch = readLocalizedCatalogBraceBranch(template, start: index)
-        variants[category] = branch.value
-        index = branch.next
+        guard index < chars.count, chars[index] == "{",
+              let end = localizedCatalogMatchingBrace(chars, start: index)
+        else { break }
+        variants[selector] = String(chars[(index + 1) ..< end])
+        index = end + 1
     }
-    return LocalizedCatalogPlural(argument: String(template[argumentRange]), variants: variants)
+    return variants
 }
 
-private func readLocalizedCatalogBraceBranch(
-    _ template: String,
-    start: String.Index
-) -> (value: String, next: String.Index) {
+/// Index of the `}` closing the `{` at `start`, or nil.
+private func localizedCatalogMatchingBrace(_ chars: [Character], start: Int) -> Int? {
     var depth = 0
-    var index = start
-    while index < template.endIndex {
-        if template[index] == "{" {
+    for index in start ..< chars.count {
+        if chars[index] == "{" {
             depth += 1
-        } else if template[index] == "}" {
+        } else if chars[index] == "}" {
             depth -= 1
-            if depth == 0 {
-                return (String(template[template.index(after: start) ..< index]), template.index(after: index))
-            }
+            if depth == 0 { return index }
         }
-        index = template.index(after: index)
     }
-    return (String(template[template.index(after: start)...]), template.endIndex)
+    return nil
 }
 
-private func replaceLocalizedCatalogPlaceholders(_ value: String, args: [String: Any]) -> String {
-    var out = value
-    for (key, value) in args {
-        out = out.replacingOccurrences(of: "{\(key)}", with: "\(value)")
+/// CLDR cardinal category for `language` (a lowercase `lang` or `lang-region` tag).
+private func localizedCatalogPluralCategory(_ language: String, _ count: Int) -> String {
+    let n = count.magnitude
+    let lastTwo = n % 100
+    let last = n % 10
+    switch language.components(separatedBy: "-")[0] {
+    case "fr":
+        return n <= 1 ? "one" : "other"
+    case "pt":
+        return n == 1 || (n == 0 && language == "pt-br") ? "one" : "other"
+    case "ru", "uk":
+        if last == 1, lastTwo != 11 { return "one" }
+        if (2 ... 4).contains(last), !(12 ... 14).contains(lastTwo) { return "few" }
+        return "many"
+    case "pl":
+        if n == 1 { return "one" }
+        if (2 ... 4).contains(last), !(12 ... 14).contains(lastTwo) { return "few" }
+        return "many"
+    case "ar":
+        if n == 0 { return "zero" }
+        if n == 1 { return "one" }
+        if n == 2 { return "two" }
+        if (3 ... 10).contains(lastTwo) { return "few" }
+        if (11 ... 99).contains(lastTwo) { return "many" }
+        return "other"
+    case "lv":
+        if last == 0 || (11 ... 19).contains(lastTwo) { return "zero" }
+        if last == 1, lastTwo != 11 { return "one" }
+        return "other"
+    default:
+        return n == 1 ? "one" : "other"
     }
-    return out
 }
 
 private func localizedCatalogInt(_ value: Any?) -> Int? {

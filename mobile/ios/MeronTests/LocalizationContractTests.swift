@@ -54,6 +54,24 @@ final class LocalizationContractTests: XCTestCase {
             ),
             "2 files"
         )
+        XCTAssertEqual(
+            localizedCatalogString(
+                "calendar.file.imported",
+                localeIdentifier: "en",
+                args: ["imported": 3, "duplicates": 1, "skipped": 0],
+                bundle: bundle
+            ),
+            "Imported 3 events. 1 duplicate and 0 unsupported or invalid entries skipped."
+        )
+        XCTAssertEqual(
+            localizedCatalogString(
+                "calendar.repeat.summaryCount",
+                localeIdentifier: "en",
+                args: ["rule": "Every week", "count": 10],
+                bundle: bundle
+            ),
+            "Every week, 10 times"
+        )
     }
 
     func testRussianCatalogFormatsPluralForms() throws {
