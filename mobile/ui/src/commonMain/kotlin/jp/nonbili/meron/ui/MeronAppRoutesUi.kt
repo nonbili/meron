@@ -294,7 +294,7 @@ internal fun KanbanRouteContent(
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                        colors = canvasAppBarColors(),
                         title = {
                             if (mailSelectionActive) {
                                 MailSelectionTitle(selectedMailThreads.size, height = 52.dp)

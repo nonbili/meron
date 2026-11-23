@@ -1349,7 +1349,7 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
     val isOAuth = account.authType == "oauth" || account.provider == "gmail" || account.provider == "outlook"
     when {
         accountSummaryIsRss(account) -> {
-            addSection = 2
+            addSection = 1
             passwordServerSettingsOpen = false
         }
 
@@ -1398,7 +1398,7 @@ internal fun MeronMobileState.reconnectAccount(account: AccountSummary) {
                 }
             smtpSecurityTouched =
                 account.smtpPort > 0 && smtpSecurity != mailSecurityForPort(account.smtpPort)
-            addSection = 1
+            addSection = 0
             passwordServerSettingsOpen = true
         }
     }

@@ -59,9 +59,8 @@ appId: jp.nonbili.meron
     text: "Open"
     optional: true
 - extendedWaitUntil:
-    visible: "New message"
+    visible: "A few ideas for Friday"
     timeout: 15000
-- assertVisible: "A few ideas for Friday"
 - extendedWaitUntil:
     notVisible: "Loaded compose draft"
     timeout: 10000

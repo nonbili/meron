@@ -311,7 +311,6 @@ internal fun ComposeScreen(
     onSend: () -> Unit,
     onBack: () -> Unit,
     sending: Boolean = false,
-    isReply: Boolean = false,
     snackbarHost: @Composable () -> Unit = {},
 ) {
     var confirmDiscard by remember { mutableStateOf(false) }
@@ -379,16 +378,9 @@ internal fun ComposeScreen(
         topBar = {
             TopAppBar(
                 colors = canvasAppBarColors(),
-                title = {
-                    // One line at the size of the other bars' titles: the bar
-                    // also holds up to four actions.
-                    Text(
-                        tr(if (isReply) "chat.actions.reply" else "composer.actions.newMessage"),
-                        fontSize = 18.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
+                // No title: the editor says what it is, and the bar holds up to
+                // four actions, which left a title cut to a few letters.
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.Close, contentDescription = tr("buttons.discard"))

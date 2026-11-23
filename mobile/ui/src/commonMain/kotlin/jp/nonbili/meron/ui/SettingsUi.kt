@@ -77,7 +77,6 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -321,10 +320,7 @@ internal fun SettingsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                    ),
+                colors = canvasAppBarColors(),
                 title = {
                     Text(
                         when (page) {
@@ -638,8 +634,9 @@ internal fun SettingsScreen(
             }
 
             composable(SettingsRoutes.Root) {
-                // Mirrors the desktop Settings sidebar: General, Messages and
-                // Composer, then Kanban boards, Mail accounts, and Feed accounts.
+                // Mirrors the desktop Settings sidebar: General, Messages,
+                // Composer, Rules, Calendars & tasks and Encryption, then Kanban
+                // boards, Mail accounts, and Feed accounts.
                 val mailAccounts = accounts.filter { !accountSummaryIsRss(it) }
                 val feedAccounts = accounts.filter { accountSummaryIsRss(it) }
                 val rootListState = rememberLazyListState()
@@ -678,18 +675,18 @@ internal fun SettingsScreen(
                     }
                     item {
                         SettingsRow(
-                            icon = Icons.Filled.Lock,
-                            title = tr("crypto.peers.nav"),
-                            subtitle = null,
-                            onClick = { settingsNavController.navigate(SettingsRoutes.Encryption) },
-                        )
-                    }
-                    item {
-                        SettingsRow(
                             icon = Icons.Filled.Event,
                             title = tr("settings.calendars.nav"),
                             subtitle = null,
                             onClick = { settingsNavController.navigate(SettingsRoutes.Calendars) },
+                        )
+                    }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.Lock,
+                            title = tr("crypto.peers.nav"),
+                            subtitle = null,
+                            onClick = { settingsNavController.navigate(SettingsRoutes.Encryption) },
                         )
                     }
                     section(tr("settings.sections.kanbanBoards"))

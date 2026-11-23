@@ -6,8 +6,8 @@ import { securityAfterPortEdit, type MailSecurity } from './accountSecurity'
 import type { AccountDialogController } from './useAccountDialog'
 import type { DialogClasses } from './accountDialogStyles'
 
-// The custom IMAP/SMTP section: email (with autodiscovery), sender name, password,
-// the app-password hint, and the collapsible advanced server settings.
+// The custom IMAP/SMTP section: email (with autodiscovery), password, the
+// app-password hint, sender name, and the collapsible advanced server settings.
 export function AccountDialogCustom({
   ctl,
   classes,
@@ -56,13 +56,6 @@ export function AccountDialogCustom({
           {discovering ? t('accounts.discovery.lookingUp') : discoverNote}
         </p>
       )}
-      <Field
-        label={t('accounts.fields.senderNameOutgoing')}
-        value={form.sender_name}
-        onChange={(sender_name) => setForm((f) => ({ ...f, sender_name }))}
-        inputClassName={inputClass}
-        labelClassName={fieldLabelClass}
-      />
       <label className="flex flex-col gap-1.5 w-full">
         <span className={`pl-0.5 ${fieldLabelClass ?? 'text-[0.6875rem] font-semibold text-secondary'}`}>
           {editing ? t('accounts.fields.passwordUnchanged') : t('accounts.fields.password')}
@@ -104,6 +97,13 @@ export function AccountDialogCustom({
           <p className="flex-1 font-medium">{t('accounts.appPasswordHint', { provider: appPasswordHint.provider })}</p>
         </div>
       )}
+      <Field
+        label={t('accounts.fields.senderNameOutgoing')}
+        value={form.sender_name}
+        onChange={(sender_name) => setForm((f) => ({ ...f, sender_name }))}
+        inputClassName={inputClass}
+        labelClassName={fieldLabelClass}
+      />
 
       <button
         type="button"

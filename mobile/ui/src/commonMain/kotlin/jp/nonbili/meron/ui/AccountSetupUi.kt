@@ -28,8 +28,7 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -38,6 +37,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LeadingIconTab
@@ -125,18 +125,17 @@ internal fun AddAccountScreen(
     onAddRss: () -> Unit,
     snackbarHost: @Composable () -> Unit = {},
 ) {
-    val pagerState = rememberPagerState(initialPage = initialSection) { 3 }
+    // Mail (a provider's sign-in, or an address and password) and RSS.
+    val pagerState = rememberPagerState(initialPage = initialSection) { 2 }
     val coroutineScope = rememberCoroutineScope()
     val tabs =
         listOf(
-            tr("accounts.setup.oauthTab"),
-            tr("accounts.setup.passwordTab"),
+            tr("accounts.setup.mailTab"),
             tr("accounts.setup.rssTab"),
         )
     val icons =
         listOf(
-            Icons.Default.PersonAdd,
-            Icons.Default.Inbox,
+            Icons.Default.Email,
             Icons.Default.RssFeed,
         )
 
@@ -229,15 +228,14 @@ internal fun AddAccountScreen(
                                     }
                                 }
                             }
-                        }
-
-                        1 -> {
+                            item { OrDivider() }
                             item {
+                                // What signs in first, as on desktop; the name only
+                                // Meron shows waits with the server settings.
                                 SetupCard(title = "") {
-                                    SetupField(displayName, onDisplayNameChange, tr("accounts.fields.displayNameMeronOnly"))
-                                    SetupField(senderName, onSenderNameChange, tr("accounts.fields.senderNameOutgoing"))
                                     SetupField(email, onEmailChange, tr("accounts.fields.emailAddress"), onFocusLost = onEmailBlur)
                                     SetupField(password, onPasswordChange, tr("accounts.fields.password"), isPassword = true)
+                                    SetupField(senderName, onSenderNameChange, tr("accounts.fields.senderNameOutgoing"))
                                     OutlinedButton(onClick = onAutodiscover, modifier = Modifier.fillMaxWidth()) {
                                         Text(tr("mobile.accounts.findMailSettings"))
                                     }
@@ -248,6 +246,7 @@ internal fun AddAccountScreen(
                                         Text(tr("accounts.advancedServerSettings"))
                                     }
                                     if (serverSettingsOpen) {
+                                        SetupField(displayName, onDisplayNameChange, tr("accounts.fields.displayNameMeronOnly"))
                                         SetupField(username, onUsernameChange, tr("accounts.fields.username"))
                                         SetupField(host, onHostChange, tr("accounts.fields.imapHost"))
                                         SetupField(imapPort, onImapPortChange, tr("accounts.fields.imapPort"))
@@ -387,12 +386,26 @@ internal fun OAuthBrandIcon(
     }
 }
 
+/** "or" between two ways to the same result, on a rule across the page. */
+@Composable
+private fun OrDivider() {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        HorizontalDivider(Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
+        Text(
+            tr("accounts.setup.orDivider"),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider(Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
 @Composable
 internal fun SetupCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (title.isNotBlank()) {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)

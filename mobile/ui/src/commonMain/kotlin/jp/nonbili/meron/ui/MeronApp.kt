@@ -1152,7 +1152,6 @@ private fun MeronMobileScreenContent(
                                 attachments = attachments.filter { it.id != draftAttachment.id }
                             },
                             sendShortcutMode = sendShortcutMode,
-                            isReply = composeInReplyTo.isNotBlank(),
                             onSaveDraft = ::saveComposeDraft,
                             onAutoSaveDraft = ::autoSaveComposeDraft,
                             onDiscardDraft = ::discardComposeDraft,
@@ -1278,7 +1277,7 @@ private fun MeronMobileScreenContent(
                             },
                             onAddFeedAccount = {
                                 resetPasswordAccountForm()
-                                addSection = 2
+                                addSection = 1
                                 previousTopScreen = Screen.Settings
                                 screen = Screen.AddAccount
                             },
@@ -1538,6 +1537,8 @@ private fun MeronMobileScreenContent(
                             onOpenThread = { thread -> readCoreThread(thread) },
                             onCopy = { label, value -> services.copyText(label, value) },
                             mobile = this@with,
+                            drawerState = drawerState,
+                            drawerContent = { ViewsDrawer(state, drawerState, drawerFolders) },
                         )
                     }
 
@@ -1563,6 +1564,10 @@ private fun MeronMobileScreenContent(
                         )
                     }
                 }
+
+                // An open drawer closes before back leaves the screen under it;
+                // after the routes, so it comes before their own back handling.
+                BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
                 // The open conversation, over the route it was opened from.
                 AnimatedVisibility(
