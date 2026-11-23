@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Selon les en-têtes, de {server}. Meron ne le vérifie pas.",
+  "source.failed": "Impossible de récupérer le message original.",
+  "source.loading": "Récupération de l'original sur le serveur…",
+  "source.lossy": "Certains octets ne peuvent pas être affichés ni copiés à l'identique. Enregistrez en .eml pour obtenir l'original exact.",
+  "source.truncated": "Affichage des {shown} premiers sur {size}. Enregistrez en .eml pour tout obtenir.",
   "settings.calendars.findForMailbox": "Rechercher les agendas d’un compte de messagerie",
   "settings.calendars.find": "Trouver des calendriers",
   "settings.calendars.discoveryNoServer": "Aucun serveur d’agenda n’a été trouvé automatiquement. Vous pouvez saisir son adresse ci-dessous.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Répondre",
   "chat.actions.replyAll": "Répondre à tous",
   "chat.actions.saveAsEml": "Enregistrer en .eml",
+  "chat.actions.showOriginal": "Afficher l'original",
   "chat.actions.saveImage": "Enregistrer l'image...",
   "chat.allowRemoteFrom": "Toujours autoriser {sender}",
   "chat.allowRemoteFromHint": "Charger le contenu distant de cet expéditeur dans tous les comptes",

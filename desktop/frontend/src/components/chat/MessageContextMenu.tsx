@@ -2,6 +2,7 @@ import {
   CheckSquare,
   Copy,
   Download,
+  FileCode,
   ExternalLink,
   FilePen,
   Forward,
@@ -27,13 +28,15 @@ import {
 } from '../../states/compose'
 import { messageCanReplyAll } from '../../states/composeReply'
 import { printMail } from '../../lib/printMail'
-import { copyAttachmentImage, downloadAttachment, saveMessageAsEml } from '../../states/mail'
+import { copyAttachmentImage, downloadAttachment, saveMessageAsEml, showMessageSource } from '../../states/mail'
 import { markMessageReadState, starMessage } from '../../states/mailFlags'
 import { isDraftFolder } from '../../states/mailFolders'
+import { isLocalSendId } from '../../states/pendingSends'
 import { deleteMessage } from '../../states/mailMoves'
 import { copyText, openExternal } from '../../lib/native'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
+import { MenuSection, MenuSections } from '../menu/MenuSections'
 import type { MessageContextMenuState } from '../../states/thread'
 import type { Message } from '../../types'
 
@@ -70,6 +73,7 @@ export function MessageContextMenu({
 }) {
   const { t } = useTranslation()
   const isDraft = isDraftFolder(state.message.folder_id, state.message.account_id)
+  const unsent = isLocalSendId(state.message.id)
   return (
     <FloatingContextMenu
       x={state.x}
@@ -77,229 +81,256 @@ export function MessageContextMenu({
       onClose={onClose}
       overlay
       overlayClassName="fixed inset-0 z-[60]"
-      className="fixed z-[61] min-w-[180px] bg-header shadow-xl"
+      // Scrolls rather than running off a short window.
+      className="fixed z-[61] max-h-[calc(100vh-1rem)] min-w-[180px] overflow-y-auto bg-header shadow-xl"
     >
       {state.linkUrl || state.image ? (
-        <>
-          {state.linkUrl && (
-            <>
-              <MenuItem
-                icon={<ExternalLink size={13} className="text-accent" />}
-                label={t('chat.actions.openLink')}
-                onClick={() => {
-                  openExternal(state.linkUrl!)
-                  onClose()
-                }}
-              />
-              <MenuItem
-                icon={<Link2 size={13} className="text-accent" />}
-                label={t('chat.actions.copyLinkAddress')}
-                onClick={() => {
-                  copyText(state.linkUrl!).catch(() => undefined)
-                  onClose()
-                }}
-              />
-            </>
-          )}
+        <MenuSections>
+          <MenuSection>
+            {state.linkUrl && (
+              <>
+                <MenuItem
+                  icon={<ExternalLink size={13} className="text-accent" />}
+                  label={t('chat.actions.openLink')}
+                  onClick={() => {
+                    openExternal(state.linkUrl!)
+                    onClose()
+                  }}
+                />
+                <MenuItem
+                  icon={<Link2 size={13} className="text-accent" />}
+                  label={t('chat.actions.copyLinkAddress')}
+                  onClick={() => {
+                    copyText(state.linkUrl!).catch(() => undefined)
+                    onClose()
+                  }}
+                />
+              </>
+            )}
+          </MenuSection>
           {/* A linked picture offers both. */}
-          {state.image && (
-            <>
+          <MenuSection>
+            {state.image && (
+              <>
+                <MenuItem
+                  icon={<Download size={13} className="text-accent" />}
+                  label={t('chat.actions.saveImage')}
+                  onClick={() => {
+                    const image = state.image!
+                    onClose()
+                    void downloadAttachment({
+                      ...image,
+                      mime: image.mime ?? state.message.attachments?.find((att) => att.key === image.key)?.mime,
+                    })
+                  }}
+                />
+                <MenuItem
+                  icon={<Copy size={13} className="text-accent" />}
+                  label={t('chat.actions.copyImage')}
+                  onClick={() => {
+                    const image = state.image!
+                    onClose()
+                    void copyAttachmentImage(image)
+                  }}
+                />
+              </>
+            )}
+          </MenuSection>
+        </MenuSections>
+      ) : (
+        <MenuSections>
+          <MenuSection>
+            {(isDraft || !state.hideOpenInNewTab) && (
+              <MenuItem
+                icon={
+                  isDraft ? (
+                    <SquarePen size={13} className="text-accent" />
+                  ) : (
+                    <ExternalLink size={13} className="text-accent" />
+                  )
+                }
+                label={isDraft ? t('chat.actions.openDraft') : t('threads.actions.openInNewTab')}
+                onClick={() => {
+                  if (isDraft) {
+                    void openDraftCompose(state.message)
+                  } else {
+                    openMessageTab(state.message)
+                  }
+                  onClose()
+                }}
+              />
+            )}
+            {isRSS && state.message.link && (
+              <>
+                <MenuItem
+                  icon={<Globe size={13} className="text-accent" />}
+                  label={t('chat.actions.openLink')}
+                  onClick={() => {
+                    openExternal(state.message.link!)
+                    onClose()
+                  }}
+                />
+                <MenuItem
+                  icon={<Link2 size={13} className="text-accent" />}
+                  label={t('chat.actions.copyLinkAddress')}
+                  onClick={() => {
+                    copyText(state.message.link!).catch(() => undefined)
+                    onClose()
+                  }}
+                />
+              </>
+            )}
+            {onSelectMessage && (
+              <MenuItem
+                icon={<CheckSquare size={13} className="text-accent" />}
+                label={t('buttons.select', { defaultValue: 'Select' })}
+                onClick={() => {
+                  onSelectMessage(state.message)
+                  onClose()
+                }}
+              />
+            )}
+          </MenuSection>
+          <MenuSection>
+            <MenuItem
+              icon={
+                state.message.unread ? (
+                  <MailOpen size={13} className="text-accent" />
+                ) : (
+                  <Mail size={13} className="text-accent" />
+                )
+              }
+              label={state.message.unread ? t('threads.actions.markAsRead') : t('threads.actions.markAsUnread')}
+              onClick={() => {
+                const message = state.message
+                onClose()
+                // Only once it took: a failed change is rolled back in the
+                // conversation, and a copy patched ahead would keep it.
+                void markMessageReadState(message, message.unread).then(() =>
+                  onMessageChange?.({ unread: !message.unread }),
+                )
+              }}
+            />
+            <MenuItem
+              icon={
+                <Star size={13} className={state.message.starred ? 'fill-amber-500 text-amber-500' : 'text-accent'} />
+              }
+              label={state.message.starred ? t('chat.unstar') : t('chat.star')}
+              onClick={() => {
+                const message = state.message
+                onClose()
+                void starMessage(message, !message.starred).then(() => onMessageChange?.({ starred: !message.starred }))
+              }}
+            />
+          </MenuSection>
+          <MenuSection>
+            {onReply && !isDraft && !isRSS && (
+              <MenuItem
+                icon={<Reply size={13} className="text-accent" />}
+                label={t('chat.actions.reply')}
+                onClick={() => {
+                  onClose()
+                  onReply()
+                }}
+              />
+            )}
+            {!isDraft && !isRSS && messageCanReplyAll(state.message) && (
+              <MenuItem
+                icon={<ReplyAll size={13} className="text-accent" />}
+                label={t('chat.actions.replyAll')}
+                onClick={() => {
+                  const message = state.message
+                  onClose()
+                  replyAllToMessage(message)
+                }}
+              />
+            )}
+            {!isDraft && !isRSS && !headerOnly && (
+              <MenuItem
+                icon={<Forward size={13} className="text-accent" />}
+                label={t('chat.actions.forward')}
+                onClick={() => {
+                  const message = state.message
+                  onClose()
+                  void forwardMessage(message)
+                }}
+              />
+            )}
+            {!isDraft && !isRSS && !headerOnly && (
+              <MenuItem
+                icon={<FilePen size={13} className="text-accent" />}
+                label={t('chat.actions.editAsNewMessage')}
+                onClick={() => {
+                  const message = state.message
+                  onClose()
+                  void editAsNewMessage(message)
+                }}
+              />
+            )}
+          </MenuSection>
+          <MenuSection>
+            {!headerOnly && !state.message.body_missing && (
+              <MenuItem
+                icon={<Copy size={13} className="text-accent" />}
+                label={t('chat.copyMessageText')}
+                onClick={() => {
+                  copyText(messagePlainText(state.message)).catch(() => undefined)
+                  onClose()
+                }}
+              />
+            )}
+            {/* The server's copy: a message just sent has none until it syncs. */}
+            {!isDraft && !isRSS && !unsent && (
               <MenuItem
                 icon={<Download size={13} className="text-accent" />}
-                label={t('chat.actions.saveImage')}
+                label={t('chat.actions.saveAsEml')}
                 onClick={() => {
-                  const image = state.image!
+                  const message = state.message
                   onClose()
-                  void downloadAttachment({
-                    ...image,
-                    mime: image.mime ?? state.message.attachments?.find((att) => att.key === image.key)?.mime,
+                  void saveMessageAsEml(message)
+                }}
+              />
+            )}
+            {!isDraft && !isRSS && !unsent && (
+              <MenuItem
+                icon={<FileCode size={13} className="text-accent" />}
+                label={t('chat.actions.showOriginal')}
+                onClick={() => {
+                  const message = state.message
+                  onClose()
+                  void showMessageSource(message)
+                }}
+              />
+            )}
+            {!headerOnly && !state.message.body_missing && !isRSS && (
+              <MenuItem
+                icon={<Printer size={13} className="text-accent" />}
+                label={t('chat.actions.print')}
+                onClick={() => {
+                  onClose()
+                  if (onPrint) onPrint()
+                  else void printMail(state.message)
+                }}
+              />
+            )}
+          </MenuSection>
+          <MenuSection>
+            {!isRSS && (
+              <MenuItem
+                danger
+                icon={<Trash2 size={13} />}
+                label={isDraft ? t('chat.actions.discardDraft') : t('chat.actions.deleteMessage')}
+                onClick={() => {
+                  const message = state.message
+                  onClose()
+                  void deleteMessage(message).then((deleted) => {
+                    if (deleted) onDeleted?.()
                   })
                 }}
               />
-              <MenuItem
-                icon={<Copy size={13} className="text-accent" />}
-                label={t('chat.actions.copyImage')}
-                onClick={() => {
-                  const image = state.image!
-                  onClose()
-                  void copyAttachmentImage(image)
-                }}
-              />
-            </>
-          )}
-        </>
-      ) : (
-        <>
-          {(isDraft || !state.hideOpenInNewTab) && (
-            <MenuItem
-              icon={
-                isDraft ? (
-                  <SquarePen size={13} className="text-accent" />
-                ) : (
-                  <ExternalLink size={13} className="text-accent" />
-                )
-              }
-              label={isDraft ? t('chat.actions.openDraft') : t('threads.actions.openInNewTab')}
-              onClick={() => {
-                if (isDraft) {
-                  void openDraftCompose(state.message)
-                } else {
-                  openMessageTab(state.message)
-                }
-                onClose()
-              }}
-            />
-          )}
-          {isRSS && state.message.link && (
-            <>
-              <MenuItem
-                icon={<Globe size={13} className="text-accent" />}
-                label={t('chat.actions.openLink')}
-                onClick={() => {
-                  openExternal(state.message.link!)
-                  onClose()
-                }}
-              />
-              <MenuItem
-                icon={<Link2 size={13} className="text-accent" />}
-                label={t('chat.actions.copyLinkAddress')}
-                onClick={() => {
-                  copyText(state.message.link!).catch(() => undefined)
-                  onClose()
-                }}
-              />
-            </>
-          )}
-          {onSelectMessage && (
-            <MenuItem
-              icon={<CheckSquare size={13} className="text-accent" />}
-              label={t('buttons.select', { defaultValue: 'Select' })}
-              onClick={() => {
-                onSelectMessage(state.message)
-                onClose()
-              }}
-            />
-          )}
-          <MenuItem
-            icon={
-              state.message.unread ? (
-                <MailOpen size={13} className="text-accent" />
-              ) : (
-                <Mail size={13} className="text-accent" />
-              )
-            }
-            label={state.message.unread ? t('threads.actions.markAsRead') : t('threads.actions.markAsUnread')}
-            onClick={() => {
-              const message = state.message
-              onClose()
-              // Only once it took: a failed change is rolled back in the
-              // conversation, and a copy patched ahead would keep it.
-              void markMessageReadState(message, message.unread).then(() =>
-                onMessageChange?.({ unread: !message.unread }),
-              )
-            }}
-          />
-          <MenuItem
-            icon={
-              <Star size={13} className={state.message.starred ? 'fill-amber-500 text-amber-500' : 'text-accent'} />
-            }
-            label={state.message.starred ? t('chat.unstar') : t('chat.star')}
-            onClick={() => {
-              const message = state.message
-              onClose()
-              void starMessage(message, !message.starred).then(() => onMessageChange?.({ starred: !message.starred }))
-            }}
-          />
-          {onReply && !isDraft && !isRSS && (
-            <MenuItem
-              icon={<Reply size={13} className="text-accent" />}
-              label={t('chat.actions.reply')}
-              onClick={() => {
-                onClose()
-                onReply()
-              }}
-            />
-          )}
-          {!isDraft && !isRSS && messageCanReplyAll(state.message) && (
-            <MenuItem
-              icon={<ReplyAll size={13} className="text-accent" />}
-              label={t('chat.actions.replyAll')}
-              onClick={() => {
-                const message = state.message
-                onClose()
-                replyAllToMessage(message)
-              }}
-            />
-          )}
-          {!isDraft && !isRSS && !headerOnly && (
-            <MenuItem
-              icon={<Forward size={13} className="text-accent" />}
-              label={t('chat.actions.forward')}
-              onClick={() => {
-                const message = state.message
-                onClose()
-                void forwardMessage(message)
-              }}
-            />
-          )}
-          {!isDraft && !isRSS && !headerOnly && (
-            <MenuItem
-              icon={<FilePen size={13} className="text-accent" />}
-              label={t('chat.actions.editAsNewMessage')}
-              onClick={() => {
-                const message = state.message
-                onClose()
-                void editAsNewMessage(message)
-              }}
-            />
-          )}
-          {!headerOnly && !state.message.body_missing && (
-            <MenuItem
-              icon={<Copy size={13} className="text-accent" />}
-              label={t('chat.copyMessageText')}
-              onClick={() => {
-                copyText(messagePlainText(state.message)).catch(() => undefined)
-                onClose()
-              }}
-            />
-          )}
-          {!isDraft && !isRSS && (
-            <MenuItem
-              icon={<Download size={13} className="text-accent" />}
-              label={t('chat.actions.saveAsEml')}
-              onClick={() => {
-                const message = state.message
-                onClose()
-                void saveMessageAsEml(message)
-              }}
-            />
-          )}
-          {!headerOnly && !state.message.body_missing && !isRSS && (
-            <MenuItem
-              icon={<Printer size={13} className="text-accent" />}
-              label={t('chat.actions.print')}
-              onClick={() => {
-                onClose()
-                if (onPrint) onPrint()
-                else void printMail(state.message)
-              }}
-            />
-          )}
-          {!isRSS && (
-            <MenuItem
-              danger
-              icon={<Trash2 size={13} />}
-              label={isDraft ? t('chat.actions.discardDraft') : t('chat.actions.deleteMessage')}
-              onClick={() => {
-                const message = state.message
-                onClose()
-                void deleteMessage(message).then((deleted) => {
-                  if (deleted) onDeleted?.()
-                })
-              }}
-            />
-          )}
-        </>
+            )}
+          </MenuSection>
+        </MenuSections>
       )}
     </FloatingContextMenu>
   )

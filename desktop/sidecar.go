@@ -505,13 +505,14 @@ func sidecarCallTimeout(method string) time.Duration {
 	// what is unsent.
 	case "googleTasks.sync", "googleTasks.remove", "carddav.sync", "carddav.addGoogle", "carddav.createContact", "carddav.updateContact", "carddav.deleteContact", "caldav.sync", "caldav.remove", "caldav.setCalendarEnabled", "caldav.setTasksEnabled":
 		return 5 * time.Minute
-	// A batch is a handful of full messages, attachments included.
+	// A batch is a handful of full messages, attachments included; a single
+	// raw message (Save as .eml, Show original) can be as large as one.
 	// A copy downloads every message in the thread in full, then APPENDs each
 	// one to the target.
 	// Moving into or out of local folders downloads or uploads every message
 	// in full; so does a move between accounts. Archive looks up the
 	// Archive folder, then moves.
-	case "eml.read", "messages.saveRawBatch", "messages.copy", "messages.move", "messages.archive":
+	case "eml.read", "messages.saveRaw", "messages.saveRawBatch", "messages.copy", "messages.move", "messages.archive":
 		return 2 * time.Minute
 	// A snapshot or a restore copies every archived message; so does the
 	// copy taken before opening a store a newer Meron last used.

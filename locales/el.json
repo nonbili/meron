@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Σύμφωνα με τις κεφαλίδες, από τον {server}. Το Meron δεν τα επαληθεύει.",
+  "source.failed": "Δεν ήταν δυνατή η λήψη του πρωτότυπου μηνύματος.",
+  "source.loading": "Λήψη του πρωτοτύπου από τον διακομιστή…",
+  "source.lossy": "Ορισμένα byte δεν μπορούν να εμφανιστούν ή να αντιγραφούν ακριβώς. Αποθηκεύστε ως .eml για το ακριβές πρωτότυπο.",
+  "source.truncated": "Εμφανίζονται τα πρώτα {shown} από {size}. Αποθηκεύστε ως .eml για ολόκληρο το μήνυμα.",
   "settings.calendars.findForMailbox": "Εύρεση ημερολογίων για λογαριασμό email",
   "settings.calendars.find": "Εύρεση ημερολογίων",
   "settings.calendars.discoveryNoServer": "Δεν βρέθηκε αυτόματα διακομιστής ημερολογίου. Μπορείτε να εισαγάγετε τη διεύθυνσή του παρακάτω.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Απάντηση",
   "chat.actions.replyAll": "Απάντηση σε όλους",
   "chat.actions.saveAsEml": "Αποθήκευση ως .eml",
+  "chat.actions.showOriginal": "Εμφάνιση πρωτοτύπου",
   "chat.actions.saveImage": "Αποθήκευση εικόνας...",
   "chat.allowRemoteFrom": "Να επιτρέπεται πάντα από {sender}",
   "chat.allowRemoteFromHint": "Φόρτωση απομακρυσμένου περιεχομένου από αυτόν τον αποστολέα σε όλους τους λογαριασμούς",

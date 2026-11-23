@@ -60,6 +60,11 @@ type App struct {
 	emlReady     bool
 	pendingEml   []string
 
+	// "Show original" windows, by session token.
+	sourceOpenMu  sync.Mutex
+	sourceMu      sync.Mutex
+	sourceViewers map[string]*sourceViewer
+
 	// At most one bulk .eml export runs at a time.
 	emlExportMu     sync.Mutex
 	emlExportCancel context.CancelFunc
@@ -285,6 +290,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.readDroppedFilesCommand(payload)
 	case "eml.open", "eml.get", "eml.close", "eml.saveAttachment":
 		return a.emlCommand(command, payload)
+	case "source.open", "source.get", "source.save", "source.close":
+		return a.sourceCommand(command, payload)
 	case "composer.isOpen", "composer.setMainDrafts", "composer.claimDraft", "composer.closeResponded", "composer.discardDraft", "composer.getDraft", "composer.setDraft", "composer.focusDraft", "composer.closeWindow":
 		return a.composeWindowCommand(command, payload)
 	case "threadWindow.updateComposer", "threadWindow.activateComposer", "threadWindow.abortComposer", "threadWindow.setReady", "threadWindow.isReady", "threadWindow.open", "threadWindow.get", "threadWindow.sessions", "threadWindow.setSetting", "threadWindow.setRemoteSender", "threadWindow.close", "threadWindow.closeResponded", "threadWindow.setDrafts", "threadWindow.reserveDraft", "threadWindow.drafts", "threadWindow.focusDraft", "threadWindow.openDraft", "threadWindow.openCorrespondent", "threadWindow.openContact", "threadWindow.beginClose", "threadWindow.cancelClose", "threadWindow.discardDraft":

@@ -1,4 +1,9 @@
 {
+  "source.authBy": "據郵件標頭聲稱來自 {server}。Meron 不會驗證這些結果。",
+  "source.failed": "無法取得原始郵件。",
+  "source.loading": "正在從伺服器取得原始郵件…",
+  "source.lossy": "部分位元組無法準確顯示或複製。另存為 .eml 可取得完全一致的原始郵件。",
+  "source.truncated": "顯示的是 {size} 中的前 {shown}。另存為 .eml 可取得完整內容。",
   "settings.calendars.findForMailbox": "尋找郵件帳戶的日曆",
   "settings.calendars.find": "尋找行事曆",
   "settings.calendars.discoveryNoServer": "未自動找到日曆伺服器。你可以在下方輸入伺服器位址。",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "回覆",
   "chat.actions.replyAll": "全部回覆",
   "chat.actions.saveAsEml": "另存為 .eml",
+  "chat.actions.showOriginal": "顯示原始郵件",
   "chat.actions.saveImage": "儲存圖片...",
   "chat.allowRemoteFrom": "一律允許 {sender}",
   "chat.allowRemoteFromHint": "在所有帳號中載入這位寄件者的遠端內容",

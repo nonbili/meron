@@ -1,4 +1,9 @@
 {
+  "source.authBy": "مذكورة في الترويسات على أنها من {server}. لا يتحقق Meron منها.",
+  "source.failed": "تعذّر جلب الرسالة الأصلية.",
+  "source.loading": "جارٍ جلب الرسالة الأصلية من الخادم…",
+  "source.lossy": "تعذّر عرض بعض البايتات أو نسخها كما هي. احفظها بصيغة .eml للحصول على الأصل كما هو.",
+  "source.truncated": "يُعرض أول {shown} من {size}. احفظها بصيغة .eml للحصول عليها كاملة.",
   "settings.calendars.findForMailbox": "البحث عن تقاويم لحساب بريد",
   "settings.calendars.find": "البحث عن التقويمات",
   "settings.calendars.discoveryNoServer": "لم يُعثر على خادم تقويم تلقائيًا. يمكنك إدخال عنوان الخادم أدناه.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "رد",
   "chat.actions.replyAll": "الرد على الكل",
   "chat.actions.saveAsEml": "حفظ كملف ‎.eml",
+  "chat.actions.showOriginal": "عرض الأصل",
   "chat.actions.saveImage": "حفظ الصورة...",
   "chat.allowRemoteFrom": "السماح دائمًا من {sender}",
   "chat.allowRemoteFromHint": "تحميل المحتوى البعيد من هذا المرسل في كل الحسابات",

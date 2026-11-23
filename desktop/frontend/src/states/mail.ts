@@ -274,6 +274,22 @@ export async function saveMessageAsEml(message: Message) {
   }
 }
 
+// Opens the message's original source in a window of its own, which fetches
+// it from the server once it is up (SourceWindow).
+export async function showMessageSource(message: Message) {
+  if (!message?.id || isLocalSendId(message.id)) return
+  try {
+    await invoke('source.open', {
+      thread_id: message.thread_id,
+      message_ids: [message.id],
+      folder: message.folder_id,
+      subject: message.subject,
+    })
+  } catch {
+    showToast(t('source.failed'))
+  }
+}
+
 // Copy a keyed image onto the system clipboard. The webview's native "Copy
 // Image" is inert in the Wails webview, so the bridge shells out to the same
 // clipboard helpers used for pasting.

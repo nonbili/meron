@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Segundo os cabeçalhos, de {server}. O Meron não verifica isto.",
+  "source.failed": "Não foi possível obter a mensagem original.",
+  "source.loading": "A obter o original do servidor…",
+  "source.lossy": "Alguns bytes não podem ser mostrados nem copiados com exatidão. Guarde como .eml para obter o original exato.",
+  "source.truncated": "A mostrar os primeiros {shown} de {size}. Guarde como .eml para obter tudo.",
   "settings.calendars.findForMailbox": "Procurar calendários de uma conta de e-mail",
   "settings.calendars.find": "Procurar calendários",
   "settings.calendars.discoveryNoServer": "Não foi encontrado automaticamente nenhum servidor de calendário. Pode introduzir o endereço do servidor abaixo.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Responder",
   "chat.actions.replyAll": "Responder a todos",
   "chat.actions.saveAsEml": "Gravar como .eml",
+  "chat.actions.showOriginal": "Mostrar original",
   "chat.actions.saveImage": "Gravar imagem...",
   "chat.allowRemoteFrom": "Permitir sempre de {sender}",
   "chat.allowRemoteFromHint": "Carregar o conteúdo remoto deste remetente em todas as contas",

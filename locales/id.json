@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Menurut header, dari {server}. Meron tidak memverifikasinya.",
+  "source.failed": "Tidak dapat mengambil pesan asli.",
+  "source.loading": "Mengambil pesan asli dari server…",
+  "source.lossy": "Beberapa byte tidak dapat ditampilkan atau disalin secara persis. Simpan sebagai .eml untuk mendapatkan aslinya secara persis.",
+  "source.truncated": "Menampilkan {shown} pertama dari {size}. Simpan sebagai .eml untuk mendapatkan semuanya.",
   "settings.calendars.findForMailbox": "Cari kalender untuk akun email",
   "settings.calendars.find": "Cari kalender",
   "settings.calendars.discoveryNoServer": "Server kalender tidak ditemukan secara otomatis. Anda dapat memasukkan alamat server di bawah ini.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Balas",
   "chat.actions.replyAll": "Balas semua",
   "chat.actions.saveAsEml": "Simpan sebagai .eml",
+  "chat.actions.showOriginal": "Tampilkan asli",
   "chat.actions.saveImage": "Simpan gambar...",
   "chat.allowRemoteFrom": "Selalu izinkan dari {sender}",
   "chat.allowRemoteFromHint": "Muat konten jarak jauh dari pengirim ini di setiap akun",

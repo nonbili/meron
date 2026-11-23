@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Theo tiêu đề, từ {server}. Meron không xác minh điều này.",
+  "source.failed": "Không thể lấy thư gốc.",
+  "source.loading": "Đang lấy bản gốc từ máy chủ…",
+  "source.lossy": "Một số byte không thể hiển thị hoặc sao chép chính xác. Lưu dưới dạng .eml để có bản gốc chính xác.",
+  "source.truncated": "Đang hiển thị {shown} đầu tiên trong {size}. Lưu dưới dạng .eml để có toàn bộ.",
   "settings.calendars.findForMailbox": "Tìm lịch cho tài khoản email",
   "settings.calendars.find": "Tìm lịch",
   "settings.calendars.discoveryNoServer": "Không tự động tìm thấy máy chủ lịch. Bạn có thể nhập địa chỉ máy chủ bên dưới.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Trả lời",
   "chat.actions.replyAll": "Trả lời tất cả",
   "chat.actions.saveAsEml": "Lưu dưới dạng .eml",
+  "chat.actions.showOriginal": "Hiển thị bản gốc",
   "chat.actions.saveImage": "Lưu ảnh...",
   "chat.allowRemoteFrom": "Luôn cho phép từ {sender}",
   "chat.allowRemoteFromHint": "Tải nội dung từ xa của người gửi này trong mọi tài khoản",

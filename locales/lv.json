@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Saskaņā ar galvenēm no {server}. Meron to nepārbauda.",
+  "source.failed": "Neizdevās iegūt oriģinālo ziņojumu.",
+  "source.loading": "Oriģināls tiek ielādēts no servera…",
+  "source.lossy": "Dažus baitus nevar precīzi parādīt vai nokopēt. Saglabājiet kā .eml, lai iegūtu precīzu oriģinālu.",
+  "source.truncated": "Tiek rādīti pirmie {shown} no {size}. Saglabājiet kā .eml, lai iegūtu visu.",
   "settings.calendars.findForMailbox": "Atrast e-pasta konta kalendārus",
   "settings.calendars.find": "Atrast kalendārus",
   "settings.calendars.discoveryNoServer": "Kalendāra serveris netika atrasts automātiski. Servera adresi varat ievadīt zemāk.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Atbildēt",
   "chat.actions.replyAll": "Atbildēt visiem",
   "chat.actions.saveAsEml": "Saglabāt kā .eml",
+  "chat.actions.showOriginal": "Rādīt oriģinālu",
   "chat.actions.saveImage": "Saglabāt attēlu...",
   "chat.allowRemoteFrom": "Vienmēr atļaut no {sender}",
   "chat.allowRemoteFromHint": "Ielādēt šī sūtītāja attālo saturu visos kontos",

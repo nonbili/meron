@@ -1,4 +1,9 @@
 {
+  "source.authBy": "ヘッダーによると {server} からの結果です。Meron は検証しません。",
+  "source.failed": "元のメッセージを取得できませんでした。",
+  "source.loading": "サーバーから元のメッセージを取得しています…",
+  "source.lossy": "一部のバイトは正確に表示・コピーできません。正確な原本は .eml として保存してください。",
+  "source.truncated": "{size} のうち最初の {shown} を表示しています。すべて取得するには .eml として保存してください。",
   "settings.calendars.findForMailbox": "メールアカウントのカレンダーを探す",
   "settings.calendars.find": "カレンダーを探す",
   "settings.calendars.discoveryNoServer": "カレンダーサーバーを自動検出できませんでした。下の欄にサーバーのアドレスを入力できます。",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "返信",
   "chat.actions.replyAll": "全員に返信",
   "chat.actions.saveAsEml": ".eml として保存",
+  "chat.actions.showOriginal": "元のメッセージを表示",
   "chat.actions.saveImage": "画像を保存...",
   "chat.allowRemoteFrom": "{sender} を常に許可",
   "chat.allowRemoteFromHint": "この送信者のリモートコンテンツをすべてのアカウントで読み込みます",

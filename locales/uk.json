@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Згідно із заголовками, від {server}. Meron це не перевіряє.",
+  "source.failed": "Не вдалося отримати оригінальний лист.",
+  "source.loading": "Завантаження оригіналу із сервера…",
+  "source.lossy": "Деякі байти неможливо точно показати чи скопіювати. Збережіть як .eml, щоб отримати точний оригінал.",
+  "source.truncated": "Показано перші {shown} із {size}. Збережіть як .eml, щоб отримати все.",
   "settings.calendars.findForMailbox": "Знайти календарі поштового облікового запису",
   "settings.calendars.find": "Знайти календарі",
   "settings.calendars.discoveryNoServer": "Не вдалося автоматично знайти сервер календаря. Ви можете ввести його адресу нижче.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Відповісти",
   "chat.actions.replyAll": "Відповісти всім",
   "chat.actions.saveAsEml": "Зберегти як .eml",
+  "chat.actions.showOriginal": "Показати оригінал",
   "chat.actions.saveImage": "Зберегти зображення…",
   "chat.allowRemoteFrom": "Завжди завантажувати вміст від {sender}",
   "chat.allowRemoteFromHint": "Завантажувати зовнішній вміст від цього відправника в усіх облікових записах",

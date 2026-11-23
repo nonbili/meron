@@ -34,6 +34,7 @@ import type { Participant } from './ConversationDetailsPanel'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
+import { MenuDivider } from '../menu/MenuSections'
 import { targetWithin } from '../menu/useDismissOnOutside'
 import { AddToTasksButton } from '../tasks/AddToTasksButton'
 import { ThreadMoveCopyItems } from '../threads/ThreadMoveCopyItems'
@@ -186,7 +187,7 @@ export function ConversationHeader({
           {expandAllAction === 'expand' ? t('chat.expandAll') : t('chat.collapseAll')}
         </button>
       )}
-      <div className="my-1 h-px bg-border" />
+      <MenuDivider />
       {/* Local conversations have no quick reply box: reply from the full editor. */}
       {!isRSS && isLocalAccountId(activeThread.account_id) && (
         <button
@@ -230,10 +231,10 @@ export function ConversationHeader({
             itemClassName="h-auto! gap-2.5! px-3! py-2 text-xs! font-medium!"
             iconSize={15}
           />
-          <div className="my-1 h-px bg-border" />
+          <MenuDivider />
           {menuAction('print')}
           {menuAction('saveEml')}
-          <div className="my-1 h-px bg-border" />
+          <MenuDivider />
           {menuAction('delete')}
         </>
       )}

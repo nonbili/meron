@@ -1,4 +1,9 @@
 {
+  "source.authBy": "헤더에 따르면 {server}의 결과입니다. Meron은 이를 검증하지 않습니다.",
+  "source.failed": "원본 메시지를 가져올 수 없습니다.",
+  "source.loading": "서버에서 원본을 가져오는 중…",
+  "source.lossy": "일부 바이트는 정확히 표시하거나 복사할 수 없습니다. 정확한 원본은 .eml로 저장하세요.",
+  "source.truncated": "{size} 중 처음 {shown}만 표시합니다. 전체를 보려면 .eml로 저장하세요.",
   "settings.calendars.findForMailbox": "메일 계정의 캘린더 찾기",
   "settings.calendars.find": "캘린더 찾기",
   "settings.calendars.discoveryNoServer": "캘린더 서버를 자동으로 찾지 못했습니다. 아래에 서버 주소를 입력할 수 있습니다.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "답장",
   "chat.actions.replyAll": "전체 답장",
   "chat.actions.saveAsEml": ".eml로 저장",
+  "chat.actions.showOriginal": "원본 보기",
   "chat.actions.saveImage": "이미지 저장...",
   "chat.allowRemoteFrom": "{sender} 항상 허용",
   "chat.allowRemoteFromHint": "이 발신자의 원격 콘텐츠를 모든 계정에서 불러옵니다",

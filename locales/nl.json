@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Volgens de headers van {server}. Meron controleert dit niet.",
+  "source.failed": "Het originele bericht kon niet worden opgehaald.",
+  "source.loading": "Origineel wordt van de server opgehaald…",
+  "source.lossy": "Sommige bytes kunnen niet exact worden getoond of gekopieerd. Bewaar als .eml voor het exacte origineel.",
+  "source.truncated": "De eerste {shown} van {size} worden getoond. Bewaar als .eml voor het geheel.",
   "settings.calendars.findForMailbox": "Agenda’s van een e-mailaccount zoeken",
   "settings.calendars.find": "Agenda’s zoeken",
   "settings.calendars.discoveryNoServer": "Er is niet automatisch een agendaserver gevonden. Je kunt het serveradres hieronder invoeren.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Beantwoorden",
   "chat.actions.replyAll": "Allen beantwoorden",
   "chat.actions.saveAsEml": "Opslaan als .eml",
+  "chat.actions.showOriginal": "Origineel tonen",
   "chat.actions.saveImage": "Afbeelding opslaan...",
   "chat.allowRemoteFrom": "Altijd toestaan van {sender}",
   "chat.allowRemoteFromHint": "Externe inhoud van deze afzender in elk account laden",

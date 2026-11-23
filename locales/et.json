@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Päiste väitel pärit serverilt {server}. Meron neid ei kontrolli.",
+  "source.failed": "Originaalsõnumit ei õnnestunud laadida.",
+  "source.loading": "Originaali laaditakse serverist…",
+  "source.lossy": "Mõnda baiti ei saa täpselt kuvada ega kopeerida. Täpse originaali saamiseks salvesta see .eml-failina.",
+  "source.truncated": "Näidatakse esimest {shown} {size}-st. Kogu sõnumi saamiseks salvesta see .eml-failina.",
   "settings.calendars.findForMailbox": "Leia e-posti konto kalendrid",
   "settings.calendars.find": "Otsi kalendreid",
   "settings.calendars.discoveryNoServer": "Kalendriserverit ei leitud automaatselt. Saad serveri aadressi allpool sisestada.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Vasta",
   "chat.actions.replyAll": "Vasta kõigile",
   "chat.actions.saveAsEml": "Salvesta .eml-failina",
+  "chat.actions.showOriginal": "Näita originaali",
   "chat.actions.saveImage": "Salvesta pilt...",
   "chat.allowRemoteFrom": "Luba alati saatjalt {sender}",
   "chat.allowRemoteFromHint": "Laadi selle saatja väline sisu kõigil kontodel",

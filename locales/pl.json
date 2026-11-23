@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Według nagłówków od {server}. Meron tego nie weryfikuje.",
+  "source.failed": "Nie udało się pobrać oryginalnej wiadomości.",
+  "source.loading": "Pobieranie oryginału z serwera…",
+  "source.lossy": "Niektórych bajtów nie da się dokładnie wyświetlić ani skopiować. Zapisz jako .eml, aby uzyskać dokładny oryginał.",
+  "source.truncated": "Wyświetlane jest pierwsze {shown} z {size}. Zapisz jako .eml, aby uzyskać całość.",
   "settings.calendars.findForMailbox": "Znajdź kalendarze konta pocztowego",
   "settings.calendars.find": "Znajdź kalendarze",
   "settings.calendars.discoveryNoServer": "Nie znaleziono automatycznie serwera kalendarza. Możesz wpisać jego adres poniżej.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Odpowiedz",
   "chat.actions.replyAll": "Odpowiedz wszystkim",
   "chat.actions.saveAsEml": "Zapisz jako .eml",
+  "chat.actions.showOriginal": "Pokaż oryginał",
   "chat.actions.saveImage": "Zapisz obraz...",
   "chat.allowRemoteFrom": "Zawsze zezwalaj: {sender}",
   "chat.allowRemoteFromHint": "Wczytuj zdalną treść od tego nadawcy na wszystkich kontach",

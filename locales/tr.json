@@ -1,4 +1,9 @@
 {
+  "source.authBy": "Başlıklara göre {server} kaynaklı. Meron bunları doğrulamaz.",
+  "source.failed": "Orijinal ileti alınamadı.",
+  "source.loading": "Orijinal sunucudan alınıyor…",
+  "source.lossy": "Bazı baytlar tam olarak gösterilemez veya kopyalanamaz. Tam orijinal için .eml olarak kaydedin.",
+  "source.truncated": "{size} içinden ilk {shown} gösteriliyor. Tamamı için .eml olarak kaydedin.",
   "settings.calendars.findForMailbox": "Bir e-posta hesabının takvimlerini bul",
   "settings.calendars.find": "Takvimleri bul",
   "settings.calendars.discoveryNoServer": "Takvim sunucusu otomatik olarak bulunamadı. Sunucu adresini aşağıya girebilirsiniz.",
@@ -319,6 +324,7 @@
   "chat.actions.reply": "Yanıtla",
   "chat.actions.replyAll": "Tümünü yanıtla",
   "chat.actions.saveAsEml": ".eml olarak kaydet",
+  "chat.actions.showOriginal": "Orijinali göster",
   "chat.actions.saveImage": "Resmi kaydet...",
   "chat.allowRemoteFrom": "{sender} için her zaman izin ver",
   "chat.allowRemoteFromHint": "Bu göndericinin uzak içeriğini tüm hesaplarda yükle",
