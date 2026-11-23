@@ -197,12 +197,12 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
   }
 
   return (
-    <div
+    <span
       ref={setNode}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}
       className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-tr font-semibold text-white shadow-sm ring-1 ring-white/10 saturate-[0.8] ${avatarColor(name)} ${className}`}
     >
       {fallback ?? initials(name)}
-    </div>
+    </span>
   )
 }

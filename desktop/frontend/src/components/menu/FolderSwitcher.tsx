@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { Bell, BellOff, Check, ChevronDown, ChevronRight, FolderPen } from 'lucide-react'
 import { folderIcon } from '../../lib/folderIcon'
@@ -119,6 +119,7 @@ export function FolderSwitcher({
   accountId,
   folderId,
   label,
+  leading,
   labelClassName,
   title,
   takenFolderIds,
@@ -127,6 +128,7 @@ export function FolderSwitcher({
   accountId: string
   folderId: string
   label: string
+  leading?: ReactNode
   labelClassName?: string
   /** Tooltip for the trigger, when picking does something other than switch folders. */
   title?: string
@@ -218,6 +220,11 @@ export function FolderSwitcher({
         onClick={open}
         onContextMenu={(event) => event.stopPropagation()}
       >
+        {leading && (
+          <span aria-hidden="true" className="flex shrink-0">
+            {leading}
+          </span>
+        )}
         <span className="min-w-0 truncate">{label}</span>
         <ChevronDown size={12} className="shrink-0 text-secondary" />
       </button>

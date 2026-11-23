@@ -43,8 +43,9 @@ import {
 } from '../../states/mailFolders'
 import { exportFolderAsEml } from '../../states/emlExport'
 import { isRssAccount } from '../../lib/threadActions'
-import { folderLabel } from '../../lib/kanbanData'
+import { accountLabel, folderLabel } from '../../lib/kanbanData'
 import { isUnifiedStarred } from '../../lib/unifiedFolders'
+import { AccountAvatar } from '../avatar/AccountAvatar'
 import { EmptyState } from '../empty-state/EmptyState'
 import { IconButton } from '../button/IconButton'
 import { QuickSettingsMenu } from '../sidenav/QuickSettingsMenu'
@@ -69,8 +70,12 @@ type ThreadListProps = {
  * the room it needs and is cut off only when the row runs out; a fixed share
  * cut off short names ("Unified inbox") with a larger Text size.
  */
-export function threadListFolderLabelClass(searchInTitleBar: boolean): string {
-  return `-ml-2 text-xs font-bold ${searchInTitleBar ? 'min-w-0' : 'max-w-[40%] shrink-0'}`
+export function threadListFolderLabelClass(searchInTitleBar: boolean, hasAvatar = false): string {
+  const base = '-ml-2 text-xs font-bold'
+  if (searchInTitleBar) return `${base} min-w-0`
+  // The avatar, its margin, and the additional flex gap take up 32px.
+  const widthCap = hasAvatar ? 'max-w-[calc(40%+32px)]' : 'max-w-[40%]'
+  return `${base} ${widthCap} shrink-0`
 }
 
 export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
@@ -136,6 +141,7 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   const inArchive = hasArchive && selectedFolder === archiveFolderId
 
   const activeAccount = accounts.find((acc) => acc.id === selectedAccount)
+  const headerAccount = selectedAccount === 'unified' ? undefined : activeAccount
   const isRSSAccount = activeAccount?.provider === 'rss' || activeAccount?.auth_type === 'rss'
   const hasSendableAccount = accounts.some(isSendableAccount)
   // Non-null only in a per-account Trash/Junk folder, which is where the
@@ -341,7 +347,19 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                 accountId={selectedAccount}
                 folderId={selectedFolder}
                 label={folderLabel({ accountId: selectedAccount, folderId: selectedFolder }, folders, accounts, t)}
-                labelClassName={threadListFolderLabelClass(titleBar)}
+                leading={
+                  headerAccount && (
+                    <AccountAvatar
+                      key={headerAccount.id}
+                      accountId={headerAccount.id}
+                      name={accountLabel(headerAccount.id, accounts)}
+                      src={headerAccount.avatar_url}
+                      size={24}
+                      className="mr-1"
+                    />
+                  )
+                }
+                labelClassName={threadListFolderLabelClass(titleBar, !!headerAccount)}
                 onSelect={(nextFolderId) => ui$.selectedFolder.set(nextFolderId)}
               />
             )}

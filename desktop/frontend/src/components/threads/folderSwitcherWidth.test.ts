@@ -14,4 +14,8 @@ describe('threadListFolderLabelClass', () => {
   it('keeps the cap that leaves room for the search box in the header', () => {
     expect(threadListFolderLabelClass(false).split(/\s+/)).toContain('max-w-[40%]')
   })
+
+  it('budgets for the account avatar when the search box is in the same header', () => {
+    expect(threadListFolderLabelClass(false, true).split(/\s+/)).toContain('max-w-[calc(40%+32px)]')
+  })
 })
