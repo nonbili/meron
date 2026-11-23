@@ -814,6 +814,8 @@ describe('SignToggle', () => {
     const locked = view.getByRole('switch') as HTMLButtonElement
     expect(locked.getAttribute('aria-checked')).toBe('true')
     expect(locked.disabled).toBe(true)
-    expect(locked.title).toBe('Encrypted mail is always signed with your key.')
+    expect(locked.title).toBe(
+      'Encrypted mail is always signed with your key. To send it signed only, turn off encryption and keep signing on.',
+    )
   })
 })
