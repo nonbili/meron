@@ -66,16 +66,7 @@ export type ThreadMenuState =
     }
 
 export type ThreadContextAction =
-  | 'mark-read'
-  | 'mark-unread'
-  | 'star'
-  | 'unstar'
-  | 'archive'
-  | 'move'
-  | 'copy'
-  | 'delete'
-  | 'open-tab'
-  | 'edit-feed'
+  'mark-read' | 'mark-unread' | 'star' | 'unstar' | 'archive' | 'move' | 'copy' | 'delete' | 'open-tab' | 'edit-feed'
 
 export type ThreadContextMenuController = {
   menu: ThreadMenuState | null

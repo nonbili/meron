@@ -52,6 +52,17 @@ function checkHook(path?: string) {
   return run(['bash', '.githooks/pre-commit'], path)
 }
 
+function pathWithoutBun() {
+  const isolatedBin = join(sandbox, 'no-bun')
+  mkdirSync(isolatedBin)
+  for (const tool of ['bash', 'git']) {
+    const source = Bun.which(tool)
+    if (!source) throw new Error(`Missing test prerequisite: ${tool}`)
+    symlinkSync(source, join(isolatedBin, tool))
+  }
+  return isolatedBin
+}
+
 beforeEach(() => {
   sandbox = mkdtempSync(join(tmpdir(), 'meron-hook-test-'))
   repo = join(sandbox, 'repo')
@@ -112,7 +123,7 @@ test('does not format symlink targets', () => {
 test('reports missing formatters', () => {
   write('desktop/frontend/src/test.ts', 'const x = 1\n')
   git('add', '.')
-  const result = checkHook()
+  const result = checkHook(pathWithoutBun())
   expect(result.exitCode).toBe(0)
   expect(result.stderr.toString()).toContain('skipping Frontend formatting')
 })
@@ -120,12 +131,12 @@ test('reports missing formatters', () => {
 test.each([
   ['gofmt', 'desktop/Test.go'],
   ['rustfmt', 'meron-core/src/test.rs'],
-  ['desktop/frontend/node_modules/.bin/prettier', 'desktop/frontend/src/test.ts'],
+  ['bun', 'desktop/frontend/src/test.ts'],
   ['ktlint', 'mobile/Test.kt'],
   ['swiftformat', 'mobile/ios/Test.swift'],
 ])('stages partial formatter fixes and keeps blocking retries: %s', (tool, path) => {
   executable(
-    join(tool.includes('/') ? repo : bin, tool),
+    join(bin, tool),
     `#!/bin/sh
 for file do
     case "$file" in
@@ -206,14 +217,7 @@ test('rejects deleted catalogs', () => {
 })
 
 test('requires Bun only for localization changes', () => {
-  // Only expose tools needed for this path; a system-installed Bun cannot leak in.
-  const isolatedBin = join(sandbox, 'no-bun')
-  mkdirSync(isolatedBin)
-  for (const tool of ['bash', 'git']) {
-    const source = Bun.which(tool)
-    if (!source) throw new Error(`Missing test prerequisite: ${tool}`)
-    symlinkSync(source, join(isolatedBin, tool))
-  }
+  const isolatedBin = pathWithoutBun()
   expect(checkHook(isolatedBin).exitCode).toBe(0)
   write('locales/en.json', '{}\n')
   git('add', '.')

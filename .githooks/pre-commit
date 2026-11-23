@@ -33,7 +33,7 @@ format_staged() {
         Go) "$tool" -w -- "${files[@]}" ;;
         # Child modules may contain unstaged edits or be outside the selection.
         Rust) "$tool" --edition 2024 --config skip_children=true -- "${files[@]}" ;;
-        Frontend) "$tool" --write "${files[@]}" ;;
+        Frontend) "$tool" fmt "${files[@]}" ;;
         Kotlin) "$tool" -F --relative "${files[@]}" ;;
         Swift) "$tool" "${files[@]}" ;;
     esac || status=$?
@@ -45,7 +45,7 @@ format_staged() {
 
 format_staged Go gofmt '*.go'
 format_staged Rust rustfmt 'meron-core/*.rs'
-format_staged Frontend desktop/frontend/node_modules/.bin/prettier \
+format_staged Frontend bun \
     'desktop/frontend/src/*.ts' 'desktop/frontend/src/*.tsx' \
     'desktop/frontend/src/*.css' 'desktop/frontend/src/*.json'
 format_staged Kotlin ktlint 'mobile/*.kt' 'mobile/*.kts'

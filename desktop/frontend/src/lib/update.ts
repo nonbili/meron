@@ -5,16 +5,7 @@ export type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'r
 
 /** How this copy of Meron was installed (see update_channel.go). */
 export type UpdateChannel =
-  | 'dmg'
-  | 'mas'
-  | 'appimage'
-  | 'tarball'
-  | 'nsis'
-  | 'portable'
-  | 'snap'
-  | 'flatpak'
-  | 'appx'
-  | 'unknown'
+  'dmg' | 'mas' | 'appimage' | 'tarball' | 'nsis' | 'portable' | 'snap' | 'flatpak' | 'appx' | 'unknown'
 
 export interface UpdateStatus {
   state: UpdateState

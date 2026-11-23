@@ -4,7 +4,7 @@
 
 - [Go](https://go.dev) 1.26+
 - [Rust](https://www.rust-lang.org) (with `cargo`)
-- [Bun](https://bun.sh)
+- [Bun](https://bun.sh) 1.4.4+ for desktop frontend formatting and its pre-commit hook
 - The [Wails v3 CLI](https://wails.io): `go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0` (the `gtk3` tag preserves Meron's Linux native integrations).
 - SQLite, and on Linux: GTK 3 + WebKitGTK 4.1
 

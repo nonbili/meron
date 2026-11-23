@@ -48,9 +48,7 @@ export async function exportBackup(includeSecrets: boolean, passphrase: string):
  * can decrypt it without making the user pick the same file again.
  */
 export type ImportOutcome =
-  | { status: 'done'; summary: BackupSummary }
-  | { status: 'cancelled' }
-  | { status: 'needs-passphrase'; path: string }
+  { status: 'done'; summary: BackupSummary } | { status: 'cancelled' } | { status: 'needs-passphrase'; path: string }
 
 /**
  * Restore a backup. Called with no arguments it opens a file dialog; called
