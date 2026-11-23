@@ -371,13 +371,14 @@ internal fun ComposeScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.background,
         // Render status snackbars here too — without a host on this screen,
         // send/draft failures would queue up and only appear after navigating
         // back to the thread list.
         snackbarHost = snackbarHost,
         topBar = {
             TopAppBar(
+                colors = canvasAppBarColors(),
                 title = {
                     // One line at the size of the other bars' titles: the bar
                     // also holds up to four actions.
@@ -448,7 +449,7 @@ internal fun ComposeScreen(
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding)
                 .imePadding(),

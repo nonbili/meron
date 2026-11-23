@@ -145,9 +145,11 @@ internal fun AddAccountScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = snackbarHost,
         topBar = {
             TopAppBar(
+                colors = canvasAppBarColors(),
                 title = {
                     Text(tr(if (reconnecting) "accounts.actions.reconnectAccountTitle" else "accounts.actions.addAccount"))
                 },
@@ -169,6 +171,7 @@ internal fun AddAccountScreen(
             SecondaryTabRow(
                 selectedTabIndex = pagerState.currentPage,
                 modifier = Modifier.fillMaxWidth(),
+                containerColor = MaterialTheme.colorScheme.background,
             ) {
                 tabs.forEachIndexed { index, label ->
                     LeadingIconTab(
@@ -180,7 +183,7 @@ internal fun AddAccountScreen(
                         },
                         text = { Text(label, maxLines = 1) },
                         icon = { Icon(icons[index], contentDescription = label) },
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        selectedContentColor = MaterialTheme.colorScheme.onSurface,
                         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

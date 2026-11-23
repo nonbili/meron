@@ -73,7 +73,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -202,11 +201,11 @@ internal fun ContactsScreen(
         if (selected != null) state.loadCards(selected.addr)
     }
     Scaffold(
-        containerColor = colors.surface,
+        containerColor = colors.background,
         // Saving to an address book reports here.
         snackbarHost = { snackbar?.let { SnackbarHost(it) } },
         topBar = {
-            Column(Modifier.background(colors.surface)) {
+            Column(Modifier.background(colors.background)) {
                 TopAppBar(
                     title = {
                         when {
@@ -272,7 +271,7 @@ internal fun ContactsScreen(
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.surface),
+                    colors = canvasAppBarColors(),
                     navigationIcon = {
                         IconButton(onClick = goBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
@@ -1194,9 +1193,9 @@ private fun ContactThreadRow(
     val draftBadge = tr("chat.draft")
     val rowBackground =
         if (unread) {
-            colors.primary.copy(alpha = 0.06f).compositeOver(colors.surface)
+            colors.primary.copy(alpha = 0.06f).compositeOver(colors.background)
         } else {
-            colors.surface
+            colors.background
         }
     Row(
         Modifier
@@ -1276,7 +1275,7 @@ private fun ContactThreadRow(
                         formatInboxTimestamp(thread.dateEpochSeconds),
                         fontSize = 11.sp,
                         fontWeight = if (unread) FontWeight.Medium else FontWeight.Normal,
-                        color = if (unread) colors.primary else colors.onSurfaceVariant,
+                        color = if (unread) colors.onSurface else colors.onSurfaceVariant,
                         maxLines = 1,
                     )
                 }

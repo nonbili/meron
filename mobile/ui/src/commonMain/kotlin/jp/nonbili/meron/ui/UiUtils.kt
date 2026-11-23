@@ -677,7 +677,7 @@ internal fun navigationBarInset(): androidx.compose.ui.unit.Dp = WindowInsets.na
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun canvasAppBarColors(scrolled: Boolean): androidx.compose.material3.TopAppBarColors {
+internal fun canvasAppBarColors(scrolled: Boolean = false): androidx.compose.material3.TopAppBarColors {
     val defaults =
         androidx.compose.material3.TopAppBarDefaults
             .topAppBarColors()

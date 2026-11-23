@@ -1572,10 +1572,13 @@ internal fun ConversationDetailsScreen(
 
     BackHandler(onBack = onBack)
 
+    val detailsListState = rememberLazyListState()
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = canvasAppBarColors(detailsListState.canScrollBackward),
                 title = { Text(if (isRss) tr("chat.feedDetails") else tr("chat.conversationDetails")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -1585,7 +1588,6 @@ internal fun ConversationDetailsScreen(
             )
         },
     ) { innerPadding ->
-        val detailsListState = rememberLazyListState()
         LazyColumn(
             modifier =
                 Modifier
@@ -1603,7 +1605,7 @@ internal fun ConversationDetailsScreen(
                 Text(
                     text = subjectLabel.uppercase(),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                 )
@@ -1642,7 +1644,7 @@ internal fun ConversationDetailsScreen(
                     Text(
                         text = tr("chat.feedUrl").uppercase(),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                     )
@@ -1658,7 +1660,9 @@ internal fun ConversationDetailsScreen(
                     ) {
                         Text(
                             text = feedUrl,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            // Tapping opens it; without the accent, the underline says so.
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
@@ -1688,7 +1692,7 @@ internal fun ConversationDetailsScreen(
                     Text(
                         text = tr("chat.people", mapOf("count" to participants.size)).uppercase(),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                     )
@@ -1763,7 +1767,7 @@ internal fun ConversationDetailsScreen(
                     Text(
                         text = tr("chat.media").uppercase(),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 4.dp),
                     )
@@ -1807,7 +1811,7 @@ internal fun ConversationDetailsScreen(
                     Text(
                         text = tr("chat.files").uppercase(),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 4.dp),
                     )
