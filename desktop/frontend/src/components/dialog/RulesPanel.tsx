@@ -142,8 +142,8 @@ function RuleRow({ id, at, locked, onMove, children }: RuleRowProps) {
           setActivatorNodeRef(node)
         }}
         type="button"
-        title={t('rules.reorder')}
-        aria-label={t('rules.reorder')}
+        title={t('common.dragToReorder')}
+        aria-label={t('common.dragToReorder')}
         aria-keyshortcuts="ArrowUp ArrowDown"
         aria-disabled={locked}
         className="-ml-1.5 flex h-6 w-4 shrink-0 cursor-grab touch-none items-center justify-center rounded text-secondary hover:text-primary active:cursor-grabbing"

@@ -65,6 +65,20 @@ export type ConversationLayout = 'chat' | 'traditional'
 /** What sits at the bottom of a conversation: the quick-reply box, a bar of
  *  reply/forward/delete buttons, or nothing. */
 export type ConversationFooter = 'reply' | 'actions' | 'none'
+/** The thread actions that can be pinned to the conversation toolbar's left
+ *  pill, in the order Settings lists the unpinned ones. */
+export const CONVERSATION_TOOLBAR_ACTIONS = [
+  'archive',
+  'spam',
+  'delete',
+  'tasks',
+  'star',
+  'print',
+  'saveEml',
+  'openInNewWindow',
+] as const
+export type ConversationToolbarAction = (typeof CONVERSATION_TOOLBAR_ACTIONS)[number]
+export const DEFAULT_CONVERSATION_TOOLBAR: ConversationToolbarAction[] = ['archive', 'delete', 'tasks', 'star']
 export type KanbanBoardColumn = {
   accountId: string
   folderId: string
@@ -143,6 +157,9 @@ export type Settings = {
   /** Chat bubbles or the traditional stacked reading view (desktop only). */
   conversationLayout: ConversationLayout
   conversationFooter: ConversationFooter
+  /** The actions pinned to the conversation toolbar, in order; the rest stay
+   *  in its ⋯ menu (desktop only). */
+  conversationToolbar: ConversationToolbarAction[]
   /** Whether chat bubbles grow to fit long bodies instead of scrolling inside a
    *  capped box, so only the conversation scrolls (desktop only). */
   chatFullMessages: boolean
@@ -248,6 +265,7 @@ const DB_KEY = {
   sendShortcut: 'send_shortcut',
   conversationLayout: 'conversation_layout',
   conversationFooter: 'conversation_footer',
+  conversationToolbar: 'conversation_toolbar',
   chatFullMessages: 'chat_full_messages',
   spellCheck: 'spell_check',
   quoteReplies: 'quote_replies',
@@ -467,6 +485,7 @@ export const settings$ = observable<Settings>({
   sendShortcut: 'mod_enter',
   conversationLayout: 'chat',
   conversationFooter: 'reply',
+  conversationToolbar: DEFAULT_CONVERSATION_TOOLBAR,
   chatFullMessages: false,
   spellCheck: true,
   quoteReplies: false,
@@ -859,6 +878,13 @@ export function isProxyUsable(proxy: ProxySettings): boolean {
   return proxy.mode !== 'off' && proxy.host.trim() !== '' && proxy.port > 0
 }
 
+/** Known actions only, each once, in the stored order. Empty is a choice: a
+ *  toolbar with nothing pinned. */
+export function sanitizeConversationToolbar(raw: unknown): ConversationToolbarAction[] | null {
+  const known = new Set<string>(CONVERSATION_TOOLBAR_ACTIONS)
+  return sanitizeStringArray(raw)?.filter((id): id is ConversationToolbarAction => known.has(id)) ?? null
+}
+
 function sanitizeStringArray(raw: unknown): string[] | null {
   if (!Array.isArray(raw)) return null
   const out: string[] = []
@@ -1022,6 +1048,8 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     if (conversationFooter === 'reply' || conversationFooter === 'actions' || conversationFooter === 'none') {
       settings$.conversationFooter.set(conversationFooter)
     }
+    const conversationToolbar = sanitizeConversationToolbar(prefs[DB_KEY.conversationToolbar])
+    if (conversationToolbar) settings$.conversationToolbar.set(conversationToolbar)
 
     if (typeof prefs[DB_KEY.chatFullMessages] === 'boolean') {
       settings$.chatFullMessages.set(prefs[DB_KEY.chatFullMessages] as boolean)

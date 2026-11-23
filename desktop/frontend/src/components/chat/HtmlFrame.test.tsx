@@ -236,6 +236,31 @@ it("forwards cached and remote pictures to the app's image context menu", () => 
   expect(images[1]).toEqual({ key: null, url: 'https://example.com/a.png', filename: 'a.png' })
 })
 
+it('re-fires a press inside the message on the frame, so popups outside it close', () => {
+  const { container } = render(<HtmlFrame html="<p>Message</p>" title="Message" />)
+  const frame = container.querySelector('iframe')!
+  const doc = new DOMParser().parseFromString('<p id="text">Message</p>', 'text/html')
+  Object.defineProperty(doc, 'readyState', { value: 'complete' })
+  Object.defineProperty(frame, 'contentDocument', { get: () => doc })
+  frame.getBoundingClientRect = () => ({ left: 100, top: 50 }) as DOMRect
+  fireEvent.load(frame)
+  const seen: string[] = []
+  const onDown = (event: Event) => {
+    if (event.target !== frame) return
+    const { clientX, clientY } = event as MouseEvent
+    seen.push(`${event.type}@${clientX},${clientY}`)
+  }
+  window.addEventListener('pointerdown', onDown, true)
+  window.addEventListener('mousedown', onDown, true)
+  try {
+    doc.getElementById('text')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 7 }))
+  } finally {
+    window.removeEventListener('pointerdown', onDown, true)
+    window.removeEventListener('mousedown', onDown, true)
+  }
+  expect(seen).toEqual(['pointerdown@105,57', 'mousedown@105,57'])
+})
+
 it('never lets a message link navigate its frame', () => {
   const opened: string[] = []
   const runtime = (window as any).runtime

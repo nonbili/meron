@@ -77,6 +77,7 @@ import { supportedI18nLanguages, languageNativeNames, type SupportedI18nLanguage
 import { ThemeSettingsSection } from './ThemeSettingsSection'
 import { CalendarAccountsPanel } from './CalendarAccountsPanel'
 import { FontSettingsSection } from './FontSettingsSection'
+import { ConversationToolbarSettings } from './ConversationToolbarSettings'
 import { AccountProxyCard, ProxySettingsSection } from './ProxySettingsCard'
 import { AccountSignatureCard, SignatureSettingsSection } from './SignatureSettingsCard'
 import { TagsSection } from './TagsSection'
@@ -727,6 +728,8 @@ function MessagesSection() {
           onChange={(value) => settings$.conversationFooter.set(value)}
         />
       </SettingsGroup>
+
+      <ConversationToolbarSettings />
 
       <SettingsGroup title={t('settings.sections.typography')}>
         <FontSettingsSection part="message" />

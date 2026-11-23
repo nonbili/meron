@@ -294,6 +294,36 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
       })
     }
 
+    if (!doc.documentElement.dataset.meronFrameDownWired) {
+      doc.documentElement.dataset.meronFrameDownWired = '1'
+      // A press inside the message never reaches the parent window, so menus
+      // and popovers that close on an outside press (useDismissOnOutside, the
+      // conversation's ⋯ menu) stayed open over it. Re-fire it on the iframe
+      // element, where it reads as a press outside them.
+      doc.addEventListener(
+        'pointerdown',
+        (event) => {
+          const frame = iframeRef.current
+          if (!frame) return
+          const rect = frame.getBoundingClientRect()
+          const init = {
+            bubbles: true,
+            clientX: rect.left + event.clientX,
+            clientY: rect.top + event.clientY,
+            button: event.button,
+            buttons: event.buttons,
+          }
+          frame.dispatchEvent(
+            typeof PointerEvent === 'function'
+              ? new PointerEvent('pointerdown', { ...init, pointerType: event.pointerType })
+              : new MouseEvent('pointerdown', init),
+          )
+          frame.dispatchEvent(new MouseEvent('mousedown', init))
+        },
+        true,
+      )
+    }
+
     if (!doc.documentElement.dataset.meronFrameKeyWired) {
       doc.documentElement.dataset.meronFrameKeyWired = '1'
       doc.addEventListener('keydown', (event) => {

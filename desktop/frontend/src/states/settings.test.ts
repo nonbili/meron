@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test'
 import {
   chosenThemeIds,
+  DEFAULT_CONVERSATION_TOOLBAR,
   deleteCustomTheme,
   EMPTY_PROXY,
   hydrateSettings,
@@ -110,6 +111,37 @@ describe('spellCheck setting', () => {
     settings$.spellCheck.set(false)
     hydrateSettings({ spell_check: 'true' })
     expect(settings$.spellCheck.get()).toBe(false)
+  })
+})
+
+describe('conversation toolbar setting', () => {
+  afterEach(() => {
+    settings$.conversationToolbar.set(DEFAULT_CONVERSATION_TOOLBAR)
+  })
+
+  it('defaults to archive, delete, add to tasks and star', () => {
+    expect(settings$.conversationToolbar.get()).toEqual(['archive', 'delete', 'tasks', 'star'])
+  })
+
+  it('hydrates the pinned actions in their stored order', () => {
+    hydrateSettings({ conversation_toolbar: ['star', 'delete'] })
+    expect(settings$.conversationToolbar.get()).toEqual(['star', 'delete'])
+  })
+
+  it('keeps an empty toolbar as a choice', () => {
+    hydrateSettings({ conversation_toolbar: [] })
+    expect(settings$.conversationToolbar.get()).toEqual([])
+  })
+
+  it('drops unknown and repeated actions', () => {
+    hydrateSettings({ conversation_toolbar: ['delete', 'snooze', 'delete', 7, 'print'] })
+    expect(settings$.conversationToolbar.get()).toEqual(['delete', 'print'])
+  })
+
+  it('ignores a stored value that is not a list', () => {
+    settings$.conversationToolbar.set(['star'])
+    hydrateSettings({ conversation_toolbar: 'star' })
+    expect(settings$.conversationToolbar.get()).toEqual(['star'])
   })
 })
 

@@ -12,6 +12,8 @@ describe('ConversationSubject', () => {
     expect(html).toContain('break-words')
     expect(html).not.toContain('truncate')
     expect(html).toContain('title="Copy subject"')
+    expect(html).toContain('aria-label="Copy subject"')
+    expect(html).toContain(`<h2 class="min-w-0" aria-label="${subject}">`)
   })
 
   it('puts the subtitle under the subject', () => {

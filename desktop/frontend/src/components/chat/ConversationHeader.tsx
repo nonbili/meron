@@ -2,40 +2,28 @@ import { useConversationView } from './conversationView'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import {
-  Archive,
-  ExternalLink,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
   ChevronsDownUp,
   ChevronsUpDown,
   Code,
-  Download,
   FileText,
   LoaderCircle,
   MoreHorizontal,
   PanelRight,
-  Printer,
   Reply,
   ReplyAll,
   Search,
-  Star,
-  Trash2,
   X,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
-import { printThread } from '../../lib/printMail'
-import { openThreadWindow } from '../../lib/threadWindow'
 import { threadWindowSession } from '../../lib/windowSession'
 import { useTranslation } from '../../lib/i18n'
 import { ui$ } from '../../states/ui'
 import { settings$ } from '../../states/settings'
-import { starThread } from '../../states/mailFlags'
-import { deletesForever, isDraftFolder } from '../../states/mailFolders'
-import { archiveThread, deleteThread } from '../../states/mailMoves'
 import { goToSearchMatch, setAllMessagesExpanded } from '../../states/thread'
 import { accounts$, isLocalAccountId } from '../../states/accounts'
-import { exportThreadsAsEml } from '../../states/emlExport'
 import { isRssAccount } from '../../lib/threadActions'
 import { closeCurrentConversation, kanban$ } from '../../states/kanban'
 import { openReplyInFullEditor } from '../../states/compose'
@@ -52,13 +40,18 @@ import { ThreadMoveCopyItems } from '../threads/ThreadMoveCopyItems'
 import { ThreadTagItem } from '../threads/ThreadTagItem'
 import { useConversationMode } from './useMessageView'
 import { TOOLBAR_TOP_PX } from './conversationScroll'
+import { useConversationActions } from './conversationActions'
+import type { ConversationToolbarAction } from '../../states/settings'
+
+// The only toggle among the actions is the star.
+const STARRED_ICON = 'fill-amber-500 text-amber-500'
 
 // A floating pill of buttons, drawn like the reader tab's.
 const PILL =
   'pointer-events-auto flex shrink-0 items-center gap-0.5 rounded-full border border-border/40 bg-chats p-1 shadow-float'
 
 // The conversation toolbar, two pills floating over the top of the message
-// list: back/close affordances, archive, delete and add-to-tasks on the left;
+// list: back/close affordances and the actions pinned in Settings on the left;
 // the desktop in-thread search box, the details toggle and the overflow actions
 // menu on the right. The list's top padding clears them (conversationScroll).
 // The subject heads the message list (ConversationSubject) and scrolls away
@@ -94,12 +87,12 @@ export function ConversationHeader({
   const mediaOpen = useValue(thread$.mediaOpen)
   const conversationMenu = useValue(thread$.conversationMenu)
   const expandAllAction = useValue(thread$.expandAllAction)
-  const tasksEnabled = useValue(settings$.tasksEnabled)
   const normalizedThreadSearch = threadSearch.trim().toLowerCase()
 
   const detailsPreviewId = useId()
   const detailsLabel = isRSS ? t('chat.feedDetails') : t('chat.conversationDetails')
-  const [printing, setPrinting] = useState(false)
+  const { actions, printing } = useConversationActions(activeThread, scope)
+  const pinned = useValue(settings$.conversationToolbar).filter((id) => actions[id].available)
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
   useEffect(() => {
     if (!viewActive) setActionsMenuOpen(false)
@@ -123,36 +116,37 @@ export function ConversationHeader({
   // reply-all identical to the reply is a second name for the same action.
   const replyAll = useValue(canReplyAllToThread)
 
-  // The same wording, and the same permanence in Trash, as the thread list's menu.
-  const inTrash = deletesForever(activeThread.account_id, activeThread.folder_id)
-  const inDrafts = isDraftFolder(activeThread.folder_id, activeThread.account_id)
-  // The left pill: back on a narrow window, close on a board, and the thread's
-  // own actions. An RSS item on a wide window has none of them.
-  const hasDesktopLeftItems = showCloseConversation || !isRSS || printing
+  // The left pill: back on a narrow window, close on a board, and the actions
+  // pinned in Settings. A wide window may leave it with none of them.
+  const hasDesktopLeftItems = showCloseConversation || printing || pinned.length > 0
   const hasLeftItems = hasDesktopLeftItems || !threadWindowSession
-  const deleteLabel = inTrash
-    ? t('threads.actions.deleteForever')
-    : inDrafts
-      ? t('threads.actions.discardDraft')
-      : t('threads.actions.moveToTrash')
   const closeActionMenus = () => {
     setActionsMenuOpen(false)
     thread$.conversationMenu.set(null)
+  }
+  // A shared action as a row of the menu below.
+  const menuAction = (id: ConversationToolbarAction) => {
+    const action = actions[id]
+    if (!action.available) return null
+    return (
+      <MenuItem
+        icon={<action.icon size={15} className={`shrink-0 ${action.active ? STARRED_ICON : ''}`} />}
+        label={action.label}
+        danger={action.danger}
+        disabled={action.disabled}
+        className="h-auto! gap-2.5! px-3! py-2 text-xs! font-medium! disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+        onClick={() => {
+          closeActionMenus()
+          action.run()
+        }}
+      />
+    )
   }
   // The thread's actions, shown both under the header's button and, for a
   // right-click on the blank part of the conversation, at the pointer.
   const actionItems = (
     <>
-      {!threadWindowSession && (
-        <MenuItem
-          icon={<ExternalLink size={15} />}
-          label={t('threads.actions.openInNewWindow')}
-          onClick={() => {
-            void openThreadWindow(activeThread.thread_id, activeThread, scope)
-            closeActionMenus()
-          }}
-        />
-      )}
+      {menuAction('openInNewWindow')}
 
       <button
         onClick={() => {
@@ -216,16 +210,7 @@ export function ConversationHeader({
           <ReplyAll size={15} className="shrink-0" /> {t('chat.actions.replyAll')}
         </button>
       )}
-      <button
-        onClick={() => {
-          void starThread(activeThread.thread_id, !activeThread.starred)
-          closeActionMenus()
-        }}
-        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-primary cursor-pointer hover:bg-hover"
-      >
-        <Star size={15} className={`shrink-0 ${activeThread.starred ? 'fill-amber-500 text-amber-500' : ''}`} />
-        {activeThread.starred ? t('chat.unstar') : t('chat.star')}
-      </button>
+      {menuAction('star')}
       {!isRSS && (
         <>
           <ThreadTagItem
@@ -235,17 +220,8 @@ export function ConversationHeader({
             itemClassName="h-auto! gap-2.5! px-3! py-2 text-xs! font-medium!"
             iconSize={15}
           />
-          {!isLocalAccountId(activeThread.account_id) && (
-            <button
-              onClick={() => {
-                void archiveThread(activeThread.thread_id)
-                closeActionMenus()
-              }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-primary cursor-pointer hover:bg-hover"
-            >
-              <Archive size={15} className="shrink-0" /> {t('threads.actions.archiveThread')}
-            </button>
-          )}
+          {menuAction('archive')}
+          {menuAction('spam')}
           <ThreadMoveCopyItems
             threadId={activeThread.thread_id}
             accountId={activeThread.account_id}
@@ -255,40 +231,10 @@ export function ConversationHeader({
             iconSize={15}
           />
           <div className="my-1 h-px bg-border" />
-          <MenuItem
-            icon={<Printer size={15} className="shrink-0" />}
-            label={t('chat.actions.printThread')}
-            disabled={printing}
-            className="h-auto! gap-2.5! px-3! py-2 text-xs! font-medium! disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
-            onClick={() => {
-              closeActionMenus()
-              setPrinting(true)
-              void printThread(activeThread.thread_id).finally(() => setPrinting(false))
-            }}
-          />
-          <MenuItem
-            icon={<Download size={15} className="shrink-0" />}
-            label={t('chat.actions.saveAsEml')}
-            className="h-auto! gap-2.5! px-3! py-2 text-xs! font-medium!"
-            onClick={() => {
-              closeActionMenus()
-              void exportThreadsAsEml(
-                [{ threadId: activeThread.thread_id, folderId: activeThread.folder_id }],
-                activeThread.subject || '',
-              )
-            }}
-          />
+          {menuAction('print')}
+          {menuAction('saveEml')}
           <div className="my-1 h-px bg-border" />
-          <button
-            onClick={() => {
-              void deleteThread(activeThread.thread_id, { permanent: inTrash })
-              closeActionMenus()
-            }}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-950/25"
-          >
-            <Trash2 size={15} className="shrink-0" />
-            {deleteLabel}
-          </button>
+          {menuAction('delete')}
         </>
       )}
     </>
@@ -319,29 +265,29 @@ export function ConversationHeader({
               onClick={closeCurrentConversation}
             />
           )}
-          {!isRSS && (
-            <>
-              {!isLocalAccountId(activeThread.account_id) && (
-                <IconButton
-                  icon={Archive}
-                  label={t('threads.actions.archiveThread')}
-                  onClick={() => void archiveThread(activeThread.thread_id)}
-                />
-              )}
-              <IconButton
-                icon={Trash2}
-                label={deleteLabel}
-                onClick={() => void deleteThread(activeThread.thread_id, { permanent: inTrash })}
-              />
-              {tasksEnabled && (
+          {pinned.map((id) => {
+            const action = actions[id]
+            if (id === 'tasks')
+              return (
                 <AddToTasksButton
+                  key={id}
                   title={activeThread.subject}
                   account={activeThread.account_id}
                   threadId={activeThread.thread_id}
                 />
-              )}
-            </>
-          )}
+              )
+            return (
+              <IconButton
+                key={id}
+                label={action.label}
+                disabled={action.disabled}
+                aria-pressed={id === 'star' ? !!action.active : undefined}
+                onClick={action.run}
+              >
+                <action.icon size={16} className={action.active ? STARRED_ICON : ''} />
+              </IconButton>
+            )
+          })}
           {printing && (
             <span className="flex h-9 w-9 items-center justify-center">
               <LoaderCircle

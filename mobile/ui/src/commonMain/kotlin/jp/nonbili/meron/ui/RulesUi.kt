@@ -558,7 +558,7 @@ internal fun MeronMobileState.RulesPage(
             // The labels are read here: accessibility actions run outside composition.
             val moveUp = tr("rules.moveUp")
             val moveDown = tr("rules.moveDown")
-            val reorder = tr("rules.reorder")
+            val reorder = tr("common.dragToReorder")
             ReorderableColumn(
                 list = rules.orEmpty(),
                 onSettle = ::move,
