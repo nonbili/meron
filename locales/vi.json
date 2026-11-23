@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Được ký bằng khóa không thuộc về {sender}. Có thể thư không phải do họ gửi.",
   "crypto.problem.weak_key_binding": "Không thể xác minh danh tính người gửi. Khóa ký của họ sử dụng thuật toán bảo mật lỗi thời.",
   "crypto.problem.redirected": "Thư mã hóa này có vẻ đã bị chuyển hướng: thư không được mã hóa cho bạn hoặc người gửi đã bị thay đổi. Đây có thể là bản sao của thư dành cho hoặc từ một người khác.",
-  "crypto.sign.encrypted": "Thư mã hóa luôn được ký bằng khóa của bạn.",
+  "crypto.sign.encrypted": "Thư mã hóa luôn được ký bằng khóa của bạn. Để chỉ gửi kèm chữ ký, hãy tắt mã hóa và bật ký.",
   "crypto.sign.off": "Chưa ký. Nhấp để ký thư này bằng khóa của bạn.",
   "crypto.sign.on": "Đã ký bằng khóa của bạn. Nhấp để gửi thư này mà không có chữ ký.",
   "crypto.trust.redirected": "Thư này có vẻ đã bị chuyển hướng và có thể không phải như bề ngoài.",

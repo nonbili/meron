@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "使用的签名密钥不属于 {sender}。邮件可能并非来自对方。",
   "crypto.problem.weak_key_binding": "无法验证发件人身份。其签名密钥使用了过时的安全算法。",
   "crypto.problem.redirected": "此加密邮件看似经过重定向：它并非加密给你，或发件人已被更改。它可能是发给他人或来自他人的邮件副本。",
-  "crypto.sign.encrypted": "加密邮件始终使用你的密钥签名。",
+  "crypto.sign.encrypted": "加密邮件始终使用你的密钥签名。若只想签名发送，请关闭加密并开启签名。",
   "crypto.sign.off": "未签名。点击使用你的密钥为此邮件签名。",
   "crypto.sign.on": "已用你的密钥签名。点击可不带签名发送此邮件。",
   "crypto.trust.redirected": "此邮件看似经过重定向，可能并非表面看到的那样。",

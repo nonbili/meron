@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Parakstīts ar atslēgu, kas nepieder sūtītājam {sender}. Iespējams, tas nav no viņa.",
   "crypto.problem.weak_key_binding": "Neizdevās pārbaudīt sūtītāja identitāti. Paraksta atslēga izmanto novecojušu drošības algoritmu.",
   "crypto.problem.redirected": "Šis šifrētais ziņojums izskatās pāradresēts: tas netika šifrēts jums vai tā sūtītājs tika mainīts. Tā var būt kopija no ziņojuma, kas bija paredzēts kādam citam vai ko sūtījis kāds cits.",
-  "crypto.sign.encrypted": "Šifrētas vēstules vienmēr tiek parakstītas ar jūsu atslēgu.",
+  "crypto.sign.encrypted": "Šifrētas vēstules vienmēr tiek parakstītas ar jūsu atslēgu. Lai sūtītu tikai parakstītu, izslēdziet šifrēšanu un ieslēdziet parakstīšanu.",
   "crypto.sign.off": "Nav parakstīts. Noklikšķiniet, lai parakstītu šo ziņojumu ar savu atslēgu.",
   "crypto.sign.on": "Parakstīts ar jūsu atslēgu. Noklikšķiniet, lai nosūtītu šo ziņojumu bez paraksta.",
   "crypto.trust.redirected": "Šis ziņojums izskatās pāradresēts un var nebūt tāds, kāds šķiet.",

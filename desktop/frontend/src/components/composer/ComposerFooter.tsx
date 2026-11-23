@@ -76,7 +76,7 @@ export function ComposerFooter({
     /** Switched off by the user before (in the quick reply). */
     offByUser?: boolean
     hasRecipients?: boolean
-    onChange: (on: boolean) => void
+    onChange: (on: boolean, byUser?: boolean) => void
   }
   /** The OpenPGP sign switch, when the account's key is in use. */
   signing?: { on: boolean; encrypted: boolean; onChange: (on: boolean) => void }

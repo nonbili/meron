@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Podpisano kluczem, który nie należy do kontaktu {sender}. Wiadomość może nie pochodzić od tej osoby.",
   "crypto.problem.weak_key_binding": "Nie udało się zweryfikować tożsamości nadawcy. Jego klucz podpisu używa przestarzałego algorytmu zabezpieczeń.",
   "crypto.problem.redirected": "Ta zaszyfrowana wiadomość wygląda na przekierowaną: nie została zaszyfrowana dla Ciebie lub zmieniono jej nadawcę. Może to być kopia wiadomości przeznaczonej dla kogoś innego lub od kogoś innego.",
-  "crypto.sign.encrypted": "Zaszyfrowana poczta jest zawsze podpisywana Twoim kluczem.",
+  "crypto.sign.encrypted": "Zaszyfrowana poczta jest zawsze podpisywana Twoim kluczem. Aby wysłać wiadomość tylko podpisaną, wyłącz szyfrowanie i włącz podpisywanie.",
   "crypto.sign.off": "Niepodpisana. Kliknij, aby podpisać tę wiadomość swoim kluczem.",
   "crypto.sign.on": "Podpisana Twoim kluczem. Kliknij, aby wysłać wiadomość bez podpisu.",
   "crypto.trust.redirected": "Ta wiadomość wygląda na przekierowaną i może nie być tym, czym się wydaje.",

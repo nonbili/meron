@@ -210,13 +210,28 @@ export function Composer({ tabId }: { tabId: string }) {
                 encryptedDraft: !!draft.encryptedDraft,
                 offByUser: !!draft.encryptOffByUser,
                 hasRecipients: !!(draft.to + draft.cc + draft.bcc).trim(),
-                onChange: (on: boolean) => update({ encrypt: on }),
+                // Switched off on purpose, it stays off, and the sign switch's
+                // state is saved with the draft, which is what keeps it off when
+                // the draft is reopened.
+                onChange: (on: boolean, byUser?: boolean) => {
+                  if (on) return update({ encrypt: true, encryptOffByUser: undefined })
+                  if (!byUser) return update({ encrypt: false })
+                  const pinSign =
+                    draft.sign === undefined && encryptionKeys?.enabled && !encryptionKeys.own_key_unusable
+                  update({
+                    encrypt: false,
+                    encryptOffByUser: true,
+                    ...(pinSign ? { sign: !!encryptionKeys.sign_plain } : {}),
+                  })
+                },
               }
             : undefined
         }
         signing={
-          // Only an account whose key is in use can sign.
-          encryptionKeys?.enabled && !encryptionKeys.own_key_unusable
+          // Only an account whose key is in use can sign; a draft already set
+          // to sign keeps the switch to turn that off, or the core would
+          // refuse to send it.
+          encryptionKeys && ((encryptionKeys.enabled && !encryptionKeys.own_key_unusable) || draft.sign === true)
             ? {
                 on: draft.sign ?? !!encryptionKeys.sign_plain,
                 encrypted: !!draft.encrypt,

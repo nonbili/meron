@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Firmado con una clave que no pertenece a {sender}. Puede no ser de esa persona.",
   "crypto.problem.weak_key_binding": "No se pudo verificar la identidad del remitente. Su clave de firma usa un algoritmo de seguridad obsoleto.",
   "crypto.problem.redirected": "Este mensaje cifrado parece redirigido: no fue cifrado para ti o se cambió el remitente. Podría ser una copia de un mensaje dirigido a otra persona o enviado por otra persona.",
-  "crypto.sign.encrypted": "El correo cifrado siempre se firma con tu clave.",
+  "crypto.sign.encrypted": "El correo cifrado siempre se firma con tu clave. Para enviarlo solo firmado, desactiva el cifrado y activa la firma.",
   "crypto.sign.off": "Sin firmar. Haz clic para firmar este mensaje con tu clave.",
   "crypto.sign.on": "Firmado con tu clave. Haz clic para enviar sin firma.",
   "crypto.trust.redirected": "Este mensaje parece redirigido y podría no ser lo que parece.",

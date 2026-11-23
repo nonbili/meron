@@ -24,6 +24,8 @@ export type PendingSend = {
   /** Encryption was chosen off. Without it, the core encrypts a reply to
    * encrypted mail. */
   plain?: boolean
+  /** Sign mail that isn't encrypted; unset: the account's default. */
+  sign?: boolean
 }
 
 /** Prefix of the synthetic id given to optimistically-rendered sent messages.

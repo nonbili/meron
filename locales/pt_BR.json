@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Assinada com uma chave que não pertence a {sender}. Pode não ter sido enviada por essa pessoa.",
   "crypto.problem.weak_key_binding": "Não foi possível verificar a identidade do remetente. A chave de assinatura usa um algoritmo de segurança desatualizado.",
   "crypto.problem.redirected": "Esta mensagem criptografada parece redirecionada: não foi criptografada para você ou o remetente foi alterado. Pode ser uma cópia de uma mensagem destinada a outra pessoa ou enviada por outra pessoa.",
-  "crypto.sign.encrypted": "E-mails criptografados são sempre assinados com sua chave.",
+  "crypto.sign.encrypted": "E-mails criptografados são sempre assinados com sua chave. Para enviar apenas assinado, desative a criptografia e ative a assinatura.",
   "crypto.sign.off": "Não assinado. Clique para assinar esta mensagem com sua chave.",
   "crypto.sign.on": "Assinado com sua chave. Clique para enviar sem assinatura.",
   "crypto.trust.redirected": "Esta mensagem parece redirecionada e pode não ser o que parece.",

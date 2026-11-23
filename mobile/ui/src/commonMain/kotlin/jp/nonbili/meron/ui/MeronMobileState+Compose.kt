@@ -172,6 +172,7 @@ internal fun MeronMobileState.clearComposeDraftState() {
     composeEncrypt = null
     composeSign = null
     composeCryptoLocked = false
+    composeReplyEncrypted = false
     composeReferences = ""
     composeForwardHtml = ""
     composeForwardInlineAttachments = emptyList()
@@ -230,7 +231,7 @@ private fun recipientEntries(value: String): List<String> {
 // inline images it references. A reply whose quote the user has edited goes out
 // plain: the cached HTML quote would no longer say what the plain one does.
 private fun MeronMobileState.currentComposeDraft(): ComposeDraft {
-    composeFoldedQuote?.takeUnless { composeEncrypt == false }?.let { quote ->
+    composeFoldedQuote?.takeUnless { composeEncrypt == false && composeReplyEncrypted }?.let { quote ->
         // A folded quote goes out under whatever the body holds.
         val own = body.trim()
         val html = if (quote.html.isBlank()) "" else plainTextToHtml(own) + quote.html
@@ -751,6 +752,7 @@ internal fun MeronMobileState.replyToMessage(
         composeFromEmail = replyFrom
         composeInReplyTo = params.inReplyTo
         composeEncrypt = if (message.crypto?.encrypted == true) true else null
+        composeReplyEncrypted = message.crypto?.encrypted == true
         composeReferences = params.references
         composeReturnScreen = Screen.Thread
         rememberComposeSeed()

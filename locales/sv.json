@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Signerad med en nyckel som inte tillhör {sender}. Det kanske inte kommer från personen.",
   "crypto.problem.weak_key_binding": "Avsändarens identitet kunde inte verifieras. Signeringsnyckeln använder en föråldrad säkerhetsalgoritm.",
   "crypto.problem.redirected": "Detta krypterade meddelande ser omdirigerat ut: det var inte krypterat för dig eller så har avsändaren ändrats. Det kan vara en kopia av ett meddelande avsett för eller från någon annan.",
-  "crypto.sign.encrypted": "Krypterad e-post signeras alltid med din nyckel.",
+  "crypto.sign.encrypted": "Krypterad e-post signeras alltid med din nyckel. För att skicka den endast signerad, stäng av kryptering och slå på signering.",
   "crypto.sign.off": "Inte signerad. Klicka för att signera detta meddelande med din nyckel.",
   "crypto.sign.on": "Signerad med din nyckel. Klicka för att skicka utan signatur.",
   "crypto.trust.redirected": "Detta meddelande ser omdirigerat ut och kanske inte är vad det ser ut att vara.",

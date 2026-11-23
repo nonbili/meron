@@ -33,13 +33,19 @@ import kotlin.math.abs
 // The quote a saved reply was written with, rebuilt from the message it answers
 // when that is loaded and the draft still ends in it unchanged. The draft's own
 // HTML can't give it back: the reader serves it sanitized.
+
+/** The loaded message a reply draft answers, if any. */
+private fun MeronMobileState.draftParent(draft: MessageBody): MessageBody? {
+    val parentId = draft.inReplyTo.normalizedComposeDraftId()
+    if (parentId.isBlank()) return null
+    return messages.firstOrNull { it.messageId.normalizedComposeDraftId() == parentId }
+}
+
 private suspend fun MeronMobileState.savedReplyQuote(
     draft: MessageBody,
     accountId: String,
 ): ReplyQuote? {
-    val parentId = draft.inReplyTo.normalizedComposeDraftId()
-    if (parentId.isBlank()) return null
-    val parent = messages.firstOrNull { it.messageId.normalizedComposeDraftId() == parentId } ?: return null
+    val parent = draftParent(draft) ?: return null
     return buildReplyQuote(parent, accountId)?.takeIf { it.endsBody(draft.body) }
 }
 
@@ -108,9 +114,20 @@ internal fun MeronMobileState.openDraftCompose(
             // the wrong conversation. The draft's own headers are restored just
             // below — a reply draft has to keep threading where it belongs.
             clearComposeDraftState()
-            composeEncrypt = if (message.crypto?.encrypted == true) true else null
+            // The sign switch is only set with encryption off: a plain draft
+            // that carries it was switched off on purpose (signed only, or
+            // plain), and isn't encrypted again by default.
+            composeEncrypt =
+                when {
+                    message.crypto?.encrypted == true -> true
+                    message.draftSign != null -> false
+                    else -> null
+                }
             composeSign = message.draftSign
             composeCryptoLocked = message.crypto?.encrypted == true
+            // A reply draft to encrypted mail keeps the guard a fresh reply has:
+            // switching encryption off asks, and leaves the quote out.
+            composeReplyEncrypted = draftParent(message)?.crypto?.encrypted == true
             to = message.to
             cc = message.cc
             bcc = message.bcc

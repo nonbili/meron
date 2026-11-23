@@ -28,6 +28,7 @@ import {
   buildReplyThreading,
   pickReplyTarget,
   quickReplyEncrypts,
+  quickReplySigns,
   resolveQuickReplyFrom,
   replySubject,
   addressQuickReply,
@@ -93,6 +94,9 @@ export function startFreshQuickReply() {
   compose$.composer.set('')
   compose$.quickReplySignatureOff.set(false)
   compose$.quickReplySignatureUnmanaged.set(false)
+  // The OpenPGP switches are per reply too: back to the defaults.
+  compose$.quickReplySign.set(null)
+  compose$.quickReplyEncrypt.set(null)
 }
 
 /**
@@ -137,6 +141,12 @@ export function setQuickReplySignatureOff(off: boolean) {
   if (compose$.quickReplySignatureOff.peek() === off) return
   compose$.quickReplySignatureOff.set(off)
   hydratedWithoutSignature = null
+  if (!isQuickReplyBlank()) scheduleQuickReplyDraftSave()
+}
+
+/** Set the OpenPGP sign switch for this thread's reply; a saved draft follows. */
+export function setQuickReplySign(threadId: string, on: boolean) {
+  compose$.quickReplySign.set({ threadId, on })
   if (!isQuickReplyBlank()) scheduleQuickReplyDraftSave()
 }
 
@@ -214,6 +224,7 @@ async function performQuickReplyDraftSave() {
       draftMessageId: draftId,
       attachments,
       encrypt: quickReplyEncrypts(),
+      sign: quickReplySigns(),
     })
     // Only when the box still points at the placeholder this save started from:
     // a send (or a thread switch) that cleared it in the meantime has moved on,
@@ -647,6 +658,13 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   // A draft saved encrypted comes back encrypted, whatever the conversation's
   // default: its text must not go out (or be saved again) in the clear.
   if (tail.crypto?.encrypted) compose$.quickReplyEncrypt.set({ threadId: activeThreadId, on: true, draft: true })
+  if (tail.draft_sign != null) {
+    compose$.quickReplySign.set({ threadId: activeThreadId, on: tail.draft_sign })
+    // The sign switch is only set with encryption off: a plain draft that
+    // carries it was switched off on purpose (signed only, or plain), and
+    // stays off rather than being encrypted again by default.
+    if (!tail.crypto?.encrypted) compose$.quickReplyEncrypt.set({ threadId: activeThreadId, on: false, byUser: true })
+  }
   ownQuickReplyDraft(tailDraftId, activeThreadId, true)
   compose$.quickReplyFrom.set(tail.from_addr ?? '')
   compose$.quickReplyAdded.set(holds.added)

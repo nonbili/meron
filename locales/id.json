@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Ditandatangani dengan kunci yang bukan milik {sender}. Pesan mungkin bukan dari mereka.",
   "crypto.problem.weak_key_binding": "Identitas pengirim tidak dapat diverifikasi. Kunci penandatangan mereka menggunakan algoritma keamanan yang sudah usang.",
   "crypto.problem.redirected": "Pesan terenkripsi ini tampak dialihkan: pesan tidak dienkripsi untuk Anda, atau pengirimnya telah diubah. Ini mungkin salinan pesan yang ditujukan untuk, atau berasal dari, orang lain.",
-  "crypto.sign.encrypted": "Email terenkripsi selalu ditandatangani dengan kunci Anda.",
+  "crypto.sign.encrypted": "Email terenkripsi selalu ditandatangani dengan kunci Anda. Untuk mengirim dengan tanda tangan saja, matikan enkripsi dan nyalakan tanda tangan.",
   "crypto.sign.off": "Tidak ditandatangani. Klik untuk menandatangani pesan ini dengan kunci Anda.",
   "crypto.sign.on": "Ditandatangani dengan kunci Anda. Klik untuk mengirim pesan ini tanpa tanda tangan.",
   "crypto.trust.redirected": "Pesan ini tampak dialihkan dan mungkin tidak seperti kelihatannya.",

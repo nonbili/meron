@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Allkirjastatud võtmega, mis ei kuulu saatjale {sender}. See ei pruugi olla temalt.",
   "crypto.problem.weak_key_binding": "Saatja identiteeti ei saanud kinnitada. Tema allkirjavõti kasutab aegunud turvaalgoritmi.",
   "crypto.problem.redirected": "See krüpteeritud kiri näib olevat ümber suunatud: see polnud krüpteeritud teile või selle saatjat muudeti. See võib olla koopia kirjast, mis oli mõeldud kellelegi teisele või saadeti kellegi teise poolt.",
-  "crypto.sign.encrypted": "Krüpteeritud kirjad allkirjastatakse alati teie võtmega.",
+  "crypto.sign.encrypted": "Krüpteeritud kirjad allkirjastatakse alati teie võtmega. Ainult allkirjastatult saatmiseks lülitage krüpteerimine välja ja allkirjastamine sisse.",
   "crypto.sign.off": "Allkirjastamata. Klõpsake selle kirja allkirjastamiseks oma võtmega.",
   "crypto.sign.on": "Allkirjastatud teie võtmega. Klõpsake ilma allkirjata saatmiseks.",
   "crypto.trust.redirected": "See kiri näib olevat ümber suunatud ja ei pruugi olla see, millena näib.",

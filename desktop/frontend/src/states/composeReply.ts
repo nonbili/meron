@@ -330,11 +330,27 @@ export function quickReplyHoldsEncryptedDraft(threadId: string | undefined): boo
   return !!threadId && !!choice?.draft && choice.threadId === threadId
 }
 
+/** Whether encryption is off in the quick reply answering `target` by a
+ * choice for this thread, made by the user or by the lock itself (an account
+ * without encryption): either way the reply is plain, not the default. */
+export function quickReplyEncryptOff(target: Message): boolean {
+  const choice = compose$.quickReplyEncrypt.peek()
+  return !!choice && choice.threadId === target.thread_id && !choice.on
+}
+
 /** Whether the user switched encryption off in the quick reply answering
  * `target` (rather than it being off by default). */
 export function quickReplyOffByUser(target: Message): boolean {
   const choice = compose$.quickReplyEncrypt.peek()
-  return !!choice && choice.threadId === target.thread_id && !choice.on
+  return !!choice && choice.threadId === target.thread_id && !choice.on && !!choice.byUser
+}
+
+/** The quick reply's sign switch as the user set it for this thread, or
+ * undefined for the account's default (decided by the core). Reactive. */
+export function quickReplySigns(): boolean | undefined {
+  const target = quickReplyTarget()
+  const choice = compose$.quickReplySign.get()
+  return target && choice?.threadId === target.thread_id ? choice.on : undefined
 }
 
 /** Whether the quick reply is encrypted: the user's choice for this thread,

@@ -3,7 +3,7 @@ import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { openReplyInFullEditor, replyQuoteWithheld } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
-import { isQuickReplyBlank } from '../../states/quickReply'
+import { isQuickReplyBlank, scheduleQuickReplyDraftSave, setQuickReplySign } from '../../states/quickReply'
 import { sendShortcutLabel, settings$ } from '../../states/settings'
 import { useQuickReply } from './useQuickReply'
 import { QuickReplyAttachments } from './QuickReplyAttachments'
@@ -14,9 +14,11 @@ import {
   quickReplyEncrypts,
   quickReplyHoldsEncryptedDraft,
   quickReplyRecipients,
+  quickReplySigns,
   quickReplyTarget,
 } from '../../states/composeReply'
 import { EncryptToggle, encryptionBlocksSend, recipientAddresses, useRecipientKeys } from '../crypto/EncryptToggle'
+import { SignToggle } from '../crypto/SignToggle'
 
 export function QuickReplyComposer() {
   const { t } = useTranslation()
@@ -38,6 +40,11 @@ export function QuickReplyComposer() {
   const target = useValue(quickReplyTarget)
   const { to, cc } = useValue(quickReplyRecipients)
   const encrypt = useValue(quickReplyEncrypts)
+  const sign = useValue(quickReplySigns)
+  const offByUser = useValue(() => {
+    const choice = compose$.quickReplyEncrypt.get()
+    return !!target && choice?.threadId === target.thread_id && !choice.on && !!choice.byUser
+  })
   const keys = useRecipientKeys(target?.account_id ?? '', recipientAddresses(to, cc))
   const encryptedDraft = useValue(() => quickReplyHoldsEncryptedDraft(target?.thread_id))
   const sensitive = target?.crypto?.encrypted ? ('reply' as const) : undefined
@@ -112,10 +119,41 @@ export function QuickReplyComposer() {
               // A draft saved encrypted may quote decrypted mail in its text:
               // it is only switched to plain on purpose.
               encryptedDraft={encryptedDraft}
+              // Switched off for this reply (signed only, say): coming back to
+              // the thread must not turn it on again by itself.
+              offByUser={offByUser}
               quoteWithheld={quoteWithheld}
-              onChange={(on) =>
-                compose$.quickReplyEncrypt.set({ threadId: target.thread_id, on, draft: encryptedDraft || undefined })
-              }
+              onChange={(on, byUser) => {
+                const optOut = !on && !!byUser
+                compose$.quickReplyEncrypt.set({
+                  threadId: target.thread_id,
+                  on,
+                  draft: encryptedDraft || undefined,
+                  byUser: optOut || undefined,
+                })
+                // Switched back on: the saved copy may be plain by now (a
+                // draft loaded encrypted, switched off and autosaved), and the
+                // encryption watcher skips such drafts.
+                if (on && byUser && !isQuickReplyBlank()) scheduleQuickReplyDraftSave()
+                if (!optOut) return
+                // Switched off on purpose, the sign switch's state is saved with
+                // the draft, which is what brings the opt-out back when it is
+                // reopened.
+                if (sign === undefined && keys?.enabled && !keys.own_key_unusable)
+                  setQuickReplySign(target.thread_id, !!keys.sign_plain)
+                else if (!isQuickReplyBlank()) scheduleQuickReplyDraftSave()
+              }}
+            />
+          )}
+          {/* Only a usable key can sign; a reply already set to sign (a
+              draft saved before the key became unusable) keeps the switch to
+              turn that off, or the core would refuse to send it. */}
+          {target && keys && ((keys.enabled && !keys.own_key_unusable) || sign === true) && (
+            <SignToggle
+              size="md"
+              on={sign ?? !!keys.sign_plain}
+              encrypted={encrypt}
+              onChange={(on) => setQuickReplySign(target.thread_id, on)}
             />
           )}
           <QuickReplySignatureToggle />

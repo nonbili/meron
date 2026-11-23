@@ -83,7 +83,9 @@ export function EncryptToggle({
 }: {
   keys: RecipientKeys | null
   on: boolean
-  onChange: (on: boolean) => void
+  /** `byUser`: the user clicked the lock, rather than it switching itself
+   * (a recipient without a key, encrypt when possible). */
+  onChange: (on: boolean, byUser?: boolean) => void
   /** The message has at least one recipient (nothing to encrypt for otherwise). */
   hasRecipients?: boolean
   /** Carries text from an encrypted message (a reply's quote, a forward). */
@@ -133,14 +135,17 @@ export function EncryptToggle({
   // in this message keeps it off.
   const encryptWhenPossible = useValue(settings$.encryptWhenPossible)
   const [userOff, setUserOff] = useState(offByUser)
+  // The opt-out can change while the lock is mounted (a draft loaded later,
+  // the next reply in the same thread): follow it.
+  useEffect(() => setUserOff(offByUser), [offByUser])
   const everyoneHasKey = !!keys?.enabled && !keys.own_key_unusable && keys.missing.length === 0 && hasRecipients
   useEffect(() => {
     if (on || !everyoneHasKey) return
-    if (lookingUp || (encryptWhenPossible && !userOff)) {
+    if (lookingUp || (encryptWhenPossible && !userOff && !offByUser)) {
       setLookingUp(false)
       onChange(true)
     }
-  }, [on, everyoneHasKey, lookingUp, encryptWhenPossible, userOff, onChange])
+  }, [on, everyoneHasKey, lookingUp, encryptWhenPossible, userOff, offByUser, onChange])
   if (!keys) return null
   if (!keys.enabled) {
     // Answering encrypted mail from an account without encryption: say why
@@ -192,7 +197,7 @@ export function EncryptToggle({
     if (!on) {
       if (!unavailable) {
         setUserOff(false)
-        onChange(true)
+        onChange(true, true)
       }
       return
     }
@@ -205,7 +210,7 @@ export function EncryptToggle({
       if (!ok) return
     }
     setUserOff(true)
-    onChange(false)
+    onChange(false, true)
   }
 
   // In the full composer, the Send button's corners; the quick reply's small ones.

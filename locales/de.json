@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Signiert mit einem Schlüssel, der nicht zu {sender} gehört. Sie stammt möglicherweise nicht von dieser Person.",
   "crypto.problem.weak_key_binding": "Die Identität des Absenders konnte nicht bestätigt werden. Sein Signaturschlüssel verwendet ein veraltetes Sicherheitsverfahren.",
   "crypto.problem.redirected": "Diese verschlüsselte Nachricht sieht weitergeleitet aus: Sie wurde nicht an Sie verschlüsselt oder ihr Absender wurde geändert. Es könnte eine Kopie einer Nachricht für oder von jemand anderem sein.",
-  "crypto.sign.encrypted": "Verschlüsselte E-Mails werden immer mit Ihrem Schlüssel signiert.",
+  "crypto.sign.encrypted": "Verschlüsselte E-Mails werden immer mit Ihrem Schlüssel signiert. Um nur signiert zu senden, schalten Sie die Verschlüsselung aus und die Signatur ein.",
   "crypto.sign.off": "Nicht signiert. Klicken Sie, um diese Nachricht mit Ihrem Schlüssel zu signieren.",
   "crypto.sign.on": "Mit Ihrem Schlüssel signiert. Klicken Sie, um ohne Signatur zu senden.",
   "crypto.trust.redirected": "Diese Nachricht sieht weitergeleitet aus und ist möglicherweise nicht das, was sie scheint.",

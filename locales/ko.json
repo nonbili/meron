@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "{sender}의 소유가 아닌 키로 서명되었습니다. 상대방이 보낸 것이 아닐 수 있습니다.",
   "crypto.problem.weak_key_binding": "발신자의 신원을 확인할 수 없습니다. 서명 키가 오래된 보안 알고리즘을 사용합니다.",
   "crypto.problem.redirected": "이 암호화된 메시지는 리디렉션된 것으로 보입니다. 본인에게 암호화되지 않았거나 보낸 사람이 변경되었습니다. 다른 사람을 위한 또는 다른 사람으로부터 온 메시지의 사본일 수 있습니다.",
-  "crypto.sign.encrypted": "암호화된 메일은 항상 내 키로 서명됩니다.",
+  "crypto.sign.encrypted": "암호화된 메일은 항상 내 키로 서명됩니다. 서명만 하여 보내려면 암호화를 끄고 서명을 켜세요.",
   "crypto.sign.off": "서명되지 않음. 내 키로 이 메시지에 서명하려면 클릭하세요.",
   "crypto.sign.on": "내 키로 서명됨. 서명 없이 메시지를 보내려면 클릭하세요.",
   "crypto.trust.redirected": "이 메시지는 리디렉션된 것으로 보이며 보이는 것과 다를 수 있습니다.",

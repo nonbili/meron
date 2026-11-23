@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "{sender} kişisine ait olmayan bir anahtarla imzalanmış. Gönderenden gelmemiş olabilir.",
   "crypto.problem.weak_key_binding": "Gönderenin kimliği doğrulanamadı. İmza anahtarı eski bir güvenlik algoritması kullanıyor.",
   "crypto.problem.redirected": "Bu şifreli ileti yeniden yönlendirilmiş görünüyor: size şifrelenmemiş veya göndereni değiştirilmiş. Başkası için veya başkasından gelen bir iletinin kopyası olabilir.",
-  "crypto.sign.encrypted": "Şifreli e-postalar her zaman anahtarınızla imzalanır.",
+  "crypto.sign.encrypted": "Şifreli e-postalar her zaman anahtarınızla imzalanır. Yalnızca imzalı göndermek için şifrelemeyi kapatıp imzalamayı açın.",
   "crypto.sign.off": "İmzalanmamış. Bu iletiyi anahtarınızla imzalamak için tıklayın.",
   "crypto.sign.on": "Anahtarınızla imzalandı. Bu iletiyi imzasız göndermek için tıklayın.",
   "crypto.trust.redirected": "Bu ileti yeniden yönlendirilmiş görünüyor ve göründüğü gibi olmayabilir.",

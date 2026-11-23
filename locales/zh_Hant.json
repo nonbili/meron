@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "使用的簽署金鑰不屬於 {sender}。郵件可能並非來自對方。",
   "crypto.problem.weak_key_binding": "無法驗證寄件者身分。其簽章金鑰使用了過時的安全演算法。",
   "crypto.problem.redirected": "此加密郵件看似經過重新導向：它並非加密給你，或寄件人已被變更。它可能是寄給他人或來自他人的郵件副本。",
-  "crypto.sign.encrypted": "加密郵件一律使用你的金鑰簽署。",
+  "crypto.sign.encrypted": "加密郵件一律使用你的金鑰簽署。若只要簽署寄出，請關閉加密並開啟簽署。",
   "crypto.sign.off": "未簽署。點擊使用你的金鑰簽署此郵件。",
   "crypto.sign.on": "已用你的金鑰簽署。點擊可不帶簽章傳送此郵件。",
   "crypto.trust.redirected": "此郵件看似經過重新導向，可能並非表面看到的那樣。",

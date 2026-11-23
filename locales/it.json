@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Firmato con una chiave che non appartiene a {sender}. Potrebbe non provenire da questo mittente.",
   "crypto.problem.weak_key_binding": "Non è stato possibile verificare l’identità del mittente. La sua chiave di firma usa un algoritmo di sicurezza obsoleto.",
   "crypto.problem.redirected": "Questo messaggio cifrato sembra essere stato reindirizzato: non è stato cifrato per te o il mittente è stato modificato. Potrebbe essere una copia di un messaggio destinato a qualcun altro o proveniente da altri.",
-  "crypto.sign.encrypted": "I messaggi cifrati sono sempre firmati con la tua chiave.",
+  "crypto.sign.encrypted": "I messaggi cifrati sono sempre firmati con la tua chiave. Per inviarlo solo firmato, disattiva la cifratura e attiva la firma.",
   "crypto.sign.off": "Non firmato. Clicca per firmare questo messaggio con la tua chiave.",
   "crypto.sign.on": "Firmato con la tua chiave. Clicca per inviare senza firma.",
   "crypto.trust.redirected": "Questo messaggio sembra reindirizzato e potrebbe non essere autentico.",

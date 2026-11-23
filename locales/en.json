@@ -625,7 +625,7 @@
   "crypto.problem.signer_mismatch": "Signed with a key that doesn't belong to {sender}. It may not be from them.",
   "crypto.problem.weak_key_binding": "Sender identity couldn’t be verified. Their signing key uses an outdated security algorithm.",
   "crypto.problem.redirected": "This encrypted message looks redirected: it was not encrypted to you, or its sender was changed. It may be a copy of a message meant for, or from, someone else.",
-  "crypto.sign.encrypted": "Encrypted mail is always signed with your key.",
+  "crypto.sign.encrypted": "Encrypted mail is always signed with your key. To send it signed only, turn off encryption and keep signing on.",
   "crypto.sign.off": "Not signed. Click to sign this message with your key.",
   "crypto.sign.on": "Signed with your key. Click to send this message without a signature.",
   "crypto.trust.redirected": "This message looks redirected and may not be what it seems.",

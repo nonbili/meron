@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Ondertekend met een sleutel die niet van {sender} is. Het is mogelijk niet van hen afkomstig.",
   "crypto.problem.weak_key_binding": "De identiteit van de afzender kon niet worden geverifieerd. De ondertekeningssleutel gebruikt een verouderd beveiligingsalgoritme.",
   "crypto.problem.redirected": "Dit versleutelde bericht lijkt te zijn doorgestuurd: het was niet voor u versleuteld of de afzender is gewijzigd. Het is mogelijk een kopie van een bericht dat voor of door iemand anders bedoeld was.",
-  "crypto.sign.encrypted": "Versleutelde e-mail wordt altijd ondertekend met uw sleutel.",
+  "crypto.sign.encrypted": "Versleutelde e-mail wordt altijd ondertekend met uw sleutel. Om alleen ondertekend te verzenden, zet u versleuteling uit en ondertekening aan.",
   "crypto.sign.off": "Niet ondertekend. Klik om dit bericht te ondertekenen met uw sleutel.",
   "crypto.sign.on": "Ondertekend met uw sleutel. Klik om dit bericht zonder handtekening te verzenden.",
   "crypto.trust.redirected": "Dit bericht lijkt te zijn doorgestuurd en is mogelijk niet wat het lijkt.",

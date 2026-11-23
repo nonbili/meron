@@ -95,8 +95,10 @@ internal fun ComposeEncryptionControl() {
         }
     }
     // The sign switch: whether this message, when it isn't encrypted, goes out
-    // signed with the account's key. Encrypted mail is always signed.
-    if (enabled) {
+    // signed with the account's key. Encrypted mail is always signed. A draft
+    // already set to sign keeps the switch once the key is unusable, to turn
+    // that off: the core would refuse to send it.
+    if (enabled || state.composeSign == true) {
         val encrypting = state.composeEncrypt == true
         val signing = encrypting || (state.composeSign ?: signDefault)
         IconButton(
@@ -124,6 +126,13 @@ internal fun ComposeEncryptionControl() {
             )
         }
     }
+    // Switched off, the sign switch's state is saved with the draft, which is
+    // what keeps it off when the draft is reopened.
+    val switchOff = {
+        state.composeEncrypt = false
+        if (state.composeSign == null && enabled) state.composeSign = signDefault
+        state.autoSaveComposeDraft()
+    }
     if (enabled || state.composeEncrypt == true) {
         IconButton(onClick = {
             when {
@@ -131,8 +140,15 @@ internal fun ComposeEncryptionControl() {
                     error = state.trs("crypto.toggle.decryptedLocked")
                 }
 
-                state.composeEncrypt == true -> {
+                // Only a reply to encrypted mail asks: its quote would be left
+                // out. Anything else switches off at once, to send signed only
+                // or plain.
+                state.composeEncrypt == true && state.composeReplyEncrypted -> {
                     offConfirm = true
+                }
+
+                state.composeEncrypt == true -> {
+                    switchOff()
                 }
 
                 missing.isNotEmpty() -> {
@@ -170,13 +186,12 @@ internal fun ComposeEncryptionControl() {
         AlertDialog(
             onDismissRequest = { offConfirm = false },
             title = { Text(tr("crypto.toggle.offTitle")) },
-            text = { Text(tr("crypto.toggle.offDraftMessage")) },
+            text = { Text(tr("crypto.toggle.offMessage")) },
             confirmButton = {
                 TextButton(onClick = {
-                    state.composeEncrypt = false
                     state.composeFoldedQuote = null
                     offConfirm = false
-                    state.autoSaveComposeDraft()
+                    switchOff()
                 }) { Text(tr("crypto.toggle.offConfirm")) }
             },
             dismissButton = { TextButton(onClick = { offConfirm = false }) { Text(tr("buttons.cancel")) } },

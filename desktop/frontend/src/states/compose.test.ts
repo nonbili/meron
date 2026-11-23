@@ -1243,6 +1243,44 @@ describe('quick reply draft sharing', () => {
     }
   })
 
+  // Signed only, answering encrypted mail: the box is cleared during the send,
+  // which must not bring back the default (encrypt, as the original was).
+  it('sends a signed-only reply to encrypted mail as chosen', async () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+      date: 1000,
+      crypto: { encrypted: true },
+    } as Partial<Message>)
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('Signed reply')
+    compose$.quickReplyEncrypt.set({ threadId: 't-1', on: false, byUser: true })
+    compose$.quickReplySign.set({ threadId: 't-1', on: true })
+    compose$.quickReplySignatureOff.set(false)
+    settings$.signature.set('')
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return { message_id: 'sent-signed@example.com' }
+      if (command === 'mail.folderList') return { folders: [] }
+      if (command === 'mail.threadList') return { threads: [] }
+      return {}
+    }
+
+    await sendReply()
+
+    const sent = [...calls].reverse().find((c) => c.command === 'mail.send')?.payload
+    expect(sent).toMatchObject({ encrypt: false, plain: true, sign: true })
+    // The next reply in the thread starts from the defaults again.
+    expect(compose$.quickReplyEncrypt.get()).toBeNull()
+    expect(compose$.quickReplySign.get()).toBeNull()
+  })
+
   it('says plain to the core only when encryption was switched off, not when the flag is missing', async () => {
     // A reply to encrypted mail that says neither is encrypted by the
     // core, so a path that loses `encrypt` can't downgrade it by accident.
@@ -3871,7 +3909,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('my answer')
-    compose$.quickReplyEncrypt.set({ threadId: 't-1', on: false })
+    compose$.quickReplyEncrypt.set({ threadId: 't-1', on: false, byUser: true })
 
     openReplyInFullEditor()
 
@@ -3900,6 +3938,53 @@ describe('quick reply draft sharing', () => {
 
     expect(compose$.tabs.get()[0].compose).toMatchObject({ encrypt: true, encryptedDraft: true })
     compose$.quickReplyEncrypt.set(null)
+  })
+
+  // Sending to someone with a key, signed only: encryption off and the sign
+  // switch on in the quick reply carry over to the full editor.
+  it('carries the quick reply sign switch into the full editor', () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('my answer')
+    compose$.quickReplyEncrypt.set({ threadId: 't-1', on: false, byUser: true })
+    compose$.quickReplySign.set({ threadId: 't-1', on: true })
+
+    openReplyInFullEditor()
+
+    expect(compose$.tabs.get()[0].compose).toMatchObject({ encrypt: false, sign: true })
+    compose$.quickReplyEncrypt.set(null)
+    compose$.quickReplySign.set(null)
+  })
+
+  // Another thread's choice is not this reply's.
+  it('leaves the sign switch to the account default in another thread', () => {
+    const thread = message({
+      id: 'root',
+      account_id: 'acc-1',
+      thread_id: 't-1',
+      folder_id: 'INBOX',
+      from_addr: 'them@example.com',
+      message_id: 'root@example.com',
+    })
+    mail$.threads.set([thread])
+    mail$.messages.set([thread])
+    ui$.selectedThread.set('t-1')
+    compose$.composer.set('my answer')
+    compose$.quickReplySign.set({ threadId: 't-2', on: true })
+
+    openReplyInFullEditor()
+
+    expect(compose$.tabs.get()[0].compose?.sign).toBeUndefined()
+    compose$.quickReplySign.set(null)
   })
 })
 

@@ -136,7 +136,13 @@ export const compose$ = observable({
   // box holds a draft that was saved encrypted, whose text may quote decrypted
   // mail: it stays encrypted unless switched off on purpose (encryptedDraft,
   // in the full editor too).
-  quickReplyEncrypt: null as null | { threadId: string; on: boolean; draft?: boolean },
+  // `byUser`: switched off by the user (not because a recipient had no key),
+  // which keeps it off rather than being encrypted again by default.
+  quickReplyEncrypt: null as null | { threadId: string; on: boolean; draft?: boolean; byUser?: boolean },
+  // The quick reply's OpenPGP sign switch for a reply that isn't encrypted:
+  // null follows the account's "Sign unencrypted mail", otherwise the user's
+  // choice for this thread (keyed like quickReplyEncrypt).
+  quickReplySign: null as null | { threadId: string; on: boolean },
   // Server-side draft backing the active thread's quick reply, shared with the
   // full composer's saveDraft/discardDraft mechanism (mail.saveDraft/
   // mail.discardDraft) rather than a separate persistence path. Reset on

@@ -62,7 +62,9 @@ import {
   detectAliasFrom,
   detectSenderFrom,
   pickReplyTarget,
+  quickReplyEncryptOff,
   quickReplyEncrypts,
+  quickReplySigns,
   quickReplyHoldsEncryptedDraft,
   quickReplyOffByUser,
   resolveQuickReplyFrom,
@@ -894,8 +896,9 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     // of a draft that was saved encrypted. Switched off there on purpose, it
     // stays off: `false`, not unset (which the core would read as "answers
     // encrypted mail, so encrypt"), and the toggle doesn't turn it back on.
-    encrypt: quickReplyOffByUser(target) ? false : quickReplyEncrypts() || undefined,
+    encrypt: quickReplyEncryptOff(target) ? false : quickReplyEncrypts() || undefined,
     encryptOffByUser: quickReplyOffByUser(target) || undefined,
+    sign: quickReplySigns(),
     sensitiveSource: target.crypto?.encrypted ? 'reply' : undefined,
     encryptedDraft: quickReplyHoldsEncryptedDraft(t.thread_id) || undefined,
     quoteWithheld: replyQuoteWithheld(target),
@@ -1022,7 +1025,10 @@ function composeFromDraftMessage(message: Message): ComposeSeed {
     noSignature: true,
     // An encrypted draft reopens encrypted, and its quote (if any) came from
     // an encrypted conversation, so it stays guarded the same way.
-    encrypt: message.crypto?.encrypted || undefined,
+    // A plain draft carrying a sign switch was switched off on purpose (the
+    // switch is only set with encryption off): it stays off.
+    encrypt: message.crypto?.encrypted ? true : message.draft_sign != null ? false : undefined,
+    encryptOffByUser: (!message.crypto?.encrypted && message.draft_sign != null) || undefined,
     // The sign switch as it stood when the draft was saved.
     sign: message.draft_sign ?? undefined,
     sensitiveSource: message.crypto?.encrypted && body.quote ? 'reply' : undefined,

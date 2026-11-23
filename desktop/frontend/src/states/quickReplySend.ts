@@ -34,6 +34,7 @@ import {
   buildReplyThreading,
   pickReplyTarget,
   quickReplyEncrypts,
+  quickReplySigns,
   resolveQuickReplyFrom,
   replySubject,
 } from './composeReply'
@@ -175,6 +176,9 @@ export async function sendReply() {
   // or the draft a failed send is rescued into). The thread load can only raise
   // it, below.
   let encrypt = quickReplyEncrypts()
+  const sign = quickReplySigns()
+  // The user's choice for this reply, if any (the box forgets it once cleared).
+  const encryptChosen = compose$.quickReplyEncrypt.peek()?.threadId === activeT.thread_id
   const prepared = prepareConversationAttachments(attachments)
   const sendAttachments = prepared.attachments
   const html = prepared.hasInlineImages ? conversationHtmlBody(text, sendAttachments) : ''
@@ -252,6 +256,8 @@ export async function sendReply() {
     added,
     signatureOff: compose$.quickReplySignatureOff.peek(),
     signatureUnmanaged: compose$.quickReplySignatureUnmanaged.peek(),
+    sign: compose$.quickReplySign.peek(),
+    encryptChoice: compose$.quickReplyEncrypt.peek(),
   }
   compose$.composerAttachments.set([])
   // The next reply in this thread starts as a plain one.
@@ -305,6 +311,7 @@ export async function sendReply() {
           draftMessageId: rescueDraftId || claim.unconfirmedDraftId || newDraftMessageId(),
           attachments: box.attachments,
           encrypt,
+          sign,
         })
         unconfirmedDraftIds.delete(normalizeMessageId(savedDraftId))
       }
@@ -352,6 +359,8 @@ export async function sendReply() {
       compose$.quickReplyAdded.set(box.added)
       compose$.quickReplySignatureOff.set(box.signatureOff)
       compose$.quickReplySignatureUnmanaged.set(box.signatureUnmanaged)
+      compose$.quickReplySign.set(box.sign)
+      compose$.quickReplyEncrypt.set(box.encryptChoice)
       // The box holds the claim's reply again, so releasing hands it back.
       claim.generation = quickReplyBoxGeneration
       dropUnsentBubble()
@@ -407,7 +416,8 @@ export async function sendReply() {
   let outgoing = { body: text, html, attachments: sendAttachments }
   // The load may have shown the reply target to be encrypted mail; still this
   // thread's choice only.
-  if (getActiveThread()?.thread_id === activeT.thread_id) encrypt ||= quickReplyEncrypts()
+  // The box is cleared by now, so this reads the target, not the next reply.
+  if (!encryptChosen) encrypt ||= !!addressed.target?.crypto?.encrypted
   // A decrypted original is never quoted into an unencrypted reply ("Re:
   // What's up Johnny?"): its text would go out in the clear.
   const quote = mayQuoteInto(addressed.target, encrypt) ? replyQuote(addressed.target) : undefined
@@ -447,6 +457,8 @@ export async function sendReply() {
     encrypt,
     // The quick reply always decides, so it always says.
     plain: !encrypt,
+    // Encrypted mail is always signed; unset follows the account's default.
+    ...(sign === undefined || encrypt ? {} : { sign }),
     attachments: outgoing.attachments.map((a) => ({
       filename: a.filename,
       mime: a.mime,

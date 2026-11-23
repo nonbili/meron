@@ -633,7 +633,7 @@
   "crypto.problem.signer_mismatch": "Signé avec une clé qui n'appartient pas à {sender}. Il se peut qu'il ne vienne pas de cette personne.",
   "crypto.problem.weak_key_binding": "L’identité de l’expéditeur n’a pas pu être vérifiée. Sa clé de signature utilise un algorithme de sécurité obsolète.",
   "crypto.problem.redirected": "Ce message chiffré semble avoir été redirigé : il n'a pas été chiffré pour vous ou son expéditeur a été modifié. Il peut s'agir d'une copie d'un message destiné à ou provenant de quelqu'un d'autre.",
-  "crypto.sign.encrypted": "Les e-mails chiffrés sont toujours signés avec votre clé.",
+  "crypto.sign.encrypted": "Les e-mails chiffrés sont toujours signés avec votre clé. Pour envoyer un message seulement signé, désactivez le chiffrement et activez la signature.",
   "crypto.sign.off": "Non signé. Cliquez pour signer ce message avec votre clé.",
   "crypto.sign.on": "Signé avec votre clé. Cliquez pour envoyer ce message sans signature.",
   "crypto.trust.redirected": "Ce message semble avoir été redirigé et pourrait ne pas être ce qu'il paraît.",

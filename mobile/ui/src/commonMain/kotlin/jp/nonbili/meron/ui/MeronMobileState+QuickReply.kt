@@ -547,6 +547,7 @@ internal fun MeronMobileState.openQuickReplyInFullEditor(replyAll: Boolean = fal
         composeDraftAccountId = if (quickReplyDraftSaved) accountId else ""
         composeInReplyTo = params.inReplyTo
         composeEncrypt = if (parent.crypto?.encrypted == true) true else null
+        composeReplyEncrypted = parent.crypto?.encrypted == true
         composeCryptoLocked = parent.crypto?.encrypted == true && alreadyQuoted
         composeReferences = params.references
         quickReplyAutosaveJob?.cancel()
