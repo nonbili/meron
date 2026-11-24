@@ -1300,6 +1300,8 @@
   "settings.appearance.conversationToolbarHint": "Закреплённые действия находятся вверху переписки, остальные — в меню ⋯.",
   "settings.appearance.showSenderImages": "Показывать изображения отправителей",
   "settings.appearance.showSenderImagesHint": "Отправляет SHA-256-хеш адреса отправителя в Gravatar, а при отсутствии изображения — домен отправителя (и при необходимости его родительский домен) в DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Значок непрочитанных на панели задач",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Показывать число непрочитанных писем во входящих на значке на панели задач.",
   "settings.appearance.showThreadAvatars": "Показывать аватары в списках писем",
   "settings.appearance.showThreadAvatarsHint": "Отключите, чтобы строки были компактнее. В списках с несколькими аккаунтами аккаунт каждой строки по-прежнему отмечается.",
   "settings.appearance.showUnreadAccountBadge": "Показывать счётчик непрочитанных",

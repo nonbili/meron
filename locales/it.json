@@ -1499,6 +1499,8 @@
   "settings.appearance.conversationToolbarHint": "Le azioni fissate compaiono in cima alla conversazione; le altre restano nel menu ⋯.",
   "settings.appearance.showSenderImages": "Mostra immagini dei mittenti",
   "settings.appearance.showSenderImagesHint": "Invia a Gravatar un hash SHA-256 dell'indirizzo email di ogni mittente e, come alternativa, il dominio del mittente (e, se necessario, il relativo dominio principale) a DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Badge messaggi non letti nella barra delle applicazioni",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Mostra il numero di messaggi non letti della posta in arrivo sull'icona nella barra delle applicazioni.",
   "settings.appearance.showThreadAvatars": "Mostra avatar negli elenchi dei messaggi",
   "settings.appearance.showThreadAvatarsHint": "Disattiva per righe più compatte. Gli elenchi che uniscono più account indicano comunque l'account di ogni riga.",
   "settings.appearance.showUnreadAccountBadge": "Mostra badge non letto",

@@ -1496,6 +1496,8 @@
   "settings.appearance.conversationToolbarHint": "Pinned actions sit at the top of a conversation; the rest stay in its ⋯ menu.",
   "settings.appearance.showSenderImages": "Show sender images",
   "settings.appearance.showSenderImagesHint": "Sends a SHA-256 hash of each sender's email address to Gravatar and, as a fallback, the sender's domain (and, if needed, its parent domain) to DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Taskbar unread badge",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Show the inbox unread count on the taskbar icon.",
   "settings.appearance.showThreadAvatars": "Show avatars in message lists",
   "settings.appearance.showThreadAvatarsHint": "Turn off for more compact rows. Lists that mix accounts still mark each row's account.",
   "settings.appearance.showUnreadAccountBadge": "Show unread badge",

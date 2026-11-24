@@ -1499,6 +1499,8 @@
   "settings.appearance.conversationToolbarHint": "Vastgezette acties staan bovenaan het gesprek; de rest blijft in het ⋯-menu.",
   "settings.appearance.showSenderImages": "Afbeeldingen van afzenders tonen",
   "settings.appearance.showSenderImagesHint": "Verzendt een SHA-256-hash van het e-mailadres van elke afzender naar Gravatar en, als terugvaloptie, het domein van de afzender (en indien nodig het hoofddomein) naar DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Ongelezen-badge op de taakbalk",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Toon het aantal ongelezen berichten in het postvak IN op het taakbalkpictogram.",
   "settings.appearance.showThreadAvatars": "Avatars tonen in berichtenlijsten",
   "settings.appearance.showThreadAvatarsHint": "Uitschakelen voor compactere rijen. Lijsten met meerdere accounts tonen nog steeds het account van elke rij.",
   "settings.appearance.showUnreadAccountBadge": "Badge voor ongelezen berichten tonen",

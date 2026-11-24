@@ -133,6 +133,7 @@ func (a *App) showMainWindow() {
 	a.windowHidden.Store(false)
 	a.revealWindow(true)
 	showAndRaiseMainWindow(ctx)
+	refreshTaskbarBadge()
 }
 
 func (a *App) hideMainWindow() {
@@ -168,9 +169,14 @@ func (a *App) traySetUnread(payload map[string]any) (any, error) {
 		unread = value > 0
 	}
 	a.setTrayUnread(unread)
-	// The inbox unread count, for the macOS Dock badge.
+	// The inbox unread count, for the macOS Dock badge and Windows taskbar overlay.
 	if count, ok := payload["count"]; ok {
 		setDockBadge(count)
+		taskbarEnabled := true
+		if enabled, ok := payload["taskbarBadge"].(bool); ok {
+			taskbarEnabled = enabled
+		}
+		setTaskbarBadge(count, taskbarEnabled)
 	}
 	return map[string]any{"ok": true}, nil
 }

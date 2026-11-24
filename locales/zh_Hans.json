@@ -1499,6 +1499,8 @@
   "settings.appearance.conversationToolbarHint": "固定的操作显示在会话顶部，其余的保留在 ⋯ 菜单中。",
   "settings.appearance.showSenderImages": "显示发件人头像",
   "settings.appearance.showSenderImagesHint": "将每位发件人电子邮件地址的 SHA-256 哈希发送给 Gravatar，并将发件人的域名（必要时还包括其父域名）发送给 DuckDuckGo 作为备选。",
+  "settings.appearance.showTaskbarUnreadBadge": "任务栏未读角标",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "在任务栏图标上显示收件箱未读消息数。",
   "settings.appearance.showThreadAvatars": "在邮件列表中显示头像",
   "settings.appearance.showThreadAvatarsHint": "关闭后行更紧凑。混合多个帐户的列表仍会标示每行所属的帐户。",
   "settings.appearance.showUnreadAccountBadge": "显示未读徽章",

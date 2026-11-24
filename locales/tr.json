@@ -1499,6 +1499,8 @@
   "settings.appearance.conversationToolbarHint": "Sabitlenen eylemler konuşmanın üstünde yer alır; diğerleri ⋯ menüsünde kalır.",
   "settings.appearance.showSenderImages": "Gönderen Resimlerini Göster",
   "settings.appearance.showSenderImagesHint": "Her gönderenin e-posta adresinin SHA-256 karmasını Gravatar'a, yedek olarak da gönderenin alan adını (ve gerekirse üst alan adını) DuckDuckGo'ya gönderir.",
+  "settings.appearance.showTaskbarUnreadBadge": "Görev çubuğu okunmamış rozeti",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Gelen kutusundaki okunmamış ileti sayısını görev çubuğu simgesinde göster.",
   "settings.appearance.showThreadAvatars": "İleti listelerinde avatarları göster",
   "settings.appearance.showThreadAvatarsHint": "Daha sıkı satırlar için kapatın. Hesapları karıştıran listeler her satırın hesabını yine de gösterir.",
   "settings.appearance.showUnreadAccountBadge": "Okunmamış rozetini göster",

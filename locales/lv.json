@@ -1499,6 +1499,8 @@
   "settings.appearance.conversationToolbarHint": "Piespraustās darbības ir sarunas augšā, pārējās paliek ⋯ izvēlnē.",
   "settings.appearance.showSenderImages": "Rādīt sūtītāja attēlus",
   "settings.appearance.showSenderImagesHint": "Nosūta katra sūtītāja e-pasta adreses SHA-256 jaucējvērtību pakalpojumam Gravatar un kā rezerves variantu sūtītāja domēnu (un, ja nepieciešams, tā augstāka līmeņa domēnu) pakalpojumam DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Nelasīto ziņojumu nozīmīte uzdevumjoslā",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Rādīt iesūtnes nelasīto ziņojumu skaitu uz uzdevumjoslas ikonas.",
   "settings.appearance.showThreadAvatars": "Rādīt avatārus ziņojumu sarakstos",
   "settings.appearance.showThreadAvatarsHint": "Izslēdziet, lai rindas būtu kompaktākas. Sarakstos ar vairākiem kontiem joprojām tiek norādīts katras rindas konts.",
   "settings.appearance.showUnreadAccountBadge": "Rādīt nelasīto emblēmu",

@@ -1499,6 +1499,8 @@
   "settings.appearance.conversationToolbarHint": "Закріплені дії розташовані вгорі розмови, решта — в меню ⋯.",
   "settings.appearance.showSenderImages": "Показувати аватари відправників",
   "settings.appearance.showSenderImagesHint": "Показувати зображення або ініціали відправників у списку листів",
+  "settings.appearance.showTaskbarUnreadBadge": "Значок непрочитаних на панелі завдань",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Показувати кількість непрочитаних листів у вхідних на значку на панелі завдань.",
   "settings.appearance.showThreadAvatars": "Показувати аватари у списках листів",
   "settings.appearance.showThreadAvatarsHint": "Вимкніть, щоб рядки були компактнішими. У списках із кількома обліковими записами обліковий запис кожного рядка все одно позначається.",
   "settings.appearance.showUnreadAccountBadge": "Лічильник непрочитаних на облікових записах",

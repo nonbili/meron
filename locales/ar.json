@@ -1499,6 +1499,8 @@
   "settings.appearance.conversationToolbarHint": "تظهر الإجراءات المثبّتة أعلى المحادثة، وتبقى البقية في قائمة ⋯.",
   "settings.appearance.showSenderImages": "إظهار صور المرسلين",
   "settings.appearance.showSenderImagesHint": "يرسل تجزئة SHA-256 لعنوان البريد الإلكتروني لكل مرسل إلى Gravatar، ويرسل نطاق المرسل (والنطاق الأصلي عند الحاجة) إلى DuckDuckGo كخيار احتياطي.",
+  "settings.appearance.showTaskbarUnreadBadge": "شارة الرسائل غير المقروءة في شريط المهام",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "إظهار عدد الرسائل غير المقروءة في البريد الوارد على أيقونة شريط المهام.",
   "settings.appearance.showThreadAvatars": "إظهار الصور الرمزية في قوائم الرسائل",
   "settings.appearance.showThreadAvatarsHint": "أوقفه للحصول على صفوف أكثر إحكامًا. القوائم التي تجمع عدة حسابات تظل تميّز حساب كل صف.",
   "settings.appearance.showUnreadAccountBadge": "إظهار الشارة غير المقروءة",

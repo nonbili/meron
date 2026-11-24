@@ -95,6 +95,7 @@ import { pickImageFile } from '../../lib/nativeFilePicker'
 import { invoke } from '../../lib/bridge'
 import { isMac } from '../../lib/shortcuts'
 import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
+import { isWindowsPlatform } from '../../lib/platform'
 import { appIconHintKey, parseAppIconColour } from '../../lib/appIconStyle'
 import { ALERT_MINUTES, ALL_DAY_ALERT_DAYS, NO_ALERT, alertLabel } from '../../lib/eventAlerts'
 import { McpSettingsPanel } from './McpSettingsPanel'
@@ -528,6 +529,7 @@ function GeneralSection() {
         />
         <AppIconRows />
         <TrayIconRow />
+        <TaskbarUnreadBadgeRow />
       </SettingsGroup>
 
       <SettingsGroup title={t('settings.sections.typography')}>
@@ -991,6 +993,24 @@ function TrayIconRow() {
       hint={t('settings.appearance.monochromeTrayIconHint')}
       checked={monochromeTrayIcon}
       onChange={() => settings$.monochromeTrayIcon.set(!monochromeTrayIcon)}
+    />
+  )
+}
+
+// Windows only: overlays the inbox unread count on the taskbar icon.
+function TaskbarUnreadBadgeRow() {
+  const { t } = useTranslation()
+  const showTaskbarUnreadBadge = useValue(settings$.showTaskbarUnreadBadge)
+
+  if (!isWindowsPlatform(navigator.userAgent, navigator.platform ?? '')) return null
+
+  return (
+    <ToggleRow
+      icon={<Bell size={15} />}
+      title={t('settings.appearance.showTaskbarUnreadBadge')}
+      hint={t('settings.appearance.showTaskbarUnreadBadgeHint')}
+      checked={showTaskbarUnreadBadge}
+      onChange={() => settings$.showTaskbarUnreadBadge.set(!showTaskbarUnreadBadge)}
     />
   )
 }

@@ -175,6 +175,7 @@ export function useAppEffects() {
   const boardBadgeSyncRunning = useRef(false)
   const language = useValue(settings$.language)
   const showAccountBadges = useValue(settings$.showUnreadAccountBadge)
+  const showTaskbarUnreadBadge = useValue(settings$.showTaskbarUnreadBadge)
   const showBoardBadges = useValue(() => settings$.kanbanBoards.get().some((board) => board.showUnreadBadge))
   // Account badges read every account's cached folder counts, board badges only
   // those of the accounts their columns show. Joined so the effects below re-run
@@ -459,10 +460,10 @@ export function useAppEffects() {
     // inbox is read. Use the exact per-account cache that renders the sidebar;
     // launching separate folder queries here allowed a slow, stale result to
     // overwrite a newer unread event and leave the two indicators disagreeing.
-    // The count, summed over accounts, is the macOS Dock badge.
+    // The count, summed over accounts, is the macOS Dock and Windows taskbar badge.
     const unread = accounts.reduce((sum, account) => sum + inboxUnread(foldersByAccount[account.id]), 0)
-    setTrayUnread(unread)
-  }, [accounts, foldersByAccount])
+    setTrayUnread({ count: unread, taskbarBadge: showTaskbarUnreadBadge })
+  }, [accounts, foldersByAccount, showTaskbarUnreadBadge])
 
   useEffect(() => {
     const eventsOn = (window as any).runtime?.EventsOn

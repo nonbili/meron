@@ -6,3 +6,7 @@ export function isMacPlatform(userAgent: string, platform = ''): boolean {
 export function isLinuxPlatform(userAgent: string, platform = ''): boolean {
   return /linux/i.test(userAgent + ' ' + platform)
 }
+
+export function isWindowsPlatform(userAgent: string, platform = ''): boolean {
+  return /win/i.test(userAgent + ' ' + platform)
+}

@@ -1499,6 +1499,8 @@
   "settings.appearance.conversationToolbarHint": "Các hành động được ghim nằm ở đầu cuộc hội thoại; phần còn lại vẫn ở menu ⋯.",
   "settings.appearance.showSenderImages": "Hiển thị ảnh người gửi",
   "settings.appearance.showSenderImagesHint": "Gửi mã băm SHA-256 của địa chỉ email từng người gửi đến Gravatar và gửi tên miền của người gửi (cùng tên miền cha nếu cần) đến DuckDuckGo làm phương án dự phòng.",
+  "settings.appearance.showTaskbarUnreadBadge": "Huy hiệu chưa đọc trên thanh tác vụ",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Hiển thị số thư chưa đọc trong hộp thư đến trên biểu tượng thanh tác vụ.",
   "settings.appearance.showThreadAvatars": "Hiển thị ảnh đại diện trong danh sách thư",
   "settings.appearance.showThreadAvatarsHint": "Tắt để các hàng gọn hơn. Danh sách gộp nhiều tài khoản vẫn đánh dấu tài khoản của từng hàng.",
   "settings.appearance.showUnreadAccountBadge": "Hiển thị huy hiệu chưa đọc",

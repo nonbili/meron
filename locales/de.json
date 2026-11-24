@@ -1499,6 +1499,8 @@
   "settings.appearance.conversationToolbarHint": "Angeheftete Aktionen stehen oben in der Konversation, die übrigen bleiben im ⋯-Menü.",
   "settings.appearance.showSenderImages": "Absenderbilder anzeigen",
   "settings.appearance.showSenderImagesHint": "Sendet einen SHA-256-Hash der E-Mail-Adresse jedes Absenders an Gravatar und ersatzweise die Domain des Absenders (und bei Bedarf deren übergeordnete Domain) an DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Ungelesen-Symbol in der Taskleiste",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Zeigt die Anzahl ungelesener Nachrichten im Posteingang auf dem Taskleistensymbol an.",
   "settings.appearance.showThreadAvatars": "Avatare in Nachrichtenlisten anzeigen",
   "settings.appearance.showThreadAvatarsHint": "Ausschalten für kompaktere Zeilen. Listen mit mehreren Konten kennzeichnen weiterhin das Konto jeder Zeile.",
   "settings.appearance.showUnreadAccountBadge": "Ungelesene Anzahl anzeigen",

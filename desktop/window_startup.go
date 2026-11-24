@@ -31,4 +31,5 @@ func (a *App) revealWindow(force bool) {
 		// that wait, even if the frontend already consumed windowReadyOnce.
 		startupWindowForceReveal(a.ctx)
 	}
+	refreshTaskbarBadge()
 }

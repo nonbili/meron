@@ -15,13 +15,13 @@ describe('tray unread updater', () => {
   test('serializes native updates and finishes on the newest state', async () => {
     const first = deferred()
     const sent: number[] = []
-    const update = createTrayUnreadUpdater(async (unread) => {
-      sent.push(unread)
+    const update = createTrayUnreadUpdater(async ({ count }) => {
+      sent.push(count)
       if (sent.length === 1) await first.promise
     })
 
-    update(0)
-    update(1)
+    update({ count: 0 })
+    update({ count: 1 })
     expect(sent).toEqual([0])
 
     first.resolve()
@@ -32,15 +32,15 @@ describe('tray unread updater', () => {
   test('coalesces intermediate states while an update is in flight', async () => {
     const first = deferred()
     const sent: number[] = []
-    const update = createTrayUnreadUpdater(async (unread) => {
-      sent.push(unread)
+    const update = createTrayUnreadUpdater(async ({ count }) => {
+      sent.push(count)
       if (sent.length === 1) await first.promise
     })
 
-    update(1)
-    update(0)
-    update(1)
-    update(0)
+    update({ count: 1 })
+    update({ count: 0 })
+    update({ count: 1 })
+    update({ count: 0 })
     first.resolve()
     await tick()
 
@@ -50,16 +50,16 @@ describe('tray unread updater', () => {
   test('does not lose a newer state when the in-flight update fails', async () => {
     const first = deferred()
     const sent: number[] = []
-    const update = createTrayUnreadUpdater(async (unread) => {
-      sent.push(unread)
+    const update = createTrayUnreadUpdater(async ({ count }) => {
+      sent.push(count)
       if (sent.length === 1) {
         await first.promise
         throw new Error('native update failed')
       }
     })
 
-    update(0)
-    update(1)
+    update({ count: 0 })
+    update({ count: 1 })
     first.resolve()
     await tick()
 
@@ -68,12 +68,12 @@ describe('tray unread updater', () => {
 
   test('retries the current state once after a transient failure', async () => {
     const sent: number[] = []
-    const update = createTrayUnreadUpdater(async (unread) => {
-      sent.push(unread)
+    const update = createTrayUnreadUpdater(async ({ count }) => {
+      sent.push(count)
       if (sent.length === 1) throw new Error('native update failed')
     })
 
-    update(1)
+    update({ count: 1 })
     await tick()
 
     expect(sent).toEqual([1, 1])
@@ -81,12 +81,12 @@ describe('tray unread updater', () => {
 
   test('stops after one retry when the failure persists', async () => {
     const sent: number[] = []
-    const update = createTrayUnreadUpdater(async (unread) => {
-      sent.push(unread)
+    const update = createTrayUnreadUpdater(async ({ count }) => {
+      sent.push(count)
       throw new Error('native update failed')
     })
 
-    update(1)
+    update({ count: 1 })
     await tick()
 
     expect(sent).toEqual([1, 1])
@@ -95,21 +95,23 @@ describe('tray unread updater', () => {
   test('coalesces in-flight duplicates and forwards later refreshes for cache repair', async () => {
     const first = deferred()
     const sent: number[] = []
-    const update = createTrayUnreadUpdater(async (unread) => {
-      sent.push(unread)
+    const update = createTrayUnreadUpdater(async ({ count }) => {
+      sent.push(count)
       await first.promise
     })
-    update(1)
-    update(1)
+    update({ count: 1 })
+    update({ count: 1 })
     first.resolve()
     await tick()
-    update(1)
+    update({ count: 1 })
     await tick()
     expect(sent).toEqual([1, 1])
   })
 
-  test('sends the inbox unread count for the Dock badge with the tray flag', () => {
+  test('sends the inbox unread count for the Dock and taskbar badges with the tray flag', () => {
     expect(trayUnreadPayload(0)).toEqual({ unread: false, count: 0 })
     expect(trayUnreadPayload(5)).toEqual({ unread: true, count: 5 })
+    expect(trayUnreadPayload(5, true)).toEqual({ unread: true, count: 5, taskbarBadge: true })
+    expect(trayUnreadPayload(5, false)).toEqual({ unread: true, count: 5, taskbarBadge: false })
   })
 })
