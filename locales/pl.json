@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "Zmniejsza szerokie wiadomości, aby mieściły się w widoku rozmowy.",
   "settings.appearance.chatFullMessages": "Pokazuj pełną treść wiadomości w czacie",
   "settings.appearance.chatFullMessagesHint": "Długie wiadomości rosną do pełnej wysokości zamiast przewijać się w dymku.",
+  "settings.appearance.pullUpToClose": "Przeciągnij w górę, aby zamknąć",
+  "settings.appearance.pullUpToCloseHint": "Przeciągnięcie w górę poza koniec rozmowy lub wiadomości zamyka ją. Wyłącz, aby tylko przewijać.",
   "settings.appearance.conversationLayout": "Układ rozmowy",
   "settings.appearance.conversationLayoutChat": "Czat",
   "settings.appearance.conversationLayoutHint": "Czat pokazuje wiadomości jako dymki. Tradycyjny układa je na pełną szerokość i zwija starsze.",

@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.SwipeUp
 import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.filled.Visibility
@@ -176,6 +177,8 @@ internal fun SettingsScreen(
     onToggleDarkMailBodies: () -> Unit,
     chatFullMessages: Boolean,
     onToggleChatFullMessages: () -> Unit,
+    pullUpToClose: Boolean,
+    onTogglePullUpToClose: () -> Unit,
     autoFitMessages: Boolean,
     onToggleAutoFitMessages: () -> Unit,
     conversationFooter: ConversationFooter,
@@ -423,6 +426,8 @@ internal fun SettingsScreen(
                     onToggleDarkMailBodies = onToggleDarkMailBodies,
                     chatFullMessages = chatFullMessages,
                     onToggleChatFullMessages = onToggleChatFullMessages,
+                    pullUpToClose = pullUpToClose,
+                    onTogglePullUpToClose = onTogglePullUpToClose,
                     autoFitMessages = autoFitMessages,
                     onToggleAutoFitMessages = onToggleAutoFitMessages,
                     conversationFooter = conversationFooter,
@@ -1157,6 +1162,8 @@ internal fun SettingsMessagesPage(
     onToggleDarkMailBodies: () -> Unit,
     chatFullMessages: Boolean,
     onToggleChatFullMessages: () -> Unit,
+    pullUpToClose: Boolean,
+    onTogglePullUpToClose: () -> Unit,
     autoFitMessages: Boolean,
     onToggleAutoFitMessages: () -> Unit,
     conversationFooter: ConversationFooter,
@@ -1226,6 +1233,15 @@ internal fun SettingsMessagesPage(
         }
         item {
             ConversationFooterRow(conversationFooter, onConversationFooterChange)
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.SwipeUp,
+                title = tr("settings.appearance.pullUpToClose"),
+                hint = tr("settings.appearance.pullUpToCloseHint"),
+                checked = pullUpToClose,
+                onToggle = onTogglePullUpToClose,
+            )
         }
 
         section(tr("tags.title"))

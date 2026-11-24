@@ -111,7 +111,7 @@ internal fun MessageReaderScreen(
                 .pullToDismiss(
                     pull,
                     isAtTop = { !scrollState.canScrollBackward },
-                    isAtBottom = { !scrollState.canScrollForward },
+                    isAtBottom = if (LocalPullUpToClose.current) ({ !scrollState.canScrollForward }) else null,
                     onDismiss = onBack,
                 ).pointerInput(Unit) {
                     detectTapGestures { }

@@ -1460,6 +1460,8 @@
   "settings.appearance.autoFitMessagesHint": "Shrink wide emails to fit the conversation view.",
   "settings.appearance.chatFullMessages": "Show full message content in chat",
   "settings.appearance.chatFullMessagesHint": "Long messages grow to fit instead of scrolling inside their bubble.",
+  "settings.appearance.pullUpToClose": "Pull up to close",
+  "settings.appearance.pullUpToCloseHint": "Dragging up past the end of a conversation or message closes it. Turn off to only scroll.",
   "settings.appearance.conversationLayout": "Conversation layout",
   "settings.appearance.conversationLayoutChat": "Chat",
   "settings.appearance.conversationLayoutHint": "Chat shows messages as bubbles. Traditional stacks them full width and collapses older ones.",

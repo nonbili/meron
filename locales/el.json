@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "Σμίκρυνση των φαρδιών μηνυμάτων ώστε να χωρούν στην προβολή συνομιλίας.",
   "settings.appearance.chatFullMessages": "Πλήρες περιεχόμενο μηνυμάτων στη συνομιλία",
   "settings.appearance.chatFullMessagesHint": "Τα μεγάλα μηνύματα μεγαλώνουν ώστε να χωρούν, αντί για κύλιση μέσα στο συννεφάκι τους.",
+  "settings.appearance.pullUpToClose": "Σύρετε προς τα πάνω για κλείσιμο",
+  "settings.appearance.pullUpToCloseHint": "Η μεταφορά προς τα πάνω πέρα από το τέλος μιας συνομιλίας ή ενός μηνύματος το κλείνει. Απενεργοποιήστε για μόνο κύλιση.",
   "settings.appearance.conversationLayout": "Διάταξη συνομιλίας",
   "settings.appearance.conversationLayoutChat": "Συνομιλία",
   "settings.appearance.conversationLayoutHint": "Η συνομιλία εμφανίζει τα μηνύματα ως συννεφάκια. Η παραδοσιακή τα στοιβάζει σε πλήρες πλάτος και συμπτύσσει τα παλαιότερα.",

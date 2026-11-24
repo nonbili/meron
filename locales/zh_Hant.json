@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "縮小較寬的郵件，使其符合對話檢視。",
   "settings.appearance.chatFullMessages": "在聊天中顯示完整郵件內容",
   "settings.appearance.chatFullMessagesHint": "長郵件隨內容展開，而不是在氣泡內捲動。",
+  "settings.appearance.pullUpToClose": "上拉關閉",
+  "settings.appearance.pullUpToCloseHint": "在對話或郵件末尾繼續向上拖曳即可關閉。關閉此項後僅捲動內容。",
   "settings.appearance.conversationLayout": "對話版面",
   "settings.appearance.conversationLayoutChat": "聊天",
   "settings.appearance.conversationLayoutHint": "聊天以氣泡顯示郵件；傳統版面以整寬堆疊，並摺疊較早的郵件。",

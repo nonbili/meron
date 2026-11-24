@@ -1264,6 +1264,8 @@
   "settings.appearance.autoFitMessagesHint": "Уменьшать широкие письма до ширины области переписки.",
   "settings.appearance.chatFullMessages": "Показывать письма целиком в чате",
   "settings.appearance.chatFullMessagesHint": "Длинные письма показываются целиком, без прокрутки внутри сообщения.",
+  "settings.appearance.pullUpToClose": "Закрывать жестом вверх",
+  "settings.appearance.pullUpToCloseHint": "Жест вверх за конец переписки или письма закрывает их. Отключите, чтобы только прокручивать.",
   "settings.appearance.conversationLayout": "Вид переписки",
   "settings.appearance.conversationLayoutChat": "Чат",
   "settings.appearance.conversationLayoutHint": "В режиме чата письма выглядят как сообщения в мессенджере. В обычном режиме они занимают всю ширину, а более ранние письма сворачиваются.",

@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "Brede e-mails verkleinen zodat ze in de gespreksweergave passen.",
   "settings.appearance.chatFullMessages": "Volledige berichtinhoud in chat weergeven",
   "settings.appearance.chatFullMessagesHint": "Lange berichten worden vergroot in plaats van te scrollen binnen hun tekstballon.",
+  "settings.appearance.pullUpToClose": "Omhoog trekken om te sluiten",
+  "settings.appearance.pullUpToCloseHint": "Voorbij het einde van een gesprek of bericht omhoog slepen sluit het. Zet uit om alleen te scrollen.",
   "settings.appearance.conversationLayout": "Gespreksindeling",
   "settings.appearance.conversationLayoutChat": "Chat",
   "settings.appearance.conversationLayoutHint": "Chat toont berichten als tekstballonnen. Traditioneel stapelt ze over de volle breedte en vouwt oudere berichten in.",
