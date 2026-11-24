@@ -180,7 +180,7 @@ private class IosMobileHost(
             // The system dialog only shows once; after a denial the user has to
             // flip the switch in the Settings app.
             val url = NSURL.URLWithString(UIApplicationOpenSettingsURLString) ?: return
-            UIApplication.sharedApplication.openURL(url)
+            UIApplication.sharedApplication.openURL(url, options = emptyMap<Any?, Any?>(), completionHandler = null)
             return
         }
         UNUserNotificationCenter.currentNotificationCenter().requestAuthorizationWithOptions(
@@ -377,7 +377,10 @@ private class IosPlatformServices : PlatformServices {
 
     override fun openUrl(url: String) {
         val nsUrl = NSURL.URLWithString(url) ?: return
-        UIApplication.sharedApplication.openURL(nsUrl)
+        // The options form: since iOS 18 the deprecated one-argument openURL(_:)
+        // opens nothing and returns false, which left every link in a message
+        // dead to the tap.
+        UIApplication.sharedApplication.openURL(nsUrl, options = emptyMap<Any?, Any?>(), completionHandler = null)
     }
 
     override fun openOAuthUrl(
