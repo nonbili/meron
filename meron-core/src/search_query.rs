@@ -479,7 +479,8 @@ impl SearchFields {
                     let value = value.replace('"', "");
                     let plain = !value
                         .contains(|c: char| c.is_whitespace() || ",|{}()".contains(c))
-                        && value != "OR";
+                        && value != "OR"
+                        && value != "AND";
                     if plain { value } else { format!("\"{value}\"") }
                 })
                 .filter(|value| !value.is_empty())
@@ -557,8 +558,10 @@ fn field_text(any: &AnyOf) -> String {
             let words: Vec<&str> = value.split_whitespace().collect();
             // The field would split it, or re-space it: its words are rejoined
             // with single spaces.
-            let splits =
-                value.contains([',', '|']) || words.contains(&"OR") || words.join(" ") != *value;
+            let splits = value.contains([',', '|'])
+                || words.contains(&"OR")
+                || words.contains(&"AND")
+                || words.join(" ") != *value;
             if splits {
                 format!("\"{}\"", value.replace('"', ""))
             } else {
@@ -701,6 +704,23 @@ fn parse_date(value: &str) -> Option<NaiveDate> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_bare_and_among_a_fields_alternatives_is_one_of_them() {
+        let fields = SearchFields {
+            subject: "receipt, AND, invoice".into(),
+            ..SearchFields::default()
+        };
+        let query = fields.to_query();
+        assert_eq!(
+            SearchQuery::parse(&query).subject,
+            [vec!["receipt", "AND", "invoice"]]
+        );
+        assert_eq!(
+            SearchFields::parse(&query).subject,
+            r#"receipt, "AND", invoice"#
+        );
+    }
 
     #[test]
     fn renaming_a_tag_changes_only_terms_that_search_it() {

@@ -1,15 +1,17 @@
 import { afterEach, expect, it, spyOn } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
-import type { Rule, RuleStatus } from '../../states/mailRules'
-import { EMPTY_FIELDS } from '../search/searchFields'
+import type { Rule, RuleCondition, RuleStatus } from '../../states/mailRules'
 import { settleConfirm, ui$ } from '../../states/ui'
 import type { Account } from '../../types'
 import { RulesPanel } from './RulesPanel'
 
+const from = (value: string): RuleCondition[] => [{ field: 'from', value, negate: false }]
+
 const bills: Rule = {
   id: 'r1',
-  query: 'from:billing',
+  conditions: from('billing'),
+  match_any: false,
   tags: ['finance'],
   mark_read: true,
   star: false,
@@ -45,8 +47,6 @@ function stubCore(initial: Rule[], refuse = false) {
             ran.push(payload.id)
             return { count: matches }
           }
-          if (command === 'search.parse') return { ...EMPTY_FIELDS, from: payload.query.replace('from:', '') }
-          if (command === 'search.build') return { query: payload.fields.from && `from:${payload.fields.from}` }
           if (command !== 'mail.setRules') return { tags: [] }
           if (refuse) throw new Error('a rule needs an action')
           saved.push(payload.rules)
@@ -104,13 +104,13 @@ it('adds a rule that only moves mail, warning before Trash', async () => {
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
 
   await waitFor(() => expect(saved.length).toBe(1))
-  expect(saved[0][0]).toMatchObject({ query: 'from:spam', tags: [], move_to: 'trash' })
+  expect(saved[0][0]).toMatchObject({ conditions: from('spam'), tags: [], move_to: 'trash' })
   await waitFor(() => expect(view.getByText('From: spam')).toBeTruthy())
   expect(view.queryByLabelText('From')).toBeNull()
 })
 
 it('edits a rule in place', async () => {
-  const saved = stubCore([bills, { ...bills, id: 'r2', query: 'from:other' }])
+  const saved = stubCore([bills, { ...bills, id: 'r2', conditions: from('other') }])
   const view = render(<RulesPanel />)
   await waitFor(() => expect(view.getAllByLabelText('Edit rule').length).toBe(2))
 
@@ -121,9 +121,9 @@ it('edits a rule in place', async () => {
   fireEvent.click(view.getByRole('button', { name: 'Save' }))
 
   await waitFor(() => expect(saved.length).toBe(1))
-  expect(saved[0].map((rule) => [rule.id, rule.query, rule.tags])).toEqual([
-    ['r1', 'from:bills', ['finance']],
-    ['r2', 'from:other', ['finance']],
+  expect(saved[0].map((rule) => [rule.id, rule.conditions, rule.tags])).toEqual([
+    ['r1', from('bills'), ['finance']],
+    ['r2', from('other'), ['finance']],
   ])
 })
 
@@ -139,7 +139,7 @@ it('takes all new mail when no condition is filled in, warning before Trash', as
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
 
   await waitFor(() => expect(saved.length).toBe(1))
-  expect(saved[0][0].query).toBe('')
+  expect(saved[0][0].conditions).toEqual([])
   await waitFor(() => expect(view.getByText('All mail')).toBeTruthy())
 })
 
@@ -240,31 +240,12 @@ it('turns a rule off and back on without losing it', async () => {
 
   fireEvent.click(view.getByRole('switch', { name: 'Rule on' }))
   await waitFor(() => expect(saved.length).toBe(1))
-  expect(saved[0][0]).toMatchObject({ id: 'r1', query: 'from:billing', disabled: true })
+  expect(saved[0][0]).toMatchObject({ id: 'r1', conditions: from('billing'), disabled: true })
   await waitFor(() => expect((view.getByLabelText('Run on existing mail') as HTMLButtonElement).disabled).toBe(true))
 })
 
-it('opens the rule asked for last, whichever answer comes back first', async () => {
-  stubCore([bills, { ...bills, id: 'r2', query: 'from:other' }])
-  const slow = (window as any).go.main.App.Invoke
-  ;(window as any).go.main.App.Invoke = async (command: string, payload: any) => {
-    if (command === 'search.parse' && payload.query === 'from:billing' && edits++ > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 50))
-    }
-    return slow(command, payload)
-  }
-  let edits = 0
-  const view = render(<RulesPanel />)
-  await waitFor(() => expect(view.getAllByLabelText('Edit rule').length).toBe(2))
-
-  fireEvent.click(view.getAllByLabelText('Edit rule')[0])
-  fireEvent.click(view.getAllByLabelText('Edit rule')[1])
-  await new Promise((resolve) => setTimeout(resolve, 100))
-  expect((view.getByLabelText('From') as HTMLInputElement).value).toBe('other')
-})
-
 it('reorders rules, since the first to move a message wins', async () => {
-  const saved = stubCore([bills, { ...bills, id: 'r2', query: 'from:other' }])
+  const saved = stubCore([bills, { ...bills, id: 'r2', conditions: from('other') }])
   const view = render(<RulesPanel />)
   await waitFor(() => expect(view.getAllByLabelText('Drag to reorder').length).toBe(2))
   const handle = view.getAllByLabelText('Drag to reorder')[0]
@@ -280,7 +261,7 @@ it('reorders rules, since the first to move a message wins', async () => {
 })
 
 async function dragFirstRuleDown(refuse: boolean) {
-  const saved = stubCore([bills, { ...bills, id: 'r2', query: 'from:other' }], refuse)
+  const saved = stubCore([bills, { ...bills, id: 'r2', conditions: from('other') }], refuse)
   const rect = spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     const row = this.closest('[data-rule]')
     const top = row ? [...row.parentElement!.children].indexOf(row) * 40 : 0
@@ -456,7 +437,7 @@ it('adds a rule that forwards mail, saying how forwarding works', async () => {
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
 
   await waitFor(() => expect(saved.length).toBe(1))
-  expect(saved[0][0]).toMatchObject({ query: 'from:billing', forward_to: 'dan@example.org' })
+  expect(saved[0][0]).toMatchObject({ conditions: from('billing'), forward_to: 'dan@example.org' })
   await waitFor(() => expect(view.getByText('Forward to dan@example.org')).toBeTruthy())
 })
 
@@ -472,4 +453,36 @@ it('asks about forwarding before running a forwarding rule on existing mail', as
     ),
   )
   expect(ui$.confirm.get()?.tone).toBe('danger')
+})
+
+it('builds a rule from rows that may be negated, any of which is enough', async () => {
+  const saved = stubCore([])
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('No rules yet.')).toBeTruthy())
+
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+  expect(view.queryByText('Any condition')).toBeNull()
+  fireEvent.change(view.getByLabelText('From'), { target: { value: 'shop.test' } })
+  fireEvent.click(view.getByRole('button', { name: 'Add condition' }))
+  const fields = view.getAllByLabelText('Condition')
+  fireEvent.change(fields[1], { target: { value: 'subject' } })
+  fireEvent.change(view.getAllByLabelText('Comparison')[1], { target: { value: 'not' } })
+  fireEvent.change(view.getByLabelText('Subject'), { target: { value: 'receipt' } })
+  fireEvent.click(view.getByRole('button', { name: 'Add condition' }))
+  fireEvent.change(view.getAllByLabelText('Condition')[2], { target: { value: 'starred' } })
+  fireEvent.click(view.getByRole('button', { name: 'Add condition' }))
+  fireEvent.click(view.getByText('Any condition'))
+  fireEvent.click(view.getByRole('switch', { name: 'Star' }))
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+
+  await waitFor(() => expect(saved.length).toBe(1))
+  expect(saved[0][0]).toMatchObject({
+    match_any: true,
+    conditions: [
+      { field: 'from', value: 'shop.test', negate: false },
+      { field: 'subject', value: 'receipt', negate: true },
+      { field: 'starred', value: '', negate: false },
+    ],
+  })
+  await waitFor(() => expect(view.getByText('Any of: From: shop.test · not Subject: receipt · Starred')).toBeTruthy())
 })

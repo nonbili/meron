@@ -1,11 +1,12 @@
 //! Rules: actions on matching mail after arrival, reading, or a given age.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
 use super::tags::{message_tag_keys, write_tag_changes};
+use crate::search_query::{SearchFields, SearchQuery};
 
 const RULES_KEY: &str = "rules";
 
@@ -16,16 +17,25 @@ const MAX_RULE_ACTION_ATTEMPTS: i64 = 5;
 /// Entries the rule log keeps.
 const RULE_LOG_SIZE: i64 = 200;
 
-/// One search and everything to do with the new mail it matches. Rules live in
-/// `settings`, so backups carry them, and are kept per device: they run on the
-/// accounts in `accounts`, or every account when that is empty.
+/// Some conditions and everything to do with the new mail they match. Rules
+/// live in `settings`, so backups carry them, and are kept per device: they
+/// run on the accounts in `accounts`, or every account when that is empty.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Rule {
     #[serde(default)]
     pub id: String,
-    /// In the search box's syntax, read against what a new message's envelope
-    /// says: its body is not here yet. Empty for all new mail.
+    /// Read against what a new message's envelope says: its body is not here
+    /// yet. None for all new mail.
     #[serde(default)]
+    pub conditions: Vec<RuleCondition>,
+    /// Whether any one of `conditions` is enough, rather than all of them.
+    #[serde(default)]
+    pub match_any: bool,
+    /// What rules kept before they had `conditions`: a search, in the search
+    /// box's syntax. Read into `conditions` whenever a rule is, so it is only
+    /// ever set on the way in. The store writes [`Rule::compat_query`] here
+    /// for older releases reading it, or a backup of it.
+    #[serde(default, skip_serializing)]
     pub query: String,
     /// Arrival is the default for existing rules. Age uses the message date and
     /// includes existing Inbox mail; read starts when an unread-to-read change
@@ -82,7 +92,177 @@ pub enum RuleTrigger {
     Age,
 }
 
+/// One thing a message has to say, or not say, for a rule to take it.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RuleCondition {
+    /// `from`, `to` and `subject` take comma-separated alternatives, any of
+    /// which matches; `words` is search text; `tag` one tag; `attachment`,
+    /// `unread` and `starred` take no value.
+    pub field: String,
+    #[serde(default)]
+    pub value: String,
+    /// Matches the mail the condition otherwise wouldn't.
+    #[serde(default)]
+    pub negate: bool,
+}
+
+impl RuleCondition {
+    fn new(field: &str, value: impl Into<String>) -> Self {
+        RuleCondition {
+            field: field.to_string(),
+            value: value.into(),
+            negate: false,
+        }
+    }
+
+    /// The search that answers this condition, before any negation.
+    fn query(&self) -> String {
+        // Search text as written: the form would re-space it.
+        if self.field == "words" {
+            return self.value.clone();
+        }
+        let mut fields = SearchFields::default();
+        let value = self.value.clone();
+        match self.field.as_str() {
+            "from" => fields.from = value,
+            "to" => fields.to = value,
+            "subject" => fields.subject = value,
+            "words" => fields.words = value,
+            "tag" => fields.tags = value,
+            "attachment" => fields.has_attachment = true,
+            "unread" => fields.unread = true,
+            "starred" => fields.starred = true,
+            _ => {}
+        }
+        fields.to_query()
+    }
+
+    /// Tidied, or why it could never apply.
+    fn clean(mut self) -> Result<Self> {
+        self.value = self.value.trim().to_string();
+        match self.field.as_str() {
+            "from" | "to" | "subject" | "words" => {}
+            "tag" => {
+                self.value = crate::tags::normalize_tag(&self.value)
+                    .ok_or_else(|| anyhow::anyhow!("a rule's tag condition needs a tag"))?;
+            }
+            "attachment" | "unread" | "starred" => self.value.clear(),
+            other => anyhow::bail!("unknown rule condition: {other}"),
+        }
+        anyhow::ensure!(
+            !SearchQuery::parse(&self.query()).is_empty(),
+            "a rule's condition means nothing"
+        );
+        Ok(self)
+    }
+}
+
+/// A search, as conditions that all have to hold: split into a row per field
+/// where that searches the same, else whole as words.
+fn conditions_from_query(query: &str) -> Vec<RuleCondition> {
+    // What reads as nothing on its own, as a dangling `AND`, was nothing.
+    let split: Vec<RuleCondition> = split_query(query)
+        .into_iter()
+        .filter(|condition| !SearchQuery::parse(&condition.query()).is_empty())
+        .collect();
+    // A search that read as nothing at all matched nothing; no rows would be
+    // all mail.
+    if split.is_empty() {
+        return vec![RuleCondition::new("words", query)];
+    }
+    let rejoined = split
+        .iter()
+        .map(RuleCondition::query)
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    if SearchQuery::parse(&rejoined) == SearchQuery::parse(query) {
+        split
+    } else {
+        vec![RuleCondition::new("words", query)]
+    }
+}
+
+fn split_query(query: &str) -> Vec<RuleCondition> {
+    let fields = SearchFields::parse(query);
+    let mut conditions = Vec::new();
+    for (field, value) in [
+        ("from", &fields.from),
+        ("to", &fields.to),
+        ("subject", &fields.subject),
+    ] {
+        if !value.is_empty() {
+            conditions.push(RuleCondition::new(field, value.as_str()));
+        }
+    }
+    conditions.extend(
+        fields
+            .tags
+            .split(|c: char| c.is_whitespace() || c == ',')
+            .filter(|tag| !tag.is_empty())
+            .map(|tag| RuleCondition::new("tag", tag)),
+    );
+    for (field, set) in [
+        ("attachment", fields.has_attachment),
+        ("unread", fields.unread),
+        ("starred", fields.starred),
+    ] {
+        if set {
+            conditions.push(RuleCondition::new(field, ""));
+        }
+    }
+    // Dates have no condition of their own: they stay search text.
+    let dates = SearchFields {
+        after: fields.after,
+        before: fields.before,
+        ..SearchFields::default()
+    }
+    .to_query();
+    let words = [dates.as_str(), fields.words.trim()]
+        .into_iter()
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !words.is_empty() {
+        conditions.push(RuleCondition::new("words", words));
+    }
+    conditions
+}
+
 impl Rule {
+    /// Read a rule from before conditions: its search becomes them.
+    fn upgrade(mut self) -> Self {
+        let query = std::mem::take(&mut self.query);
+        if self.conditions.is_empty() && !query.trim().is_empty() {
+            self.conditions = conditions_from_query(query.trim());
+            self.match_any = false;
+        }
+        self
+    }
+
+    /// The search an older release, which reads only `query`, runs for this
+    /// rule: the same one, or one that matches nothing when it can't say it,
+    /// so a rule never acts on more mail there than here.
+    fn compat_query(&self) -> String {
+        if self.conditions.iter().any(|condition| condition.negate)
+            || (self.match_any && self.conditions.len() > 1)
+        {
+            return "is:read AND is:unread".to_string();
+        }
+        let queries: Vec<String> = self.conditions.iter().map(RuleCondition::query).collect();
+        let joined = queries.join(" AND ");
+        // A row's open quote or group would run on into the next one there; a
+        // newline here ends it, as the rows are read apart.
+        if SearchQuery::parse(&joined) != SearchQuery::parse(&queries.join("\nAND ")) {
+            return "is:read AND is:unread".to_string();
+        }
+        joined
+    }
+
+    /// What a cached nonmatch was checked against: it holds while this does.
+    fn condition_key(&self) -> String {
+        serde_json::json!([self.match_any, self.conditions]).to_string()
+    }
+
     fn has_action(&self) -> bool {
         !self.tags.is_empty()
             || self.mark_read
@@ -95,10 +275,86 @@ impl Rule {
 
 pub fn rules(conn: &Connection) -> Result<Vec<Rule>> {
     let stored = super::settings_get(conn, &[RULES_KEY.to_string()])?;
-    Ok(stored
+    let rules: Vec<Rule> = stored
         .get(RULES_KEY)
         .and_then(|rules| serde_json::from_value(rules.clone()).ok())
-        .unwrap_or_default())
+        .unwrap_or_default();
+    Ok(rules.into_iter().map(Rule::upgrade).collect())
+}
+
+/// `rules` as the store keeps them: each with the search an older release
+/// would run for it, as that is all such a release, or a backup restored
+/// there, reads.
+fn stored_rules(rules: &[Rule]) -> serde_json::Value {
+    serde_json::Value::Array(
+        rules
+            .iter()
+            .map(|rule| {
+                let mut value = serde_json::json!(rule);
+                value["query"] = rule.compat_query().into();
+                value
+            })
+            .collect(),
+    )
+}
+
+/// Which of `uids` in `folder` match `rule`'s conditions, in `uids`' order.
+fn rule_matching_uids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    rule: &Rule,
+    uids: &[u32],
+) -> Result<Vec<u32>> {
+    if rule.conditions.is_empty() {
+        return Ok(uids.to_vec());
+    }
+    // Each condition looks only at what is still open: for all, what every
+    // one before matched; for any, what none of them has yet.
+    let mut open: Vec<u32> = uids.to_vec();
+    // A search finds only cached mail, so "not" would take a message that is
+    // gone: only those still here are looked at.
+    if rule.conditions.iter().any(|condition| condition.negate) {
+        let list = uids
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let mut stmt = conn.prepare(&format!(
+            "SELECT uid FROM messages WHERE account = ?1 AND folder = ?2 AND uid IN ({list})"
+        ))?;
+        let cached = stmt
+            .query_map(params![account, folder], |row| row.get::<_, u32>(0))?
+            .collect::<rusqlite::Result<BTreeSet<u32>>>()?;
+        open.retain(|uid| cached.contains(uid));
+    }
+    let mut matched: BTreeSet<u32> = BTreeSet::new();
+    for condition in &rule.conditions {
+        if open.is_empty() {
+            break;
+        }
+        let hits: BTreeSet<u32> =
+            super::matching_uids(conn, account, folder, &condition.query(), &open)?
+                .into_iter()
+                .collect();
+        let (these, rest): (Vec<u32>, Vec<u32>) = std::mem::take(&mut open)
+            .into_iter()
+            .partition(|uid| hits.contains(uid) != condition.negate);
+        if rule.match_any {
+            matched.extend(these);
+            open = rest;
+        } else {
+            open = these;
+        }
+    }
+    if !rule.match_any {
+        matched.extend(open);
+    }
+    Ok(uids
+        .iter()
+        .copied()
+        .filter(|uid| matched.contains(uid))
+        .collect())
 }
 
 /// Replace the rules, refusing any that could never apply.
@@ -115,16 +371,24 @@ pub fn set_rules(conn: &Connection, incoming: Vec<Rule>) -> Result<Vec<Rule>> {
     };
     let previous = rules(conn)?;
     let mut clean = Vec::with_capacity(incoming.len());
-    for mut rule in incoming {
+    for rule in incoming {
+        let query = rule.query.trim().to_string();
+        let mut rule = rule.upgrade();
+        anyhow::ensure!(
+            query.is_empty() || !SearchQuery::parse(&query).is_empty(),
+            "a rule's search means nothing"
+        );
+        rule.conditions = rule
+            .conditions
+            .into_iter()
+            .map(RuleCondition::clean)
+            .collect::<Result<_>>()?;
+        if rule.conditions.len() < 2 {
+            rule.match_any = false;
+        }
         anyhow::ensure!(
             (0..=315_360_000).contains(&rule.delay_seconds),
             "a rule's delay must be between zero and ten years"
-        );
-        rule.query = rule.query.trim().to_string();
-        anyhow::ensure!(
-            rule.query.is_empty()
-                || !crate::search_query::SearchQuery::parse(&rule.query).is_empty(),
-            "a rule's search means nothing"
         );
         let tags = serde_json::json!(rule.tags);
         rule.tags = crate::tags::parse_tag_list(Some(&tags)).map_err(anyhow::Error::msg)?;
@@ -184,7 +448,7 @@ pub fn set_rules(conn: &Connection, incoming: Vec<Rule>) -> Result<Vec<Rule>> {
             )?;
         }
     }
-    let stored = serde_json::json!(clean);
+    let stored = stored_rules(&clean);
     for table in ["rule_activation", "rule_evaluations", "rule_firings"] {
         conn.execute(&format!(
             "DELETE FROM {table} WHERE rule_id NOT IN (SELECT json_extract(value, '$.id') FROM json_each(?1))"
@@ -449,11 +713,7 @@ fn run_immediate_rules(
         {
             continue;
         }
-        let matched = if rule.query.is_empty() {
-            uids.to_vec()
-        } else {
-            super::matching_uids(tx, account, folder, &rule.query, uids)?
-        };
+        let matched = rule_matching_uids(tx, account, folder, &rule, uids)?;
         for uid in &matched {
             let subject = rule_message_subject(tx, account, folder, *uid)?;
             log_rule(tx, &rule.id, account, &subject, 1, None)?;
@@ -518,6 +778,7 @@ pub fn apply_due_rules(
             ),
             RuleTrigger::Age => ("NULLIF(m.date, 0)", "m.date", "1"),
         };
+        let key = rule.condition_key();
         let mut stmt = tx.prepare(&format!(
             "SELECT m.uid, {event_sequence} FROM messages m JOIN rule_events e ON e.message = m.id
              LEFT JOIN rule_activation a ON a.rule_id = ?4
@@ -529,13 +790,7 @@ pub fn apply_due_rules(
         ))?;
         let candidates = stmt
             .query_map(
-                params![
-                    account,
-                    folder,
-                    now - rule.delay_seconds,
-                    rule.id,
-                    rule.query
-                ],
+                params![account, folder, now - rule.delay_seconds, rule.id, key],
                 |row| Ok((row.get::<_, u32>(0)?, row.get::<_, i64>(1)?)),
             )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -544,22 +799,12 @@ pub fn apply_due_rules(
         // Input changes invalidate those checks through the store's triggers.
         for chunk in candidates.chunks(500) {
             let uids: Vec<u32> = chunk.iter().map(|(uid, _)| *uid).collect();
-            if rule.query.is_empty() {
-                matched.extend(uids);
-            } else {
-                matched.extend(super::matching_uids(
-                    &tx,
-                    account,
-                    folder,
-                    &rule.query,
-                    &uids,
-                )?);
-            }
+            matched.extend(rule_matching_uids(&tx, account, folder, &rule, &uids)?);
             for (uid, sequence) in chunk {
                 tx.execute(
                     "INSERT OR REPLACE INTO rule_evaluations (message, rule_id, event_sequence, query)
                      SELECT id, ?4, ?5, ?6 FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
-                    params![account, folder, uid, rule.id, sequence, rule.query],
+                    params![account, folder, uid, rule.id, sequence, key],
                 )?;
             }
         }
@@ -708,7 +953,7 @@ pub fn forget_rule_account(conn: &Connection, id: &str) -> Result<()> {
             rule.disabled = true;
         }
     }
-    super::setting_set(conn, RULES_KEY, &serde_json::json!(stored))?;
+    super::setting_set(conn, RULES_KEY, &stored_rules(&stored))?;
     Ok(())
 }
 
@@ -891,10 +1136,7 @@ fn existing_rule_matches(
     let uids = stmt
         .query_map(params![account, folder], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<u32>>>()?;
-    if rule.query.is_empty() {
-        return Ok(uids);
-    }
-    super::matching_uids(conn, account, folder, &rule.query, &uids)
+    rule_matching_uids(conn, account, folder, rule, &uids)
 }
 
 /// How many messages [`queue_existing_rule`] would look at.
@@ -1086,8 +1328,30 @@ pub fn replace_rule_tag(conn: &Connection, tag: &str, to: Option<&str>) -> Resul
     }
     let mut next = Vec::with_capacity(current.len());
     for mut rule in current {
+        // "Isn't tagged" would take all mail once the tag is gone: the rule
+        // is turned off rather than left to act on far more than it said.
+        if to.is_none()
+            && rule.conditions.iter().any(|condition| {
+                condition.negate
+                    && SearchQuery::parse(&condition.query())
+                        .tags
+                        .iter()
+                        .any(|item| item == tag)
+            })
+        {
+            rule.disabled = true;
+        }
         if let Some(to) = to {
-            rule.query = crate::search_query::rename_tag_terms(&rule.query, tag, to);
+            for condition in &mut rule.conditions {
+                match condition.field.as_str() {
+                    "tag" if condition.value == tag => condition.value = to.to_string(),
+                    "words" => {
+                        condition.value =
+                            crate::search_query::rename_tag_terms(&condition.value, tag, to)
+                    }
+                    _ => {}
+                }
+            }
         }
         if rule.tags.iter().any(|item| item == tag) {
             rule.tags.retain(|item| item != tag);

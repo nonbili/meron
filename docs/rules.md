@@ -1,6 +1,16 @@
 # Mail rules
 
-In Settings → Rules, choose the conditions, actions, and **When to run**. Every choice except **Right away** takes an amount in minutes, hours, or days:
+In Settings → Rules, choose the conditions, actions, and **When to run**.
+
+## Conditions
+
+Each condition is a row: pick what to look at (From, To, Subject, Has the words, Tag, Has attachment, Unread, Starred), whether it should or shouldn't match (**contains** / **doesn't contain**, or **Yes** / **No**), and the value. From, To and Subject take several values separated by commas, any of which matches. With more than one row, **Match** chooses whether all conditions must hold or any one is enough. A rule with no conditions takes all mail. Conditions read what a message's envelope says; bodies aren't checked.
+
+For newsletters from a shop except its receipts, add **From contains shop.example** and **Subject doesn't contain receipt**, matching all conditions.
+
+## When to run
+
+Every choice except **Right away** takes an amount in minutes, hours, or days:
 
 - **Right away** runs as new mail arrives.
 - **After it arrives** starts the wait when new mail is observed. Existing rules keep their immediate arrival behavior. The initial mailbox download does not count as new mail.

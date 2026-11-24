@@ -19,7 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.DragHandle
@@ -34,6 +34,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -66,16 +67,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.Rule
+import jp.nonbili.meron.shared.RuleCondition
 import jp.nonbili.meron.shared.RuleStatus
-import jp.nonbili.meron.shared.SearchFields
 import jp.nonbili.meron.shared.accountSummaryIsRss
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableColumn
 
-private val NEW_RULE = Rule(query = "")
+private val NEW_RULE = Rule()
+
+/** A condition as the editor holds it: [key] keeps a row's fields its own while others come and go. */
+private data class ConditionRow(
+    val key: Int,
+    val condition: RuleCondition,
+)
+
+private var nextConditionKey = 0
+
+private fun conditionRow(condition: RuleCondition = RuleCondition()) = ConditionRow(nextConditionKey++, condition)
+
+private val RULE_FIELDS = listOf("from", "to", "subject", "words", "tag", "attachment", "unread", "starred")
+
+/** Whether a condition says anything: one left blank is dropped on save. */
+private fun RuleCondition.isSet(): Boolean = !valued || value.isNotBlank()
 
 private const val RUN_POLL_MS = 1500L
 private const val ACTIVITY_SHOWN = 20
@@ -276,34 +290,235 @@ private fun MeronMobileState.RuleTargetRow(
     }
 }
 
-/** A rule's conditions in the form's own words, not as search text. */
 @Composable
-private fun ruleCondition(fields: SearchFields): String {
-    @Composable
-    fun valued(
-        key: String,
-        value: String,
-    ) = "${tr(key)}: ${value.trim()}".takeIf { value.isNotBlank() }
-    return listOfNotNull(
-        tr("rules.allMail").takeIf { fields == SearchFields() },
-        valued("composer.fields.from", fields.from),
-        valued("composer.fields.to", fields.to),
-        valued("composer.fields.subject", fields.subject),
-        valued("tags.title", fields.tags),
-        valued("search.hasWords", fields.words),
-        valued("search.after", fields.after),
-        valued("search.before", fields.before),
-        tr("filters.unread").takeIf { fields.unread },
-        tr("filters.starred").takeIf { fields.starred },
-        tr("filters.hasAttachment").takeIf { fields.hasAttachment },
-    ).joinToString(" · ")
+private fun ruleFieldLabel(field: String): String =
+    when (field) {
+        "from" -> tr("composer.fields.from")
+        "to" -> tr("composer.fields.to")
+        "subject" -> tr("composer.fields.subject")
+        "words" -> tr("search.hasWords")
+        "tag" -> tr("rules.field.tag")
+        "attachment" -> tr("filters.hasAttachment")
+        "unread" -> tr("filters.unread")
+        "starred" -> tr("filters.starred")
+        else -> field
+    }
+
+/** What a condition's two choices say: it holds, or it doesn't. */
+@Composable
+private fun ruleOperators(condition: RuleCondition): Pair<String, String> =
+    when {
+        !condition.valued -> tr("rules.op.yes") to tr("rules.op.no")
+        condition.field == "tag" -> tr("rules.op.is") to tr("rules.op.isNot")
+        else -> tr("rules.op.contains") to tr("rules.op.notContains")
+    }
+
+/** A rule's conditions in the editor's own words. */
+@Composable
+private fun ruleConditionSummary(rule: Rule): String {
+    val parts =
+        rule.conditions.filter { it.isSet() }.map { condition ->
+            val label = ruleFieldLabel(condition.field)
+            val text = if (condition.valued) "$label: ${condition.value.trim()}" else label
+            if (condition.negate) tr("rules.summary.not", mapOf("condition" to text)) else text
+        }
+    if (parts.isEmpty()) return tr("rules.allMail")
+    val joined = parts.joinToString(" · ")
+    return if (rule.matchAny && parts.size > 1) tr("rules.summaryAny", mapOf("conditions" to joined)) else joined
+}
+
+/** A compact choice inside a condition's row. */
+@Composable
+private fun ConditionPicker(
+    value: String,
+    description: String,
+    options: List<Pair<String, () -> Unit>>,
+    modifier: Modifier = Modifier,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Row(
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { open = true }
+                    .semantics { contentDescription = "$description: $value" }
+                    .padding(vertical = 6.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Icon(
+                Icons.Filled.ArrowDropDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { (label, pick) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        open = false
+                        pick()
+                    },
+                )
+            }
+        }
+    }
 }
 
 /**
- * What to do with new mail that matches some conditions, filled in as fields. A
- * rule stores them as search text, which the page never shows; conditions it has
- * no field for stay in that text across an edit.
+ * One card per condition: what to look at, whether it should or shouldn't match, and the value,
+ * which depends on the field. With several, whether all or any one of them has to hold.
  */
+@Composable
+private fun MeronMobileState.RuleConditionsEditor(
+    rows: List<ConditionRow>,
+    matchAny: Boolean,
+    onChange: (List<ConditionRow>, Boolean) -> Unit,
+) {
+    fun update(
+        key: Int,
+        next: RuleCondition,
+    ) = onChange(rows.map { if (it.key == key) it.copy(condition = next) else it }, matchAny)
+
+    val count = rows.size + 1 + if (rows.size > 1) 1 else 0
+    var at = 0
+
+    fun position(): ConnectedPosition {
+        val index = at++
+        return when {
+            count == 1 -> ConnectedPosition.Single
+            index == 0 -> ConnectedPosition.First
+            index == count - 1 -> ConnectedPosition.Last
+            else -> ConnectedPosition.Middle
+        }
+    }
+    if (rows.size > 1) {
+        val all = tr("rules.match.all")
+        val any = tr("rules.match.any")
+        Surface(
+            shape = connectedShape(position()),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(tr("rules.match"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                ConditionPicker(
+                    value = if (matchAny) any else all,
+                    description = tr("rules.match"),
+                    options = listOf(all to { onChange(rows, false) }, any to { onChange(rows, true) }),
+                )
+            }
+        }
+        Spacer(Modifier.height(CONNECTED_GAP))
+    }
+    rows.forEach { row ->
+        key(row.key) {
+            val condition = row.condition
+            val label = ruleFieldLabel(condition.field)
+            val (yes, no) = ruleOperators(condition)
+            val fieldOptions =
+                RULE_FIELDS.map { field ->
+                    ruleFieldLabel(field) to {
+                        // A value only carries over between fields that take the same kind.
+                        val addresses = setOf("from", "to")
+                        val picked = RuleCondition(field = field)
+                        val kept = picked.valued && (condition.field in addresses) == (field in addresses)
+                        update(row.key, condition.copy(field = field, value = if (kept) condition.value else ""))
+                    }
+                }
+            Surface(
+                shape = connectedShape(position()),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ConditionPicker(
+                            value = label,
+                            description = tr("rules.field"),
+                            options = fieldOptions,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        ConditionPicker(
+                            value = if (condition.negate) no else yes,
+                            description = tr("rules.op"),
+                            options =
+                                listOf(
+                                    yes to { update(row.key, condition.copy(negate = false)) },
+                                    no to { update(row.key, condition.copy(negate = true)) },
+                                ),
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { onChange(rows.filter { it.key != row.key }, matchAny) }) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = tr("rules.removeCondition"),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (condition.valued) {
+                        Box(Modifier.padding(end = 12.dp)) {
+                            if (condition.field == "from" || condition.field == "to") {
+                                SearchOptionsAddressField(this@RuleConditionsEditor, "", label, condition.value, {}) {
+                                    update(row.key, condition.copy(value = it))
+                                }
+                            } else {
+                                SearchOptionsTextField(label, condition.value, {}) { update(row.key, condition.copy(value = it)) }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(CONNECTED_GAP))
+        }
+    }
+    Surface(
+        onClick = { onChange(rows + conditionRow(), matchAny) },
+        shape = connectedShape(position()),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Add,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(16.dp))
+            Text(
+                tr("rules.addCondition"),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+/** What to do with new mail that matches some conditions, each a card of its own. */
 @Composable
 internal fun MeronMobileState.RulesPage(
     modifier: Modifier = Modifier,
@@ -314,8 +529,7 @@ internal fun MeronMobileState.RulesPage(
     var rules by remember { mutableStateOf<List<Rule>?>(null) }
     var saving by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(NEW_RULE) }
-    var fields by remember { mutableStateOf(SearchFields()) }
-    var conditions by remember { mutableStateOf(emptyMap<String, SearchFields>()) }
+    var conditionRows by remember { mutableStateOf(listOf(conditionRow())) }
     var tags by remember { mutableStateOf("") }
     var timing by remember { mutableStateOf("now") }
     var amount by remember { mutableStateOf("") }
@@ -327,8 +541,6 @@ internal fun MeronMobileState.RulesPage(
     // The rule waiting for a yes, and how much mail it would run on.
     var confirmRun by remember { mutableStateOf<Pair<Rule, Int>?>(null) }
     var confirmDelete by remember { mutableStateOf<Rule?>(null) }
-    // Opening a rule waits on the core: only the last thing asked for may land.
-    var opening by remember { mutableStateOf<Job?>(null) }
     var runNotice by remember { mutableStateOf("") }
     var runStarted by remember { mutableStateOf<Int?>(null) }
     var status by remember { mutableStateOf(RuleStatus()) }
@@ -349,14 +561,10 @@ internal fun MeronMobileState.RulesPage(
     }
     val mailAccounts = coreAccounts.filterNot { accountSummaryIsRss(it) || it.needsReconnect }
     LaunchedEffect(mailAccounts.size) { mailAccounts.forEach { ensureAccountFolders(it.id) } }
-    LaunchedEffect(rules) {
-        conditions = rules.orEmpty().associate { it.query to (parseSearchQuery(it.query) ?: SearchFields(words = it.query)) }
-    }
 
     fun reset() {
-        opening?.cancel()
         draft = NEW_RULE
-        fields = SearchFields()
+        conditionRows = listOf(conditionRow())
         tags = ""
         timing = "now"
         amount = ""
@@ -386,8 +594,12 @@ internal fun MeronMobileState.RulesPage(
         }
     }
 
-    fun changeFields(next: SearchFields) {
-        fields = next
+    fun changeConditions(
+        rows: List<ConditionRow>,
+        matchAny: Boolean,
+    ) {
+        conditionRows = rows
+        draft = draft.copy(matchAny = matchAny)
         invalid = false
     }
 
@@ -461,7 +673,7 @@ internal fun MeronMobileState.RulesPage(
             onDismissRequest = { confirmDelete = null },
             title = { Text(tr("rules.delete")) },
             text = {
-                val condition = conditions[rule.query]?.let { ruleCondition(it) } ?: rule.query.ifEmpty { tr("rules.allMail") }
+                val condition = ruleConditionSummary(rule)
                 Text("$condition\n${tr("rules.deleteConfirm")}")
             },
             confirmButton = {
@@ -487,23 +699,16 @@ internal fun MeronMobileState.RulesPage(
     // The editor and the list are different pages: neither opens partway down.
     LaunchedEffect(formOpen) { scroll.scrollTo(0) }
     val openEdit: (Rule) -> Unit = { rule ->
-        opening?.cancel()
-        opening =
-            coroutines.launch {
-                val parsed = parseSearchQuery(rule.query)
-                // Its failure handling also swallows being cancelled.
-                ensureActive()
-                fields = parsed ?: SearchFields(words = rule.query)
-                draft = rule
-                val (ruleAmount, ruleUnit) = splitDelay(rule.delaySeconds)
-                timing = if (rule.trigger == "arrival" && rule.delaySeconds == 0L) "now" else rule.trigger
-                amount = if (timing == "now") "" else ruleAmount
-                unit = ruleUnit
-                tags = rule.tags.joinToString(", ")
-                scoped = rule.accounts.isNotEmpty()
-                adding = false
-                invalid = false
-            }
+        conditionRows = rule.conditions.map { conditionRow(it) }
+        draft = rule
+        val (ruleAmount, ruleUnit) = splitDelay(rule.delaySeconds)
+        timing = if (rule.trigger == "arrival" && rule.delaySeconds == 0L) "now" else rule.trigger
+        amount = if (timing == "now") "" else ruleAmount
+        unit = ruleUnit
+        tags = rule.tags.joinToString(", ")
+        scoped = rule.accounts.isNotEmpty()
+        adding = false
+        invalid = false
     }
 
     Column(
@@ -633,7 +838,7 @@ internal fun MeronMobileState.RulesPage(
                                                 )
                                             }
                                             Text(
-                                                conditions[rule.query]?.let { ruleCondition(it) } ?: rule.query.ifEmpty { tr("rules.allMail") },
+                                                ruleConditionSummary(rule),
                                                 style = MaterialTheme.typography.titleSmall,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
@@ -756,10 +961,7 @@ internal fun MeronMobileState.RulesPage(
             }
 
             Surface(
-                onClick = {
-                    opening?.cancel()
-                    adding = true
-                },
+                onClick = { adding = true },
                 enabled = rules != null,
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -871,58 +1073,7 @@ internal fun MeronMobileState.RulesPage(
             }
             Spacer(Modifier.height(16.dp))
 
-            Surface(
-                shape = connectedShape(ConnectedPosition.First),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    SearchOptionsAddressField(this@RulesPage, "", tr("composer.fields.from"), fields.from, {}) {
-                        changeFields(fields.copy(from = it))
-                    }
-                    SearchOptionsAddressField(this@RulesPage, "", tr("composer.fields.to"), fields.to, {}) {
-                        changeFields(fields.copy(to = it))
-                    }
-                    SearchOptionsTextField(tr("composer.fields.subject"), fields.subject, {}) {
-                        changeFields(fields.copy(subject = it))
-                    }
-                    SearchOptionsTextField(tr("search.hasWords"), fields.words, {}) { changeFields(fields.copy(words = it)) }
-                }
-            }
-            Spacer(Modifier.height(CONNECTED_GAP))
-            Surface(
-                onClick = { changeFields(fields.copy(hasAttachment = !fields.hasAttachment)) },
-                shape = connectedShape(ConnectedPosition.Last),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Icons.Filled.AttachFile,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        tr("filters.hasAttachment"),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(
-                        checked = fields.hasAttachment,
-                        onCheckedChange = { changeFields(fields.copy(hasAttachment = it)) },
-                        colors = settingsSwitchColors(),
-                    )
-                }
-            }
+            RuleConditionsEditor(conditionRows, draft.matchAny, ::changeConditions)
 
             if (!draft.sent) {
                 SettingsSectionLabel(tr("rules.timing"), hint = tr("rules.timingHint"))
@@ -1127,7 +1278,7 @@ internal fun MeronMobileState.RulesPage(
                             accounts = mailAccounts,
                             options =
                                 listOf("", "archive", "trash").map { option ->
-                                    moveLabel(mailAccounts, Rule(query = "", moveTo = option)) to {
+                                    moveLabel(mailAccounts, Rule(moveTo = option)) to {
                                         change(draft.copy(moveTo = option, folder = "", folderAccount = ""))
                                     }
                                 },
@@ -1146,7 +1297,7 @@ internal fun MeronMobileState.RulesPage(
             }
             if (draft.moveTo == "trash") {
                 Text(
-                    tr(if (fields == SearchFields()) "rules.trashAllHint" else "rules.trashHint"),
+                    tr(if (conditionRows.any { it.condition.isSet() }) "rules.trashHint" else "rules.trashAllHint"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 4.dp),
@@ -1181,18 +1332,17 @@ internal fun MeronMobileState.RulesPage(
                                 trigger = if (timing == "now") "arrival" else timing,
                                 delaySeconds = delay ?: return@Button,
                             )
-                        val submittedFields = fields
+                        // A row left blank is no condition at all.
+                        val conditions = conditionRows.map { it.condition }.filter { it.isSet() }
                         val accounts = chosenAccounts
                         val tagList = tags.split(",").map(String::trim).filter(String::isNotEmpty)
                         val current = rules.orEmpty()
                         save({
-                            buildSearchQuery(submittedFields)?.let { query ->
-                                val rule = submitted.copy(query = query, tags = tagList, accounts = accounts)
-                                // Editing doesn't turn a rule on or off.
-                                val live = rules.orEmpty().firstOrNull { it.id == rule.id }
-                                val edited = rule.copy(disabled = live?.disabled ?: rule.disabled)
-                                if (editing) current.map { if (it.id == rule.id) edited else it } else current + rule
-                            }
+                            val rule = submitted.copy(conditions = conditions, tags = tagList, accounts = accounts)
+                            // Editing doesn't turn a rule on or off.
+                            val live = rules.orEmpty().firstOrNull { it.id == rule.id }
+                            val edited = rule.copy(disabled = live?.disabled ?: rule.disabled)
+                            if (editing) current.map { if (it.id == rule.id) edited else it } else current + rule
                         }, onSaved = ::reset)
                     },
                     modifier = Modifier.weight(1f),

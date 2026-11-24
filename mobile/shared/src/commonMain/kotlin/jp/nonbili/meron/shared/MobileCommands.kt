@@ -1226,9 +1226,33 @@ data class SetTagsParams(
         )
 }
 
+/**
+ * One thing a message has to say, or not say, for a rule to take it. [field] is `from`, `to` or
+ * `subject` (comma-separated alternatives, any of which matches), `words` (search text), `tag`, or
+ * `attachment`, `unread` or `starred`, which take no [value].
+ */
+data class RuleCondition(
+    val field: String = "from",
+    val value: String = "",
+    /** Matches the mail the condition otherwise wouldn't. */
+    val negate: Boolean = false,
+) {
+    val valued: Boolean get() = this.field !in setOf("attachment", "unread", "starred")
+
+    fun toJson(): String =
+        jsonObject(
+            "field" to field.jsonString(),
+            "value" to value.jsonString(),
+            "negate" to negate.toString(),
+        )
+}
+
 data class Rule(
     val id: String = "",
-    val query: String,
+    /** None for all mail. */
+    val conditions: List<RuleCondition> = emptyList(),
+    /** Any one of [conditions] is enough, rather than all of them. */
+    val matchAny: Boolean = false,
     val trigger: String = "arrival",
     val delaySeconds: Long = 0,
     val tags: List<String> = emptyList(),
@@ -1252,7 +1276,8 @@ data class Rule(
     fun toJson(): String =
         jsonObject(
             "id" to id.jsonString(),
-            "query" to query.jsonString(),
+            "conditions" to conditions.joinToString(separator = ",", prefix = "[", postfix = "]") { it.toJson() },
+            "match_any" to matchAny.toString(),
             "tags" to tags.jsonStringArray(),
             "trigger" to trigger.jsonString(),
             "delay_seconds" to delaySeconds.toString(),

@@ -976,6 +976,260 @@ mod tests {
     }
 
     #[test]
+    fn rule_conditions_can_be_negated_and_any_one_enough() {
+        use crate::store::RuleCondition;
+        let conn = db();
+        let condition = |field: &str, value: &str, negate| RuleCondition {
+            field: field.into(),
+            value: value.into(),
+            negate,
+        };
+        let rule = |id: &str, tag: &str, match_any, conditions| Rule {
+            id: id.into(),
+            conditions,
+            match_any,
+            tags: vec![tag.into()],
+            ..Default::default()
+        };
+        set_rules(
+            &conn,
+            vec![
+                rule(
+                    "all",
+                    "billing",
+                    false,
+                    vec![
+                        condition("from", "shop.test", false),
+                        condition("subject", "receipt", true),
+                    ],
+                ),
+                Rule {
+                    star: true,
+                    tags: vec![],
+                    ..rule(
+                        "not",
+                        "",
+                        false,
+                        vec![condition("subject", "nothing like it", true)],
+                    )
+                },
+                rule(
+                    "any",
+                    "either",
+                    true,
+                    vec![
+                        condition("from", "boss@work.test", false),
+                        condition("subject", "receipt", false),
+                    ],
+                ),
+            ],
+        )
+        .unwrap();
+        let mail = |uid, id: &str, from: &str, subject: &str| MessageHeader {
+            from_addr: from.into(),
+            subject: subject.into(),
+            ..message(uid, id, Some(&[]))
+        };
+        upsert(
+            &conn,
+            "INBOX",
+            &[
+                mail(1, "bill@x", "billing@shop.test", "Your bill"),
+                mail(2, "receipt@x", "billing@shop.test", "Your receipt"),
+                mail(3, "boss@x", "boss@work.test", "Hello"),
+                mail(4, "other@x", "ann@example.org", "Hello"),
+            ],
+        );
+        // 5 is already gone again: not having a subject doesn't make it match.
+        apply_rules(&conn, "a", "INBOX", 1, &[1, 2, 3, 4, 5]).unwrap();
+        assert!(
+            pending_rule_actions(&conn, "a", "INBOX")
+                .unwrap()
+                .iter()
+                .all(|action| action.uid != 5)
+        );
+        assert_eq!(tags(&conn, "bill@x"), ["billing"]);
+        assert_eq!(tags(&conn, "receipt@x"), ["either"]);
+        assert_eq!(tags(&conn, "boss@x"), ["either"]);
+        assert!(tags(&conn, "other@x").is_empty());
+    }
+
+    #[test]
+    fn a_rule_search_becomes_conditions_and_empty_ones_are_refused() {
+        use crate::store::RuleCondition;
+        let conn = db();
+        let saved = set_rules(
+            &conn,
+            vec![Rule {
+                query: "from:{a b} has:attachment tag:Todo budget".into(),
+                star: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        let fields: Vec<(&str, &str)> = saved[0]
+            .conditions
+            .iter()
+            .map(|condition| (condition.field.as_str(), condition.value.as_str()))
+            .collect();
+        assert_eq!(
+            fields,
+            [
+                ("from", "a, b"),
+                ("tag", "todo"),
+                ("attachment", ""),
+                ("words", "budget")
+            ]
+        );
+        assert!(saved[0].query.is_empty());
+        let stored = serde_json::to_value(&saved[0]).unwrap();
+        assert!(stored.get("query").is_none());
+
+        let with = |field: &str, value: &str| Rule {
+            conditions: vec![RuleCondition {
+                field: field.into(),
+                value: value.into(),
+                negate: false,
+            }],
+            star: true,
+            ..Default::default()
+        };
+        assert!(set_rules(&conn, vec![with("from", " ")]).is_err());
+        assert!(set_rules(&conn, vec![with("body", "x")]).is_err());
+        assert!(
+            set_rules(&conn, vec![with("starred", "ignored")]).unwrap()[0].conditions[0]
+                .value
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_dangling_and_in_a_rule_search_is_dropped() {
+        let conn = db();
+        let saved = set_rules(
+            &conn,
+            vec![Rule {
+                query: "from:alice AND".into(),
+                star: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        let fields: Vec<&str> = saved[0]
+            .conditions
+            .iter()
+            .map(|condition| condition.field.as_str())
+            .collect();
+        assert_eq!(fields, ["from"]);
+
+        // Stored as nothing but `AND`, it matched nothing, and still does.
+        let stored = serde_json::json!([{ "id": "old", "query": "AND", "star": true }]);
+        crate::store::setting_set(&conn, "rules", &stored).unwrap();
+        let read = rules(&conn).unwrap();
+        assert_eq!(read[0].conditions.len(), 1);
+        upsert(&conn, "INBOX", &[message(1, "m@x", Some(&[]))]);
+        apply_rules(&conn, "a", "INBOX", 1, &[1]).unwrap();
+        assert!(
+            pending_rule_actions(&conn, "a", "INBOX")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_rule_search_that_rows_would_change_stays_whole() {
+        let conn = db();
+        let query = "from:first from:alice OR to:team from:bob\nAND to:\"Support Team\"";
+        let saved = set_rules(
+            &conn,
+            vec![Rule {
+                query: query.into(),
+                star: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+        let only = &saved[0].conditions;
+        assert_eq!(only.len(), 1);
+        assert_eq!(
+            (only[0].field.as_str(), only[0].value.as_str()),
+            ("words", query)
+        );
+    }
+
+    #[test]
+    fn older_releases_read_a_rule_as_the_same_search_or_none() {
+        use crate::store::RuleCondition;
+        let conn = db();
+        let condition = |field: &str, value: &str, negate| RuleCondition {
+            field: field.into(),
+            value: value.into(),
+            negate,
+        };
+        let rule = |match_any, conditions| Rule {
+            conditions,
+            match_any,
+            star: true,
+            ..Default::default()
+        };
+        set_rules(
+            &conn,
+            vec![
+                rule(
+                    false,
+                    vec![
+                        condition("from", "a, b", false),
+                        condition("words", "x y", false),
+                    ],
+                ),
+                rule(
+                    true,
+                    vec![condition("from", "a", false), condition("to", "b", false)],
+                ),
+                rule(false, vec![condition("subject", "s", true)]),
+                rule(false, vec![]),
+                rule(
+                    false,
+                    vec![
+                        condition("words", "from:\"alice", false),
+                        condition("subject", "urgent mail", false),
+                    ],
+                ),
+            ],
+        )
+        .unwrap();
+        let stored = crate::store::settings_get(&conn, &["rules".to_string()]).unwrap();
+        let queries: Vec<&str> = stored["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|rule| rule["query"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            queries,
+            [
+                "from:{a b} AND x y",
+                "is:read AND is:unread",
+                "is:read AND is:unread",
+                "",
+                "is:read AND is:unread"
+            ]
+        );
+        let nothing = crate::search_query::SearchQuery::parse(queries[1]);
+        assert!(nothing.read && nothing.unread);
+        // This release still reads the conditions, not that search.
+        let read = rules(&conn).unwrap();
+        assert!(read[1].match_any && read[1].conditions.len() == 2);
+        assert!(read[2].conditions[0].negate);
+        assert!(
+            serde_json::to_value(&read[0])
+                .unwrap()
+                .get("query")
+                .is_none()
+        );
+    }
+
+    #[test]
     fn mail_filed_from_another_folder_has_not_arrived() {
         let conn = db();
         let known = message(1, "m@x", Some(&[]));
@@ -1007,7 +1261,11 @@ mod tests {
             query: " ".into(),
             ..rule.clone()
         };
-        assert_eq!(set_rules(&conn, vec![no_search]).unwrap()[0].query, "");
+        assert!(
+            set_rules(&conn, vec![no_search]).unwrap()[0]
+                .conditions
+                .is_empty()
+        );
         let no_tag = Rule {
             tags: vec![],
             ..rule
@@ -1103,13 +1361,47 @@ mod tests {
 
         let renamed = replace_rule_tag(&conn, "old", Some("new")).unwrap();
         assert_eq!(renamed[0].tags, ["keep", "new"]);
-        assert_eq!(renamed[1].query, "from:b tag:new tag:older");
+        let values: Vec<&str> = renamed[1]
+            .conditions
+            .iter()
+            .map(|condition| condition.value.as_str())
+            .collect();
+        assert_eq!(values, ["b", "new", "older"]);
         assert_eq!(renamed[2].tags, ["new"]);
 
         let deleted = replace_rule_tag(&conn, "new", None).unwrap();
         assert_eq!(deleted.len(), 2, "a rule with nothing left to do is gone");
         assert_eq!(deleted[0].tags, ["keep"]);
         assert_eq!(rules(&conn).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn deleting_a_tag_turns_off_rules_for_mail_without_it() {
+        use crate::store::RuleCondition;
+        let conn = db();
+        let rule = |negate| Rule {
+            conditions: vec![RuleCondition {
+                field: "tag".into(),
+                value: "old".into(),
+                negate,
+            }],
+            star: true,
+            ..Default::default()
+        };
+        let words = Rule {
+            conditions: vec![RuleCondition {
+                field: "words".into(),
+                value: "tag:old".into(),
+                negate: true,
+            }],
+            star: true,
+            ..Default::default()
+        };
+        set_rules(&conn, vec![rule(true), rule(false), words]).unwrap();
+        let kept = replace_rule_tag(&conn, "old", None).unwrap();
+        assert!(kept[0].disabled, "would now take all mail");
+        assert!(!kept[1].disabled, "takes no mail, as before");
+        assert!(kept[2].disabled);
     }
 
     #[test]

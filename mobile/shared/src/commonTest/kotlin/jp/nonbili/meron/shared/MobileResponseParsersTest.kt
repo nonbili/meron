@@ -914,8 +914,13 @@ class MobileResponseParsersTest {
     fun parsesRulesWithTheirScopeAndTargets() {
         val rule =
             parseRulesResponse(
-                """{"rules":[{"id":"r","query":"","tags":[],"mark_read":false,"star":true,"move_to":"folder","folder":"Saved","folder_account":"b","accounts":["a","b"],"copy_folder":"Kept","copy_account":"c","forward_to":"dan@example.org, eve@example.org","disabled":true,"sent":true}]}""",
+                """{"rules":[{"id":"r","conditions":[{"field":"from","value":"a, b","negate":false},{"field":"subject","value":"say \"hi\"","negate":true}],"match_any":true,"tags":[],"mark_read":false,"star":true,"move_to":"folder","folder":"Saved","folder_account":"b","accounts":["a","b"],"copy_folder":"Kept","copy_account":"c","forward_to":"dan@example.org, eve@example.org","disabled":true,"sent":true}]}""",
             ).single()
+        assertEquals(
+            listOf(RuleCondition("from", "a, b"), RuleCondition("subject", "say \"hi\"", negate = true)),
+            rule.conditions,
+        )
+        assertEquals(true, rule.matchAny)
         assertEquals("b", rule.folderAccount)
         assertEquals(listOf("a", "b"), rule.accounts)
         assertEquals("Kept", rule.copyFolder)
@@ -930,7 +935,7 @@ class MobileResponseParsersTest {
 
     @Test
     fun parsesRulesAndStatusInsideNativeProtocolEnvelope() {
-        val rule = Rule(id = "saved", query = "from:sender@example.com", star = true)
+        val rule = Rule(id = "saved", conditions = listOf(RuleCondition("from", "sender@example.com")), star = true)
         val result = """{"rules":[${rule.toJson()}]}"""
         assertEquals(listOf(rule), parseRulesResponse("""{"id":1,"result":$result}"""))
         assertEquals(emptyList(), parseRulesResponse("""{"id":1,"result":{"rules":[]}}"""))

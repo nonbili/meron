@@ -1,13 +1,29 @@
-import { EMPTY_FIELDS, type SearchFields } from '../components/search/searchFields'
 import { invoke } from '../lib/bridge'
 
 export type RuleTrigger = 'arrival' | 'read' | 'age'
 
 export type RuleMove = '' | 'archive' | 'trash' | 'folder'
 
+/** From, To and Subject take comma-separated alternatives; the last three take no value. */
+export type RuleField = 'from' | 'to' | 'subject' | 'words' | 'tag' | 'attachment' | 'unread' | 'starred'
+
+export const RULE_FIELDS: RuleField[] = ['from', 'to', 'subject', 'words', 'tag', 'attachment', 'unread', 'starred']
+
+export const valuedRuleField = (field: RuleField) => !['attachment', 'unread', 'starred'].includes(field)
+
+export type RuleCondition = {
+  field: RuleField
+  value: string
+  /** Matches the mail the condition otherwise wouldn't. */
+  negate: boolean
+}
+
 export type Rule = {
   id: string
-  query: string
+  /** None for all mail. */
+  conditions: RuleCondition[]
+  /** Any one condition is enough, rather than all of them. */
+  match_any: boolean
   trigger?: RuleTrigger
   delay_seconds?: number
   tags: string[]
@@ -47,18 +63,6 @@ export type RuleStatus = {
   running: Record<string, number>
 }
 
-// A rule keeps its condition as search text; people only ever see it as fields.
-// Text the core can't read stays in the words, so a save doesn't lose it.
-export async function ruleFields(query: string): Promise<SearchFields> {
-  const parsed = await invoke<SearchFields>('search.parse', { query }).catch(() => null)
-  return { ...EMPTY_FIELDS, ...parsed, words: parsed ? parsed.words : query }
-}
-
-export async function ruleQuery(fields: SearchFields): Promise<string> {
-  const { query } = await invoke<{ query: string }>('search.build', { fields })
-  return query
-}
-
 /** How many messages already in the Inbox, or in Sent for a rule for sent mail, a saved rule would run on. */
 export async function ruleMatches(id: string): Promise<number> {
   const { count } = await invoke<{ count: number }>('mail.ruleMatches', { id })
@@ -83,7 +87,7 @@ export async function stopRule(id: string): Promise<void> {
 
 export async function loadRules(): Promise<Rule[]> {
   const { rules } = await invoke<{ rules: Rule[] }>('mail.rules', {})
-  return rules ?? []
+  return (rules ?? []).map((rule) => ({ ...rule, conditions: rule.conditions ?? [], match_any: !!rule.match_any }))
 }
 
 // The core normalizes what it keeps and refuses a rule that could never apply.

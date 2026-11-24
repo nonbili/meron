@@ -10,9 +10,7 @@ import { accounts$, isSendableAccount } from '../../states/accounts'
 import {
   loadRules,
   loadRuleStatus,
-  ruleFields,
   ruleMatches,
-  ruleQuery,
   runRule,
   saveRules,
   stopRule,
@@ -28,13 +26,19 @@ import { AccountAvatar } from '../avatar/AccountAvatar'
 import { RecipientInput } from '../composer/RecipientInput'
 import { Checkbox } from '../field/Checkbox'
 import { SelectInput, TextInput } from '../field/Field'
-import { EMPTY_FIELDS, fieldsEmpty, type SearchFields } from '../search/searchFields'
-import { inputClass, Row } from '../search/SearchOptions'
+import { inputClass } from '../search/SearchOptions'
 import { TagInput } from '../search/TagInput'
 import { useTaskDragSensors } from '../tasks/taskDrag'
 import { accountLabel } from '../threads/ThreadMoveCopyItems'
 import { SegmentedRow, SettingRow, SettingsGroup, Switch, ToggleRow } from './AccountSettingsRows'
 import { RuleFolderPicker, useRuleTargetLabel } from './RuleFolderPicker'
+import {
+  conditionSet,
+  draftCondition,
+  RuleConditions,
+  useConditionSummary,
+  type DraftCondition,
+} from './RuleConditions'
 
 type Timing = 'now' | RuleTrigger
 type Unit = 'minutes' | 'hours' | 'days'
@@ -52,7 +56,8 @@ function splitDelay(seconds: number): { amount: number; unit: Unit } {
 }
 
 type Draft = {
-  fields: SearchFields
+  conditions: DraftCondition[]
+  match_any: boolean
   // "Right away" is arrival with no delay, kept apart so that choosing "After
   // it arrives" doesn't fall back to it while the amount is still empty.
   timing: Timing
@@ -84,8 +89,9 @@ function draftDelay({ timing, amount, unit }: Draft) {
 const RUN_POLL_MS = 1500
 const ACTIVITY_SHOWN = 20
 
-const EMPTY_DRAFT: Draft = {
-  fields: EMPTY_FIELDS,
+const emptyDraft = (): Draft => ({
+  conditions: [draftCondition()],
+  match_any: false,
   timing: 'now',
   amount: '',
   unit: 'minutes',
@@ -101,7 +107,7 @@ const EMPTY_DRAFT: Draft = {
   forward_to: '',
   disabled: false,
   sent: false,
-}
+})
 
 type RuleRowProps = {
   id: string
@@ -162,9 +168,7 @@ function RuleRow({ id, at, locked, onMove, children }: RuleRowProps) {
   )
 }
 
-// What to do with new mail that matches some conditions, filled in as fields. A
-// rule stores them as search text, which the form never shows; conditions it has
-// no field for stay in that text across an edit.
+// What to do with new mail that matches some conditions, each a row of its own.
 export function RulesPanel() {
   const { t } = useTranslation()
   const allAccounts = useValue(accounts$)
@@ -174,35 +178,21 @@ export function RulesPanel() {
   // not before the list has loaded, and not while another save is on its way.
   const [rules, setRules] = useState<Rule[] | null>(null)
   const [saving, setSaving] = useState(false)
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
+  const [draft, setDraft] = useState<Draft>(emptyDraft)
   const [editing, setEditing] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   // Apart from `draft.accounts`: picking "selected" starts with none ticked,
   // which as a list would mean all of them.
   const [scoped, setScoped] = useState(false)
   const [invalid, setInvalid] = useState(false)
-  // Opening a rule waits on the core: only the last thing asked for may land.
-  const formRequest = useRef(0)
   const [starting, setStarting] = useState<string | null>(null)
   const [status, setStatus] = useState<RuleStatus>({ log: [], running: {} })
-  const [conditions, setConditions] = useState<Record<string, SearchFields>>({})
+  const conditionSummary = useConditionSummary()
   const sensors = useTaskDragSensors()
 
   useEffect(() => {
     void loadRules().then(setRules, () => setRules(null))
   }, [])
-
-  useEffect(() => {
-    let current = true
-    void Promise.all((rules ?? []).map(async (rule) => [rule.query, await ruleFields(rule.query)] as const)).then(
-      (entries) => {
-        if (current) setConditions(Object.fromEntries(entries))
-      },
-    )
-    return () => {
-      current = false
-    }
-  }, [rules])
 
   const refreshStatus = () => void loadRuleStatus().then(setStatus, () => {})
 
@@ -307,11 +297,8 @@ export function RulesPanel() {
         : { sent },
     )
 
-  const changeFields = (patch: Partial<SearchFields>) => change({ fields: { ...draft.fields, ...patch } })
-
   const reset = () => {
-    formRequest.current += 1
-    setDraft(EMPTY_DRAFT)
+    setDraft(emptyDraft())
     setEditing(null)
     setAdding(false)
     setScoped(false)
@@ -335,16 +322,17 @@ export function RulesPanel() {
   const submit = async () => {
     if (!rules) return
     const tags = draft.tags.split(/[\s,]+/).filter(Boolean)
-    const { fields, timing, amount: _, unit: __, ...actions } = draft
+    const { conditions, timing, amount: _, unit: __, ...actions } = draft
     const delay = draftDelay(draft)
     if (delay === null) return
-    const saved = await save(async () => {
+    const saved = await save(() => {
       const rule: Rule = {
         ...actions,
         trigger: timing === 'now' ? 'arrival' : timing,
         delay_seconds: delay,
         id: editing ?? '',
-        query: await ruleQuery(fields),
+        // A row left blank is no condition at all.
+        conditions: conditions.filter(conditionSet).map(({ key: _, ...condition }) => condition),
         tags,
         accounts: chosenAccounts,
         // Editing doesn't turn a rule on or off.
@@ -355,19 +343,16 @@ export function RulesPanel() {
     if (saved) reset()
   }
 
-  const edit = async (rule: Rule) => {
-    const request = ++formRequest.current
+  const edit = (rule: Rule) => {
     const {
-      query: _,
-      id: __,
+      id: _,
+      conditions,
       trigger = 'arrival',
       delay_seconds: delay = 0,
       sent = false,
       forward_to = '',
       ...actions
     } = rule
-    const fields = await ruleFields(rule.query)
-    if (request !== formRequest.current) return
     const timing = trigger === 'arrival' && delay === 0 ? 'now' : trigger
     const { amount, unit } = splitDelay(delay)
     setDraft({
@@ -377,7 +362,7 @@ export function RulesPanel() {
       timing,
       amount: timing === 'now' ? '' : String(amount),
       unit,
-      fields,
+      conditions: conditions.map(draftCondition),
       tags: rule.tags.join(' '),
     })
     setEditing(rule.id)
@@ -399,27 +384,7 @@ export function RulesPanel() {
     if ((await save(() => rules.filter((item) => item.id !== rule.id))) && editing === rule.id) reset()
   }
 
-  // The rule's conditions in the form's own words, not as search text.
-  const condition = (rule: Rule) => {
-    const fields = conditions[rule.query]
-    if (!fields) return rule.query || t('rules.allMail')
-    const valued = (label: string, value: string) => value.trim() && `${label}: ${value.trim()}`
-    return [
-      fieldsEmpty(fields) && t('rules.allMail'),
-      valued(t('composer.fields.from'), fields.from),
-      valued(t('composer.fields.to'), fields.to),
-      valued(t('composer.fields.subject'), fields.subject),
-      valued(t('tags.title'), fields.tags),
-      valued(t('search.hasWords'), fields.words),
-      valued(t('search.after'), fields.after),
-      valued(t('search.before'), fields.before),
-      fields.unread && t('filters.unread'),
-      fields.starred && t('filters.starred'),
-      fields.has_attachment && t('filters.hasAttachment'),
-    ]
-      .filter(Boolean)
-      .join(' · ')
-  }
+  const condition = (rule: Rule) => conditionSummary(rule.conditions, rule.match_any)
 
   const moveLabel = ({ move_to, folder, folder_account }: Draft | Rule) => {
     if (move_to === 'archive') return t('folders.roles.archive')
@@ -536,48 +501,11 @@ export function RulesPanel() {
               )}
             </>
           )}
-          <div className="flex flex-col gap-2 px-3.5 py-2.5">
-            <Row label={t('composer.fields.from')}>
-              <RecipientInput
-                bare
-                value={draft.fields.from}
-                onChange={(from) => changeFields({ from })}
-                accountId=""
-                className={`${inputClass} w-full`}
-              />
-            </Row>
-            <Row label={t('composer.fields.to')}>
-              <RecipientInput
-                bare
-                value={draft.fields.to}
-                onChange={(to) => changeFields({ to })}
-                accountId=""
-                className={`${inputClass} w-full`}
-              />
-            </Row>
-            <Row label={t('composer.fields.subject')}>
-              <input
-                value={draft.fields.subject}
-                onChange={(event) => changeFields({ subject: event.target.value })}
-                className={inputClass}
-              />
-            </Row>
-            <Row label={t('search.hasWords')}>
-              <input
-                value={draft.fields.words}
-                onChange={(event) => changeFields({ words: event.target.value })}
-                className={inputClass}
-              />
-            </Row>
-            <label className="flex cursor-pointer items-center gap-2 pt-1 text-xs text-primary select-none">
-              <Checkbox
-                checked={draft.fields.has_attachment}
-                onChange={(event) => changeFields({ has_attachment: event.target.checked })}
-              />
-              {t('filters.hasAttachment')}
-            </label>
-            <p className="text-[0.6875rem] text-secondary">{t('rules.queryHint')}</p>
-          </div>
+          <RuleConditions
+            conditions={draft.conditions}
+            matchAny={draft.match_any}
+            onChange={(conditions, match_any) => change({ conditions, match_any })}
+          />
         </SettingsGroup>
 
         {!draft.sent && (
@@ -696,7 +624,7 @@ export function RulesPanel() {
           )}
           {draft.move_to === 'trash' && (
             <p className="px-3.5 py-2.5 text-[0.6875rem] font-medium text-rose-500">
-              {t(fieldsEmpty(draft.fields) ? 'rules.trashAllHint' : 'rules.trashHint')}
+              {t(draft.conditions.some(conditionSet) ? 'rules.trashHint' : 'rules.trashAllHint')}
             </p>
           )}
         </SettingsGroup>
@@ -814,14 +742,7 @@ export function RulesPanel() {
       )}
 
       <div>
-        <Button
-          leftIcon={Plus}
-          disabled={!rules}
-          onClick={() => {
-            formRequest.current += 1
-            setAdding(true)
-          }}
-        >
+        <Button leftIcon={Plus} disabled={!rules} onClick={() => setAdding(true)}>
           {t('rules.add')}
         </Button>
       </div>

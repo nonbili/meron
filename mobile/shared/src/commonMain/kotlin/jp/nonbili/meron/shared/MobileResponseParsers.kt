@@ -833,7 +833,21 @@ fun parseRulesResponse(responseJson: String): List<Rule> =
         ?.map { rule ->
             Rule(
                 id = rule.findJsonStringProperty("id").orEmpty(),
-                query = rule.findJsonStringProperty("query").orEmpty(),
+                conditions =
+                    rule
+                        .jsonObjectEntries()
+                        .firstOrNull { it.first == "conditions" }
+                        ?.second
+                        ?.takeIf { it.startsWith("[") }
+                        ?.jsonArrayElements()
+                        ?.map { condition ->
+                            RuleCondition(
+                                field = condition.findJsonStringProperty("field").orEmpty(),
+                                value = condition.findJsonStringProperty("value").orEmpty(),
+                                negate = condition.findJsonBooleanProperty("negate") ?: false,
+                            )
+                        }.orEmpty(),
+                matchAny = rule.findJsonBooleanProperty("match_any") ?: false,
                 tags = rule.topLevelStringArray("tags"),
                 trigger = rule.findJsonStringProperty("trigger") ?: "arrival",
                 delaySeconds = rule.findJsonLongProperty("delay_seconds") ?: 0,
