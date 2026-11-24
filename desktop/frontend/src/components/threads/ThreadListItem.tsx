@@ -59,6 +59,8 @@ export function ThreadListItem({
   const unread = thread.unread
   const hasDraft = !isRSS && (thread.has_draft || isDraftFolder(thread.folder_id, thread.account_id))
   const showAvatar = useValue(settings$.showThreadAvatars)
+  // Three-line rows: sender, subject, then the preview on a line of its own.
+  const previewLine = useValue(settings$.threadPreviewLine)
   // In lists that mix accounts, a coloured account is marked by a bar along the
   // row's edge; one without a colour falls back to its avatar as a badge.
   const accountColor = badgeAccount?.color || undefined
@@ -207,7 +209,7 @@ export function ThreadListItem({
             >
               {hasDraft && <span className="mr-1 font-normal text-rose-500">{t('chat.draft')}</span>}
               <span className={clsx(unread ? 'text-primary' : 'text-primary/85')}>{threadTitle}</span>
-              {thread.preview && (
+              {!previewLine && thread.preview && (
                 <span className={clsx(unread ? 'text-secondary/90 font-medium' : 'text-secondary/75 font-normal')}>
                   {' - '}
                   {thread.preview}
@@ -222,6 +224,16 @@ export function ThreadListItem({
               </span>
             ) : null}
           </div>
+          {previewLine && thread.preview && (
+            <p
+              className={clsx(
+                'truncate text-[0.75rem] leading-snug',
+                unread ? 'text-secondary/90 font-medium' : 'text-secondary/75 font-normal',
+              )}
+            >
+              {thread.preview}
+            </p>
+          )}
           <TagChips tags={thread.tags} />
           {!!thread.files?.length && <AttachmentChips files={thread.files} />}
         </div>

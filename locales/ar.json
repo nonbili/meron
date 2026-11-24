@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "يرسل تجزئة SHA-256 لعنوان البريد الإلكتروني لكل مرسل إلى Gravatar، ويرسل نطاق المرسل (والنطاق الأصلي عند الحاجة) إلى DuckDuckGo كخيار احتياطي.",
   "settings.appearance.showThreadAvatars": "إظهار الصور الرمزية في قوائم الرسائل",
   "settings.appearance.showThreadAvatarsHint": "أوقفه للحصول على صفوف أكثر إحكامًا. القوائم التي تجمع عدة حسابات تظل تميّز حساب كل صف.",
+  "settings.appearance.threadPreviewLine": "إظهار المعاينة في سطر مستقل",
+  "settings.appearance.threadPreviewLineHint": "صفوف من ثلاثة أسطر: المرسل، ثم الموضوع، ثم معاينة للرسالة.",
   "settings.appearance.showUnreadAccountBadge": "إظهار الشارة غير المقروءة",
   "settings.appearance.showUnreadAccountBadgeHint": "عرض عدد الرسائل غير المقروءة لكل حساب في الشريط الجانبي.",
   "settings.appearance.textSize": "حجم النص",

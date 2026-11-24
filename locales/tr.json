@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Her gönderenin e-posta adresinin SHA-256 karmasını Gravatar'a, yedek olarak da gönderenin alan adını (ve gerekirse üst alan adını) DuckDuckGo'ya gönderir.",
   "settings.appearance.showThreadAvatars": "İleti listelerinde avatarları göster",
   "settings.appearance.showThreadAvatarsHint": "Daha sıkı satırlar için kapatın. Hesapları karıştıran listeler her satırın hesabını yine de gösterir.",
+  "settings.appearance.threadPreviewLine": "Önizlemeyi ayrı satırda göster",
+  "settings.appearance.threadPreviewLineHint": "Üç satırlı öğeler: gönderen, konu ve ardından iletinin önizlemesi.",
   "settings.appearance.showUnreadAccountBadge": "Okunmamış rozetini göster",
   "settings.appearance.showUnreadAccountBadgeHint": "Kenar çubuğundaki her hesap için okunmamış ileti sayısını göster.",
   "settings.appearance.textSize": "Metin boyutu",

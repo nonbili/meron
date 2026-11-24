@@ -30,6 +30,7 @@ const avatarSizes = (container: HTMLElement) =>
 afterEach(() => {
   cleanup()
   settings$.showThreadAvatars.set(true)
+  settings$.threadPreviewLine.set(false)
 })
 
 it('badges the account on the sender avatar when avatars are shown', () => {
@@ -69,4 +70,18 @@ it('keeps the colour bar, and no inline account avatar, when avatars are hidden'
 it('draws no colour bar outside mixed-account lists', () => {
   const { container } = render(<ThreadListItem thread={thread} onSelect={() => {}} />)
   expect(colorBar(container)).toBeNull()
+})
+
+// The subject's paragraph, and whether the preview follows it there or on its own line.
+const lines = (container: HTMLElement) => Array.from(container.querySelectorAll('p')).map((p) => p.textContent)
+
+it('runs the preview after the subject by default', () => {
+  const { container } = render(<ThreadListItem thread={thread} onSelect={() => {}} />)
+  expect(lines(container)).toEqual(['Hello - Hi there'])
+})
+
+it('gives the preview its own line under the subject when asked', () => {
+  settings$.threadPreviewLine.set(true)
+  const { container } = render(<ThreadListItem thread={thread} onSelect={() => {}} />)
+  expect(lines(container)).toEqual(['Hello', 'Hi there'])
 })

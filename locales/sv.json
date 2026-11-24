@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Skickar en SHA-256-hash av varje avsändares e-postadress till Gravatar och, som reserv, avsändarens domän (och vid behov dess överordnade domän) till DuckDuckGo.",
   "settings.appearance.showThreadAvatars": "Visa avatarer i meddelandelistor",
   "settings.appearance.showThreadAvatarsHint": "Stäng av för kompaktare rader. Listor som blandar konton visar fortfarande varje rads konto.",
+  "settings.appearance.threadPreviewLine": "Visa förhandsvisningen på en egen rad",
+  "settings.appearance.threadPreviewLineHint": "Rader i tre nivåer: avsändare, ämne och sedan en förhandsvisning av meddelandet.",
   "settings.appearance.showUnreadAccountBadge": "Visa oläst märke",
   "settings.appearance.showUnreadAccountBadgeHint": "Visa antal olästa meddelanden för varje konto i sidofältet.",
   "settings.appearance.textSize": "Textstorlek",

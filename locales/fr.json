@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Envoie à Gravatar un hachage SHA-256 de l'adresse e-mail de chaque expéditeur et, à défaut, le domaine de l'expéditeur (et, si nécessaire, son domaine parent) à DuckDuckGo.",
   "settings.appearance.showThreadAvatars": "Afficher les avatars dans les listes de messages",
   "settings.appearance.showThreadAvatarsHint": "Désactivez pour des lignes plus compactes. Les listes qui mélangent les comptes indiquent toujours le compte de chaque ligne.",
+  "settings.appearance.threadPreviewLine": "Afficher l'aperçu sur sa propre ligne",
+  "settings.appearance.threadPreviewLineHint": "Lignes sur trois niveaux : expéditeur, objet, puis un aperçu du message.",
   "settings.appearance.showUnreadAccountBadge": "Afficher le badge non lu",
   "settings.appearance.showUnreadAccountBadgeHint": "Afficher le nombre de messages non lus pour chaque compte dans la barre latérale.",
   "settings.appearance.textSize": "Taille du texte",

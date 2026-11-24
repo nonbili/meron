@@ -42,6 +42,7 @@ import {
   SquarePen,
   Contrast,
   AppWindow,
+  Rows3,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -484,6 +485,7 @@ function GeneralSection() {
   const { t } = useTranslation()
   const showRealAvatars = useValue(settings$.showRealAvatars)
   const showThreadAvatars = useValue(settings$.showThreadAvatars)
+  const threadPreviewLine = useValue(settings$.threadPreviewLine)
   const showUnreadAccountBadge = useValue(settings$.showUnreadAccountBadge)
   const showUnifiedInbox = useValue(settings$.showUnifiedInboxInSideNav)
   const showCalendarInSideNav = useValue(settings$.showCalendarInSideNav)
@@ -525,6 +527,13 @@ function GeneralSection() {
           hint={t('settings.appearance.showThreadAvatarsHint')}
           checked={showThreadAvatars}
           onChange={() => settings$.showThreadAvatars.set(!showThreadAvatars)}
+        />
+        <ToggleRow
+          icon={<Rows3 size={15} />}
+          title={t('settings.appearance.threadPreviewLine')}
+          hint={t('settings.appearance.threadPreviewLineHint')}
+          checked={threadPreviewLine}
+          onChange={() => settings$.threadPreviewLine.set(!threadPreviewLine)}
         />
         <AppIconRows />
         <TrayIconRow />

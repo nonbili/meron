@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Στέλνει στο Gravatar έναν κατακερματισμό SHA-256 της διεύθυνσης email κάθε αποστολέα και, εναλλακτικά, τον τομέα του αποστολέα (και, αν χρειαστεί, τον γονικό του τομέα) στο DuckDuckGo.",
   "settings.appearance.showThreadAvatars": "Εμφάνιση avatar στις λίστες μηνυμάτων",
   "settings.appearance.showThreadAvatarsHint": "Απενεργοποιήστε το για πιο συμπαγείς γραμμές. Οι λίστες με πολλούς λογαριασμούς εξακολουθούν να δείχνουν τον λογαριασμό κάθε γραμμής.",
+  "settings.appearance.threadPreviewLine": "Εμφάνιση προεπισκόπησης σε δική της γραμμή",
+  "settings.appearance.threadPreviewLineHint": "Γραμμές τριών επιπέδων: αποστολέας, θέμα και μετά προεπισκόπηση του μηνύματος.",
   "settings.appearance.showUnreadAccountBadge": "Εμφάνιση σήματος μη αναγνωσμένων",
   "settings.appearance.showUnreadAccountBadgeHint": "Εμφάνιση του αριθμού μη αναγνωσμένων μηνυμάτων για κάθε λογαρισμό στην πλαϊνή γραμμή.",
   "settings.appearance.textSize": "Μέγεθος κειμένου",
