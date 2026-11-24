@@ -16,6 +16,11 @@ class MobileCommandsTest {
         assertEquals("""{"email":"em@em1.cloudflare.com","size":96}""", core.lastPayloadJson)
         assertEquals("data:image/png;base64,aGVsbG8=", parseSenderImageResponse(result))
         assertEquals("", parseSenderImageResponse("""{"src":"","kind":""}"""))
+        assertEquals("favicon", parseSenderImageKind(result))
+        assertEquals("gravatar", parseSenderImageKind("""{"src":"data:image/jpeg;base64,AA==","kind":"gravatar"}"""))
+        // Callers ask for the pixels the avatar covers on screen.
+        runSuspend { MobileMailCommandClient(core).resolveSenderImage("em@em1.cloudflare.com", 114) }
+        assertEquals("""{"email":"em@em1.cloudflare.com","size":114}""", core.lastPayloadJson)
     }
 
     @Test

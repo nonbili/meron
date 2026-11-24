@@ -30,7 +30,15 @@ private const val IMAGE_BITMAP_CACHE_MAX_BYTES = 64L * 1024L * 1024L
 
 private class CachedBitmap(
     val bitmap: ImageBitmap,
+    val kind: String,
     val bytes: Long,
+)
+
+/** A cached bitmap with the loader's note on what it is (a sender image's
+ *  "gravatar" or "favicon"); empty when the loader has nothing to say. */
+internal class KindedImageBitmap(
+    val bitmap: ImageBitmap,
+    val kind: String = "",
 )
 
 private val imageBitmapCacheMutex = Mutex()
@@ -45,19 +53,26 @@ private var imageBitmapCacheBytes = 0L
 internal suspend fun loadCachedImageBitmap(
     key: String,
     load: suspend () -> ImageBitmap?,
-): ImageBitmap? {
+): ImageBitmap? = loadCachedKindedImageBitmap(key) { load()?.let { KindedImageBitmap(it) } }?.bitmap
+
+internal suspend fun loadCachedKindedImageBitmap(
+    key: String,
+    load: suspend () -> KindedImageBitmap?,
+): KindedImageBitmap? {
     imageBitmapCacheMutex.withLock {
         imageBitmapCache.remove(key)?.let { cached ->
             imageBitmapCache[key] = cached
-            return cached.bitmap
+            return KindedImageBitmap(cached.bitmap, cached.kind)
         }
     }
-    val bitmap = load() ?: return null
+    val loaded = load() ?: return null
+    val bitmap = loaded.bitmap
     imageBitmapCacheMutex.withLock {
         // Half-float pixels (a 16-bit or wide-gamut source) take twice the room.
         val bytesPerPixel = if (bitmap.config == ImageBitmapConfig.F16) 8L else 4L
         val size = bitmap.width.toLong() * bitmap.height.toLong() * bytesPerPixel
-        imageBitmapCache[key] = CachedBitmap(bitmap, size)
+        imageBitmapCache.remove(key)?.let { imageBitmapCacheBytes -= it.bytes }
+        imageBitmapCache[key] = CachedBitmap(bitmap, loaded.kind, size)
         imageBitmapCacheBytes += size
         while (imageBitmapCacheBytes > IMAGE_BITMAP_CACHE_MAX_BYTES) {
             val eldestKey = imageBitmapCache.keys.firstOrNull() ?: break
@@ -65,5 +80,5 @@ internal suspend fun loadCachedImageBitmap(
             imageBitmapCacheBytes -= eldest.bytes
         }
     }
-    return bitmap
+    return loaded
 }

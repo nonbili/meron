@@ -1370,7 +1370,12 @@ class MobileMailCommandClient(
 
     suspend fun setAccountSenderName(params: AccountNameParams): String = core.invoke(MobileCommand.AccountSetSenderName, params.toJson())
 
-    suspend fun resolveSenderImage(email: String): String = core.invoke(MobileCommand.AvatarResolve, jsonObject("email" to email.jsonString(), "size" to "96"))
+    /** [sizePx] is the pixel size the image is drawn at, so Gravatar returns
+     *  a picture that is sharp on the screen's density; core clamps it. */
+    suspend fun resolveSenderImage(
+        email: String,
+        sizePx: Int = 96,
+    ): String = core.invoke(MobileCommand.AvatarResolve, jsonObject("email" to email.jsonString(), "size" to sizePx.toString()))
 
     suspend fun setAccountAvatar(params: AccountAvatarParams): String = core.invoke(MobileCommand.AccountSetAvatar, params.toJson())
 
