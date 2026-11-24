@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "Vähenda laiad kirjad vestlusvaatesse mahtuvaks.",
   "settings.appearance.chatFullMessages": "Näita vestluses sõnumi kogu sisu",
   "settings.appearance.chatFullMessagesHint": "Pikad sõnumid kasvavad sisu järgi, selle asemel et mullis kerida.",
+  "settings.appearance.pullUpToClose": "Sulgemiseks tõmba üles",
+  "settings.appearance.pullUpToCloseHint": "Vestluse või kirja lõpust edasi üles lohistamine sulgeb selle. Lülita välja, et ainult kerida.",
   "settings.appearance.conversationLayout": "Vestluse paigutus",
   "settings.appearance.conversationLayoutChat": "Vestlus",
   "settings.appearance.conversationLayoutHint": "Vestlus kuvab sõnumeid mullidena. Traditsiooniline laotab need täislaiuses ja ahendab vanemad.",

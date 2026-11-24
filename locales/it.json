@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "Riduce le email larghe per adattarle alla vista della conversazione.",
   "settings.appearance.chatFullMessages": "Mostra il contenuto completo dei messaggi nella chat",
   "settings.appearance.chatFullMessagesHint": "I messaggi lunghi si allungano per intero invece di scorrere nel loro fumetto.",
+  "settings.appearance.pullUpToClose": "Trascina in alto per chiudere",
+  "settings.appearance.pullUpToCloseHint": "Trascinare verso l'alto oltre la fine di una conversazione o di un messaggio lo chiude. Disattiva per scorrere soltanto.",
   "settings.appearance.conversationLayout": "Layout della conversazione",
   "settings.appearance.conversationLayoutChat": "Chat",
   "settings.appearance.conversationLayoutHint": "La chat mostra i messaggi come fumetti. Il layout tradizionale li impila a tutta larghezza e comprime i più vecchi.",

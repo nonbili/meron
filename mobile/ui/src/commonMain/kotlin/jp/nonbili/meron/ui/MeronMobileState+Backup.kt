@@ -323,6 +323,10 @@ internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
                 chatFullMessages = loadAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, false)
             }
 
+            settingKeyFor(PULL_UP_TO_CLOSE_PREF) -> {
+                pullUpToClose = loadAppBoolean(prefs, PULL_UP_TO_CLOSE_PREF, true)
+            }
+
             settingKeyFor(CONVERSATION_FOOTER_PREF) -> {
                 setConversationFooter(loadConversationFooter(prefs))
             }

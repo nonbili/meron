@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "Kecilkan email lebar agar pas dengan tampilan percakapan.",
   "settings.appearance.chatFullMessages": "Tampilkan konten pesan lengkap di obrolan",
   "settings.appearance.chatFullMessagesHint": "Pesan panjang diperluas agar pas, alih-alih menggulir di dalam balon obrolan.",
+  "settings.appearance.pullUpToClose": "Tarik ke atas untuk menutup",
+  "settings.appearance.pullUpToCloseHint": "Menyeret ke atas melewati akhir percakapan atau pesan akan menutupnya. Matikan untuk hanya menggulir.",
   "settings.appearance.conversationLayout": "Tata letak percakapan",
   "settings.appearance.conversationLayoutChat": "Obrolan",
   "settings.appearance.conversationLayoutHint": "Obrolan menampilkan pesan sebagai balon obrolan. Tradisional menumpuknya dengan lebar penuh dan menciutkan pesan yang lebih lama.",

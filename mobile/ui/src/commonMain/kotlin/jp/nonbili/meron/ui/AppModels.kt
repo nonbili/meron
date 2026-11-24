@@ -168,6 +168,11 @@ internal const val AUTO_FIT_MESSAGES_PREF = "auto_fit_messages_v1"
  *  capped box, so only the conversation scrolls. Off by default. */
 internal const val CHAT_FULL_MESSAGES_PREF = "chat_full_messages_v1"
 
+/** Whether a drag up past the bottom of a conversation or the message reader
+ *  pulls the view up to close it. On by default; off, a drag up only ever
+ *  scrolls the content. */
+internal const val PULL_UP_TO_CLOSE_PREF = "pull_up_to_close_v1"
+
 /** What sits at the bottom of a conversation (see [ConversationFooter]). */
 internal const val CONVERSATION_FOOTER_PREF = "conversation_footer_v1"
 

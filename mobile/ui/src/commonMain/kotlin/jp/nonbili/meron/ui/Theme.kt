@@ -444,6 +444,10 @@ val LocalAutoFitMessages = staticCompositionLocalOf { false }
  *  capped box (see MessageBubble). */
 val LocalChatFullMessages = staticCompositionLocalOf { false }
 
+/** Whether a drag up past the bottom of a conversation or the message reader
+ *  pulls the view up to close it (see pullToDismiss). */
+val LocalPullUpToClose = staticCompositionLocalOf { true }
+
 /** The handful of colors a theme swatch paints, mirroring desktop's ThemeSwatch. */
 internal data class ThemePreviewColors(
     val dark: Boolean,
@@ -483,6 +487,7 @@ fun MeronTheme(
     darkMailBodies: Boolean = false,
     autoFitMessages: Boolean = false,
     chatFullMessages: Boolean = false,
+    pullUpToClose: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val resolved = resolveThemeSpec(appearanceMode)
@@ -494,6 +499,7 @@ fun MeronTheme(
         LocalDarkMailBodies provides (darkMailBodies && spec.dark),
         LocalAutoFitMessages provides autoFitMessages,
         LocalChatFullMessages provides chatFullMessages,
+        LocalPullUpToClose provides pullUpToClose,
     ) {
         MaterialTheme(colorScheme = resolved.scheme ?: materialColors(spec), content = content)
     }

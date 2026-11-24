@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "Масштабувати широкі листи за шириною екрана",
   "settings.appearance.chatFullMessages": "Розгортати листи в бесідах повністю",
   "settings.appearance.chatFullMessagesHint": "Завжди показувати повний текст листів замість скороченого вигляду",
+  "settings.appearance.pullUpToClose": "Закривати жестом угору",
+  "settings.appearance.pullUpToCloseHint": "Жест угору за кінець розмови чи листа закриває їх. Вимкніть, щоб лише прокручувати.",
   "settings.appearance.conversationLayout": "Вигляд перегляду розмов",
   "settings.appearance.conversationLayoutChat": "Чат (сучасний)",
   "settings.appearance.conversationLayoutHint": "Виберіть стиль відображення ланцюжків повідомлень",

@@ -168,14 +168,15 @@ internal fun Modifier.pullToDismissLayer(state: PullToDismissState): Modifier =
  * its top ([isAtTop], read as the finger goes down), or a drag up that started
  * with it at its bottom ([isAtBottom]), and that nothing nested in it scrolls,
  * moves the view instead of the content. Flings never pull, so momentum
- * carrying the content to an end stops there.
+ * carrying the content to an end stops there. Without [isAtBottom] the view
+ * never moves up: a drag up only ever scrolls the content.
  */
 @Composable
 internal fun Modifier.pullToDismiss(
     state: PullToDismissState,
     enabled: Boolean = true,
     isAtTop: () -> Boolean,
-    isAtBottom: () -> Boolean,
+    isAtBottom: (() -> Boolean)? = null,
     onDismiss: () -> Unit,
 ): Modifier {
     if (!enabled) return this
@@ -211,7 +212,7 @@ internal fun Modifier.pullToDismiss(
                         return Offset.Zero
                     }
                     if (available.y > 0f && state.armedTop && atTop()) return Offset(0f, state.dragBy(available.y))
-                    if (available.y < 0f && state.armedBottom && atBottom()) return Offset(0f, state.dragBy(available.y))
+                    if (available.y < 0f && state.armedBottom && atBottom?.invoke() == true) return Offset(0f, state.dragBy(available.y))
                     return Offset.Zero
                 }
 
@@ -226,7 +227,7 @@ internal fun Modifier.pullToDismiss(
         awaitEachGesture {
             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             state.armedTop = atTop()
-            state.armedBottom = atBottom()
+            state.armedBottom = atBottom?.invoke() == true
         }
     }.nestedScroll(connection)
 }

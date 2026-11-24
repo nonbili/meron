@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "Réduit les e-mails larges pour qu'ils tiennent dans la vue de conversation.",
   "settings.appearance.chatFullMessages": "Afficher le contenu complet des messages dans le chat",
   "settings.appearance.chatFullMessagesHint": "Les messages longs s’agrandissent au lieu de défiler dans leur bulle.",
+  "settings.appearance.pullUpToClose": "Tirer vers le haut pour fermer",
+  "settings.appearance.pullUpToCloseHint": "Tirer vers le haut au-delà de la fin d'une conversation ou d'un message le ferme. Désactivez pour seulement faire défiler.",
   "settings.appearance.conversationLayout": "Disposition de la conversation",
   "settings.appearance.conversationLayoutChat": "Chat",
   "settings.appearance.conversationLayoutHint": "Le chat affiche les messages sous forme de bulles. Le mode traditionnel les empile sur toute la largeur et réduit les plus anciens.",

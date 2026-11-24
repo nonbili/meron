@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "Reduz os emails largos para caberem na vista da conversa.",
   "settings.appearance.chatFullMessages": "Mostrar o conteúdo completo das mensagens no chat",
   "settings.appearance.chatFullMessagesHint": "As mensagens longas crescem para caber em vez de se deslocarem dentro do balão.",
+  "settings.appearance.pullUpToClose": "Puxar para cima para fechar",
+  "settings.appearance.pullUpToCloseHint": "Arrastar para cima depois do fim de uma conversa ou mensagem fecha-a. Desative para apenas deslocar.",
   "settings.appearance.conversationLayout": "Esquema da conversa",
   "settings.appearance.conversationLayoutChat": "Chat",
   "settings.appearance.conversationLayoutHint": "O chat mostra as mensagens como balões. O tradicional empilha-as em toda a largura e recolhe as mais antigas.",

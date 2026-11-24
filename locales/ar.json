@@ -1463,6 +1463,8 @@
   "settings.appearance.autoFitMessagesHint": "تصغير الرسائل العريضة لتناسب عرض المحادثة.",
   "settings.appearance.chatFullMessages": "عرض محتوى الرسالة كاملًا في الدردشة",
   "settings.appearance.chatFullMessagesHint": "تتمدّد الرسائل الطويلة لتتسع لمحتواها بدلًا من التمرير داخل فقاعتها.",
+  "settings.appearance.pullUpToClose": "اسحب لأعلى للإغلاق",
+  "settings.appearance.pullUpToCloseHint": "السحب لأعلى بعد نهاية المحادثة أو الرسالة يغلقها. أوقفه للتمرير فقط.",
   "settings.appearance.conversationLayout": "تخطيط المحادثة",
   "settings.appearance.conversationLayoutChat": "دردشة",
   "settings.appearance.conversationLayoutHint": "تعرض الدردشة الرسائل كفقاعات. أما التقليدي فيرتّبها بعرض كامل ويطوي الأقدم منها.",

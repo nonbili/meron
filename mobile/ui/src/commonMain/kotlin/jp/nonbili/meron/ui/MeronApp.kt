@@ -364,6 +364,7 @@ fun MeronApp(
             darkMailBodies = state.darkMailBodies,
             autoFitMessages = state.autoFitMessages,
             chatFullMessages = state.chatFullMessages,
+            pullUpToClose = state.pullUpToClose,
         ) {
             MeronMobileScreenContent(
                 state = state,
@@ -1359,6 +1360,11 @@ private fun MeronMobileScreenContent(
                             onToggleChatFullMessages = {
                                 chatFullMessages = !chatFullMessages
                                 saveAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, chatFullMessages)
+                            },
+                            pullUpToClose = pullUpToClose,
+                            onTogglePullUpToClose = {
+                                pullUpToClose = !pullUpToClose
+                                saveAppBoolean(prefs, PULL_UP_TO_CLOSE_PREF, pullUpToClose)
                             },
                             autoFitMessages = autoFitMessages,
                             onToggleAutoFitMessages = {

@@ -63,6 +63,7 @@ internal val mobileSettings =
         MobileSetting(PrefStore.App, DARK_MAIL_BODIES_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, AUTO_FIT_MESSAGES_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, CHAT_FULL_MESSAGES_PREF, PrefType.Bool),
+        MobileSetting(PrefStore.App, PULL_UP_TO_CLOSE_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, SHOW_UNREAD_BADGES_PREF, PrefType.Bool),
         // Layout and navigation.
         MobileSetting(PrefStore.App, SHOW_UNIFIED_INBOX_PREF, PrefType.Bool),
