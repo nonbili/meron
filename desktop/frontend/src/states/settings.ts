@@ -146,6 +146,9 @@ export type Settings = {
   showRealAvatars: boolean
   /** Whether thread list rows show the sender avatar; off gives denser rows. */
   showThreadAvatars: boolean
+  /** Whether thread list rows give the preview its own line under the subject
+   *  (sender, subject, preview), instead of running it after the subject. */
+  threadPreviewLine: boolean
   /** Whether a message that brings its own light design is drawn inverted under
    *  a dark theme, instead of as a light card (see `darkensCanvas`). */
   darkMessageBodies: boolean
@@ -259,6 +262,7 @@ const DB_KEY = {
   messageFontScale: 'message_font_scale',
   showRealAvatars: 'show_real_avatars',
   showThreadAvatars: 'show_thread_avatars',
+  threadPreviewLine: 'thread_preview_line',
   darkMessageBodies: 'dark_message_bodies',
   autoFitMessages: 'auto_fit_messages',
   showUnreadAccountBadge: 'show_unread_account_badge',
@@ -479,6 +483,7 @@ export const settings$ = observable<Settings>({
   messageFontScale: fontBootstrap.messageFontScale,
   showRealAvatars: false,
   showThreadAvatars: true,
+  threadPreviewLine: false,
   darkMessageBodies: false,
   autoFitMessages: false,
   showUnreadAccountBadge: false,
@@ -1021,6 +1026,9 @@ export function hydrateSettings(prefs: Record<string, unknown>) {
     }
     if (typeof prefs[DB_KEY.showThreadAvatars] === 'boolean') {
       settings$.showThreadAvatars.set(prefs[DB_KEY.showThreadAvatars] as boolean)
+    }
+    if (typeof prefs[DB_KEY.threadPreviewLine] === 'boolean') {
+      settings$.threadPreviewLine.set(prefs[DB_KEY.threadPreviewLine] as boolean)
     }
 
     if (typeof prefs[DB_KEY.darkMessageBodies] === 'boolean') {

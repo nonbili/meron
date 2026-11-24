@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Gửi mã băm SHA-256 của địa chỉ email từng người gửi đến Gravatar và gửi tên miền của người gửi (cùng tên miền cha nếu cần) đến DuckDuckGo làm phương án dự phòng.",
   "settings.appearance.showThreadAvatars": "Hiển thị ảnh đại diện trong danh sách thư",
   "settings.appearance.showThreadAvatarsHint": "Tắt để các hàng gọn hơn. Danh sách gộp nhiều tài khoản vẫn đánh dấu tài khoản của từng hàng.",
+  "settings.appearance.threadPreviewLine": "Hiển thị bản xem trước trên dòng riêng",
+  "settings.appearance.threadPreviewLineHint": "Hàng ba dòng: người gửi, tiêu đề, rồi đến bản xem trước của thư.",
   "settings.appearance.showUnreadAccountBadge": "Hiển thị huy hiệu chưa đọc",
   "settings.appearance.showUnreadAccountBadgeHint": "Hiển thị số lượng thư chưa đọc cho mỗi tài khoản trong thanh bên.",
   "settings.appearance.textSize": "Cỡ chữ",

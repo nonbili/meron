@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Nosūta katra sūtītāja e-pasta adreses SHA-256 jaucējvērtību pakalpojumam Gravatar un kā rezerves variantu sūtītāja domēnu (un, ja nepieciešams, tā augstāka līmeņa domēnu) pakalpojumam DuckDuckGo.",
   "settings.appearance.showThreadAvatars": "Rādīt avatārus ziņojumu sarakstos",
   "settings.appearance.showThreadAvatarsHint": "Izslēdziet, lai rindas būtu kompaktākas. Sarakstos ar vairākiem kontiem joprojām tiek norādīts katras rindas konts.",
+  "settings.appearance.threadPreviewLine": "Rādīt priekšskatījumu atsevišķā rindā",
+  "settings.appearance.threadPreviewLineHint": "Trīsrindu ieraksti: sūtītājs, temats un pēc tam ziņojuma priekšskatījums.",
   "settings.appearance.showUnreadAccountBadge": "Rādīt nelasīto emblēmu",
   "settings.appearance.showUnreadAccountBadgeHint": "Rādīt nelasīto ziņojumu skaitu katram kontam sānu joslā.",
   "settings.appearance.textSize": "Teksta izmērs",

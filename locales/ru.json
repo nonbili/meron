@@ -1302,6 +1302,8 @@
   "settings.appearance.showSenderImagesHint": "Отправляет SHA-256-хеш адреса отправителя в Gravatar, а при отсутствии изображения — домен отправителя (и при необходимости его родительский домен) в DuckDuckGo.",
   "settings.appearance.showThreadAvatars": "Показывать аватары в списках писем",
   "settings.appearance.showThreadAvatarsHint": "Отключите, чтобы строки были компактнее. В списках с несколькими аккаунтами аккаунт каждой строки по-прежнему отмечается.",
+  "settings.appearance.threadPreviewLine": "Показывать превью отдельной строкой",
+  "settings.appearance.threadPreviewLineHint": "Строки из трёх линий: отправитель, тема, а под ними превью письма.",
   "settings.appearance.showUnreadAccountBadge": "Показывать счётчик непрочитанных",
   "settings.appearance.showUnreadAccountBadgeHint": "Показывать число непрочитанных писем каждого аккаунта на боковой панели.",
   "settings.appearance.textSize": "Размер текста",

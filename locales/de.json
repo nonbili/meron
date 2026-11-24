@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Sendet einen SHA-256-Hash der E-Mail-Adresse jedes Absenders an Gravatar und ersatzweise die Domain des Absenders (und bei Bedarf deren übergeordnete Domain) an DuckDuckGo.",
   "settings.appearance.showThreadAvatars": "Avatare in Nachrichtenlisten anzeigen",
   "settings.appearance.showThreadAvatarsHint": "Ausschalten für kompaktere Zeilen. Listen mit mehreren Konten kennzeichnen weiterhin das Konto jeder Zeile.",
+  "settings.appearance.threadPreviewLine": "Vorschau in eigener Zeile anzeigen",
+  "settings.appearance.threadPreviewLineHint": "Dreizeilige Einträge: Absender, Betreff und darunter eine Vorschau der Nachricht.",
   "settings.appearance.showUnreadAccountBadge": "Ungelesene Anzahl anzeigen",
   "settings.appearance.showUnreadAccountBadgeHint": "Zeigt die Anzahl ungelesener Nachrichten für jedes Konto in der Seitenleiste an.",
   "settings.appearance.textSize": "Textgröße",

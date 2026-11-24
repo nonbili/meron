@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Verzendt een SHA-256-hash van het e-mailadres van elke afzender naar Gravatar en, als terugvaloptie, het domein van de afzender (en indien nodig het hoofddomein) naar DuckDuckGo.",
   "settings.appearance.showThreadAvatars": "Avatars tonen in berichtenlijsten",
   "settings.appearance.showThreadAvatarsHint": "Uitschakelen voor compactere rijen. Lijsten met meerdere accounts tonen nog steeds het account van elke rij.",
+  "settings.appearance.threadPreviewLine": "Voorbeeld op een eigen regel tonen",
+  "settings.appearance.threadPreviewLineHint": "Rijen van drie regels: afzender, onderwerp en daaronder een voorbeeld van het bericht.",
   "settings.appearance.showUnreadAccountBadge": "Badge voor ongelezen berichten tonen",
   "settings.appearance.showUnreadAccountBadgeHint": "Toon het aantal ongelezen berichten voor elk account in de zijbalk.",
   "settings.appearance.textSize": "Tekstgrootte",

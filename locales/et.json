@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Saadab iga saatja e-posti aadressi SHA-256 räsi Gravatarile ja varulahendusena saatja domeeni (ning vajaduse korral selle ülemise taseme domeeni) DuckDuckGo'le.",
   "settings.appearance.showThreadAvatars": "Kuva sõnumiloendites avatare",
   "settings.appearance.showThreadAvatarsHint": "Lülita välja kompaktsemate ridade jaoks. Mitut kontot segavad loendid märgivad endiselt iga rea kontot.",
+  "settings.appearance.threadPreviewLine": "Kuva eelvaade eraldi real",
+  "settings.appearance.threadPreviewLineHint": "Kolmerealised kirjed: saatja, teema ja seejärel sõnumi eelvaade.",
   "settings.appearance.showUnreadAccountBadge": "Kuva lugemata märk",
   "settings.appearance.showUnreadAccountBadgeHint": "Kuva külgribal iga konto lugemata sõnumite arv.",
   "settings.appearance.textSize": "Teksti suurus",

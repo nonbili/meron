@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "각 발신자 이메일 주소의 SHA-256 해시를 Gravatar로 보내고, 대체 수단으로 발신자 도메인(필요한 경우 상위 도메인도)을 DuckDuckGo로 보냅니다.",
   "settings.appearance.showThreadAvatars": "메시지 목록에 아바타 표시",
   "settings.appearance.showThreadAvatarsHint": "끄면 행이 더 촘촘해집니다. 여러 계정이 섞인 목록에서는 각 행의 계정이 계속 표시됩니다.",
+  "settings.appearance.threadPreviewLine": "미리보기를 별도 줄에 표시",
+  "settings.appearance.threadPreviewLineHint": "3줄 행: 보낸 사람, 제목, 그 아래에 메시지 미리보기.",
   "settings.appearance.showUnreadAccountBadge": "읽지 않은 배지 표시",
   "settings.appearance.showUnreadAccountBadgeHint": "사이드바에 각 계정의 읽지 않은 메시지 수를 표시합니다.",
   "settings.appearance.textSize": "글자 크기",

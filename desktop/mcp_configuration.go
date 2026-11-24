@@ -26,6 +26,7 @@ var mcpAppSettings = map[string]mcpSettingSpec{
 	"spell_check":                   {Type: "boolean", Description: "Spell checking in composers"},
 	"show_real_avatars":             {Type: "boolean", Description: "Show sender avatars"},
 	"show_thread_avatars":           {Type: "boolean", Description: "Show avatars in message lists"},
+	"thread_preview_line":           {Type: "boolean", Description: "Give message list previews their own line (sender, subject, preview)"},
 	"show_unread_account_badge":     {Type: "boolean", Description: "Show unread badges on accounts"},
 	"show_unified_inbox_in_sidenav": {Type: "boolean", Description: "Show unified inbox in navigation"},
 	"font_family":                   {Type: "string", Description: "Interface font family; empty uses default"},

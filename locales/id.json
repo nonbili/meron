@@ -1501,6 +1501,8 @@
   "settings.appearance.showSenderImagesHint": "Mengirim hash SHA-256 dari setiap alamat email pengirim ke Gravatar dan, sebagai alternatif cadangan, domain pengirim (dan jika diperlukan, domain induknya) ke DuckDuckGo.",
   "settings.appearance.showThreadAvatars": "Tampilkan avatar di daftar pesan",
   "settings.appearance.showThreadAvatarsHint": "Matikan untuk baris yang lebih ringkas. Daftar yang menggabungkan akun tetap menandai akun setiap baris.",
+  "settings.appearance.threadPreviewLine": "Tampilkan pratinjau di barisnya sendiri",
+  "settings.appearance.threadPreviewLineHint": "Baris tiga tingkat: pengirim, subjek, lalu pratinjau pesan.",
   "settings.appearance.showUnreadAccountBadge": "Tampilkan lencana belum dibaca",
   "settings.appearance.showUnreadAccountBadgeHint": "Tampilkan jumlah pesan yang belum dibaca untuk setiap akun di bilah samping.",
   "settings.appearance.textSize": "Ukuran teks",

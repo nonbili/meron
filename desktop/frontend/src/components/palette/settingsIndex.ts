@@ -32,6 +32,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { page: 'general', titleKey: 'settings.language.label', keywords: 'locale translation' },
   { page: 'general', titleKey: 'settings.appearance.showSenderImages', keywords: 'avatars pictures photos' },
   { page: 'general', titleKey: 'settings.appearance.showThreadAvatars', keywords: 'gravatar compact density' },
+  { page: 'general', titleKey: 'settings.appearance.threadPreviewLine', keywords: 'gmail three lines snippet subject' },
   {
     page: 'general',
     titleKey: 'settings.appearance.appIconCustom',

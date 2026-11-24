@@ -1498,6 +1498,8 @@
   "settings.appearance.showSenderImagesHint": "Sends a SHA-256 hash of each sender's email address to Gravatar and, as a fallback, the sender's domain (and, if needed, its parent domain) to DuckDuckGo.",
   "settings.appearance.showThreadAvatars": "Show avatars in message lists",
   "settings.appearance.showThreadAvatarsHint": "Turn off for more compact rows. Lists that mix accounts still mark each row's account.",
+  "settings.appearance.threadPreviewLine": "Show preview on its own line",
+  "settings.appearance.threadPreviewLineHint": "Three-line rows: sender, subject, then a preview of the message.",
   "settings.appearance.showUnreadAccountBadge": "Show unread badge",
   "settings.appearance.showUnreadAccountBadgeHint": "Show unread message count for each account in the sidebar.",
   "settings.appearance.textSize": "Text size",
