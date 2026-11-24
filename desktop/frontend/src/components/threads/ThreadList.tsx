@@ -43,6 +43,7 @@ import {
 } from '../../states/mailFolders'
 import { exportFolderAsEml } from '../../states/emlExport'
 import { isRssAccount } from '../../lib/threadActions'
+import { isThreadListDeleteKey, isTyping } from '../../lib/shortcuts'
 import { accountLabel, folderLabel } from '../../lib/kanbanData'
 import { isUnifiedStarred } from '../../lib/unifiedFolders'
 import { AccountAvatar } from '../avatar/AccountAvatar'
@@ -311,7 +312,9 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
         mobilePane === 'threads' ? 'max-[768px]:flex' : 'max-[768px]:hidden'
       }`}
       onKeyDownCapture={(event) => {
-        if (event.key === 'Delete') restoreFocusAfterDeleteRef.current = true
+        // Not from the list's search field: Backspace there edits the query,
+        // and the next selection change must not pull focus out of it.
+        if (isThreadListDeleteKey(event.key) && !isTyping(event.target)) restoreFocusAfterDeleteRef.current = true
       }}
       style={width ? ({ '--thread-list-width': `${width}px` } as CSSProperties) : undefined}
     >

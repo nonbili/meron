@@ -337,6 +337,18 @@ const SHORTCUT_ALIASES: [ShortcutId, Chord][] = [
   ['thread.prev', { alt: true, key: 'ArrowUp' }],
 ]
 
+/** Keys that delete the selected thread while keyboard focus is in the thread
+ * list: ⌫ on a Mac keyboard (which sends Backspace) and Delete/⌦ elsewhere.
+ * Kept apart from SHORTCUT_ALIASES on purpose: an alias fires anywhere bare
+ * shortcuts do, but these are destructive, and Backspace in particular gets
+ * pressed out of habit just after typing, so AppHotkeys only honours them with
+ * focus in the list. A user binding onto one of them still wins. */
+export const THREAD_LIST_DELETE_KEYS = ['Backspace', 'Delete'] as const
+
+export function isThreadListDeleteKey(key: string): boolean {
+  return (THREAD_LIST_DELETE_KEYS as readonly string[]).includes(key)
+}
+
 /** Arrow keys move the caret in a text field, so shortcuts on them stand down
  * while typing, even with Alt held, like the single-key ones. */
 export function isArrowKey(key: string): boolean {
@@ -357,12 +369,24 @@ export function formatShortcut(id: ShortcutId): string[] {
 /** A shortcut's fixed secondary chords, as display parts. Leaves out any a user
  * binding has taken over, since those no longer reach this shortcut. */
 export function formatShortcutAliases(id: ShortcutId): string[][] {
-  return SHORTCUT_ALIASES.filter(([aliasId, chord]) => aliasId === id && shortcutForChord(chord) === id).map(
+  const aliases = SHORTCUT_ALIASES.filter(([aliasId, chord]) => aliasId === id && shortcutForChord(chord) === id).map(
     ([, chord]) => formatChord(chord),
   )
+  if (id !== 'thread.delete') return aliases
+  // The thread-list delete keys, unless a user binding has claimed one. Only
+  // the platform's own key is listed: ⌫ on a Mac, Delete elsewhere.
+  const key = isMac ? 'Backspace' : 'Delete'
+  if (!shortcutForChord({ key })) aliases.unshift(formatChord({ key }))
+  return aliases
 }
 
-const ARROW_GLYPHS: Record<string, string> = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' }
+const KEY_GLYPHS: Record<string, string> = {
+  ArrowUp: '↑',
+  ArrowDown: '↓',
+  ArrowLeft: '←',
+  ArrowRight: '→',
+  ...(isMac ? { Backspace: '⌫', Delete: '⌦' } : {}),
+}
 
 function formatChord(chord: Chord): string[] {
   const parts: string[] = []
@@ -374,7 +398,7 @@ function formatChord(chord: Chord): string[] {
   }
   // Space's KeyboardEvent.key is " ", which would render as an empty badge.
   if (chord.key === ' ') parts.push('Space')
-  else if (ARROW_GLYPHS[chord.key]) parts.push(ARROW_GLYPHS[chord.key])
+  else if (KEY_GLYPHS[chord.key]) parts.push(KEY_GLYPHS[chord.key])
   else parts.push(chord.key.length === 1 ? chord.key.toUpperCase() : chord.key)
   return parts
 }
