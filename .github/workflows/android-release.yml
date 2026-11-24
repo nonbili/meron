@@ -109,6 +109,15 @@ jobs:
           mv android-arm64-v8a-release.apk "meron-${MERON_VERSION_NAME}-arm64-v8a.apk"
           mv android-armeabi-v7a-release.apk "meron-${MERON_VERSION_NAME}-armeabi-v7a.apk"
 
+      - name: Upload issue 59 test APK
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/issue59'
+        uses: actions/upload-artifact@v4
+        with:
+          name: meron-issue59-android
+          path: mobile/android/build/outputs/apk/release/meron-${{ env.MERON_VERSION_NAME }}.apk
+          if-no-files-found: error
+          retention-days: 30
+
       # Never claim the repo-wide "latest release" pointer: the desktop updater
       # reads its manifest from releases/latest/download/latest.json, which an
       # android release would hijack (and 404, since it ships no manifest).
