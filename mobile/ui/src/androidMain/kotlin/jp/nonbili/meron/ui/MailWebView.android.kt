@@ -137,6 +137,11 @@ actual fun MailWebView(
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = false
                 settings.defaultFontSize = 16
+                // The page is served from an https origin, and WebView's default
+                // blocks every http: subresource on one -- so a mail whose images
+                // are http: stays blank even after its remote content is allowed.
+                // Whether remote content loads at all is the CSP's call.
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 // Pinch to zoom, for mail whose text or pictures stay too small
                 // at the size they fit the view in. The on-screen +/- buttons
                 // are the deprecated half of the same switch.

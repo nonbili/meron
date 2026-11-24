@@ -1367,9 +1367,18 @@ internal fun ThreadScreen(
                                 onReply = { conversationReplyTarget?.let(onReplyToMessage) },
                                 onReplyAll = { conversationReplyTarget?.let(onReplyAllToMessage) },
                                 onForward = { conversationReplyTarget?.let(onForward) },
-                                // Named as the top bar's delete is; one that can't
-                                // be undone (Trash, Drafts) asks first.
-                                deleteLabel = deleteLabel,
+                                // Named as the top bar's delete is, except that moving
+                                // to Trash is plain "Delete": the icon says where it
+                                // goes, and the long wording ("Placer dans la
+                                // corbeille") wraps and makes the card taller. One
+                                // that can't be undone (Trash, Drafts) keeps its
+                                // warning name and asks first.
+                                deleteLabel =
+                                    if (thread == null || threadDeleteActionKey(thread.folderRole) == "threads.actions.moveToTrash") {
+                                        tr("buttons.delete")
+                                    } else {
+                                        deleteLabel
+                                    },
                                 onDelete = {
                                     if (thread?.folderRole == "trash" || thread?.folderRole == "drafts") {
                                         confirmFooterDelete = true
