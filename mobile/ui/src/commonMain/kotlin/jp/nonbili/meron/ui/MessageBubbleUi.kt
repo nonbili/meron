@@ -1556,7 +1556,11 @@ internal fun HtmlMessageBody(
                   document.addEventListener('click', function (event) {
                     var target = event.target;
                     var image = target && target.closest ? target.closest('img[src]') : null;
-                    if (image) {
+                    // A picture inside a link is the link's button (a
+                    // newsletter's "Read more"), so the link wins.
+                    var linkAround = image && image.closest('a[href]');
+                    var linkHref = linkAround ? linkAround.getAttribute('href') : '';
+                    if (image && !(linkHref && linkHref.charAt(0) !== '#')) {
                       var src = image.getAttribute('src');
                       if (src) {
                         event.preventDefault();

@@ -316,12 +316,18 @@ internal fun mailMediaMimeType(filename: String): String =
         else -> "application/octet-stream"
     }
 
+// Read by pattern, not with java.net.URI: URI rejects characters a browser takes
+// in its stride (`|`, `{`, `^`, a space), which tracking links in mail are full
+// of, and a link it failed to parse used to be dropped without a word.
+private val urlScheme = Regex("""^([a-z][a-z0-9+.-]*):""", RegexOption.IGNORE_CASE)
+private val urlHost = Regex("""^[a-z][a-z0-9+.-]*://(?:[^/?#@]*@)?([^/?#:]*)""", RegexOption.IGNORE_CASE)
+
 internal fun externalMailUrl(url: String): String? {
     val value = url.trim()
     if (value.isEmpty()) return null
-    val host = runCatching { URI(value).host }.getOrNull()
+    val host = urlHost.find(value)?.groupValues?.get(1)
     if (isMailWebViewOrigin(host)) return null
-    val scheme = runCatching { URI(value).scheme?.lowercase() }.getOrNull() ?: return null
+    val scheme = urlScheme.find(value)?.groupValues?.get(1)?.lowercase() ?: return null
     return value.takeUnless {
         scheme in setOf("intent", "javascript", "file", "content", "data", "cid", "about") ||
             isMeronOAuthCallbackScheme(scheme)
