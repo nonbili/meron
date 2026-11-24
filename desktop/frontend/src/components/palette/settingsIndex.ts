@@ -3,6 +3,7 @@ import { update$ } from '../../states/update'
 import { windowChrome$ } from '../../lib/windowChrome'
 import { isMac } from '../../lib/shortcuts'
 import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
+import { isWindowsPlatform } from '../../lib/platform'
 import { isLocalAccountId } from '../../states/accounts'
 import type { Account } from '../../types'
 
@@ -44,6 +45,12 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     titleKey: 'settings.appearance.monochromeTrayIcon',
     keywords: 'tray menu bar icon',
     available: () => offersMonochromeTrayIcon(navigator.userAgent, navigator.platform ?? ''),
+  },
+  {
+    page: 'general',
+    titleKey: 'settings.appearance.showTaskbarUnreadBadge',
+    keywords: 'taskbar unread badge count overlay icon',
+    available: () => isWindowsPlatform(navigator.userAgent, navigator.platform ?? ''),
   },
   { page: 'general', titleKey: 'settings.appearance.uiFont', keywords: 'typography typeface font family' },
   { page: 'general', titleKey: 'settings.appearance.textSize', keywords: 'font size scale zoom' },

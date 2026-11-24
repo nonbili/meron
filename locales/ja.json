@@ -1501,6 +1501,8 @@
   "settings.appearance.conversationToolbarHint": "固定したアクションは会話の上部に表示され、それ以外は ⋯ メニューに残ります。",
   "settings.appearance.showSenderImages": "送信者の画像を表示",
   "settings.appearance.showSenderImagesHint": "各送信者のメールアドレスのSHA-256ハッシュをGravatarに送信し、代替として送信者のドメイン（必要に応じて親ドメインも）をDuckDuckGoに送信します。",
+  "settings.appearance.showTaskbarUnreadBadge": "タスクバーの未読バッジ",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "受信トレイの未読件数をタスクバーアイコンに表示します。",
   "settings.appearance.showThreadAvatars": "メッセージ一覧にアバターを表示",
   "settings.appearance.showThreadAvatarsHint": "オフにすると行がよりコンパクトになります。複数のアカウントが混在する一覧では、各行のアカウントは引き続き表示されます。",
   "settings.appearance.threadPreviewLine": "プレビューを別の行に表示",

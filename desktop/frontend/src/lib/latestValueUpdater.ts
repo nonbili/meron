@@ -4,7 +4,13 @@ type Send<T> = (value: T) => Promise<unknown>
 // one tray update in flight and, if state changes while it is running, send the
 // newest value immediately afterwards. Intermediate values can be coalesced:
 // only the final value matters. Used for the unread count and tray style.
-export function createLatestValueUpdater<T>(send: Send<T>, { deduplicate = true } = {}) {
+export function createLatestValueUpdater<T>(
+  send: Send<T>,
+  {
+    deduplicate = true,
+    equals = (a: T, b: T) => a === b,
+  }: { deduplicate?: boolean; equals?: (a: T, b: T) => boolean } = {},
+) {
   let desired: T | undefined
   let failed = false
   let version = 0
@@ -34,7 +40,8 @@ export function createLatestValueUpdater<T>(send: Send<T>, { deduplicate = true 
         }
         retriedVersion = -1
         failed = false
-        if (sendingVersion === version || desired === value) return
+        if (sendingVersion === version || (desired !== undefined && value !== undefined && equals(desired, value)))
+          return
       }
     } finally {
       running = false
@@ -42,7 +49,7 @@ export function createLatestValueUpdater<T>(send: Send<T>, { deduplicate = true 
   }
 
   return (value: T) => {
-    if (deduplicate && desired === value && !failed) return
+    if (deduplicate && desired !== undefined && equals(desired, value) && !failed) return
     desired = value
     version += 1
     void flush()

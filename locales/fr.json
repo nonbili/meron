@@ -1501,6 +1501,8 @@
   "settings.appearance.conversationToolbarHint": "Les actions épinglées s'affichent en haut de la conversation ; les autres restent dans son menu ⋯.",
   "settings.appearance.showSenderImages": "Afficher les photos des expéditeurs",
   "settings.appearance.showSenderImagesHint": "Envoie à Gravatar un hachage SHA-256 de l'adresse e-mail de chaque expéditeur et, à défaut, le domaine de l'expéditeur (et, si nécessaire, son domaine parent) à DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Badge de non-lus dans la barre des tâches",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Afficher le nombre de messages non lus de la boîte de réception sur l'icône de la barre des tâches.",
   "settings.appearance.showThreadAvatars": "Afficher les avatars dans les listes de messages",
   "settings.appearance.showThreadAvatarsHint": "Désactivez pour des lignes plus compactes. Les listes qui mélangent les comptes indiquent toujours le compte de chaque ligne.",
   "settings.appearance.threadPreviewLine": "Afficher l'aperçu sur sa propre ligne",

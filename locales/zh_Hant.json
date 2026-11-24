@@ -1501,6 +1501,8 @@
   "settings.appearance.conversationToolbarHint": "固定的動作會顯示在對話頂部，其餘的保留在 ⋯ 選單中。",
   "settings.appearance.showSenderImages": "顯示寄件者圖片",
   "settings.appearance.showSenderImagesHint": "將每位寄件者電子郵件地址的 SHA-256 雜湊傳送給 Gravatar，並將寄件者的網域（必要時也包括其父網域）傳送給 DuckDuckGo 作為備用方案。",
+  "settings.appearance.showTaskbarUnreadBadge": "工作列未讀徽章",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "在工作列圖示上顯示收件匣未讀訊息數。",
   "settings.appearance.showThreadAvatars": "在郵件列表中顯示頭像",
   "settings.appearance.showThreadAvatarsHint": "關閉後列更緊湊。混合多個帳戶的列表仍會標示每列所屬的帳戶。",
   "settings.appearance.threadPreviewLine": "在獨立一行顯示預覽",

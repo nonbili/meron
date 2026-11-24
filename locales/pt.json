@@ -1501,6 +1501,8 @@
   "settings.appearance.conversationToolbarHint": "As ações afixadas ficam no topo da conversa; as restantes ficam no menu ⋯.",
   "settings.appearance.showSenderImages": "Mostrar imagens do remetente",
   "settings.appearance.showSenderImagesHint": "Envia ao Gravatar um hash SHA-256 do endereço de e-mail de cada remetente e, como alternativa, o domínio do remetente (e, se necessário, o respetivo domínio principal) ao DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Indicador de não lidas na barra de tarefas",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Mostrar o número de mensagens não lidas da caixa de entrada no ícone da barra de tarefas.",
   "settings.appearance.showThreadAvatars": "Mostrar avatares nas listas de mensagens",
   "settings.appearance.showThreadAvatarsHint": "Desative para linhas mais compactas. As listas que misturam contas continuam a indicar a conta de cada linha.",
   "settings.appearance.threadPreviewLine": "Mostrar a pré-visualização numa linha própria",

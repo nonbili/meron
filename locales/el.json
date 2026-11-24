@@ -1501,6 +1501,8 @@
   "settings.appearance.conversationToolbarHint": "Οι καρφιτσωμένες ενέργειες εμφανίζονται στο πάνω μέρος της συνομιλίας· οι υπόλοιπες μένουν στο μενού ⋯.",
   "settings.appearance.showSenderImages": "Εμφάνιση εικόνων αποστολέα",
   "settings.appearance.showSenderImagesHint": "Στέλνει στο Gravatar έναν κατακερματισμό SHA-256 της διεύθυνσης email κάθε αποστολέα και, εναλλακτικά, τον τομέα του αποστολέα (και, αν χρειαστεί, τον γονικό του τομέα) στο DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Ένδειξη μη αναγνωσμένων στη γραμμή εργασιών",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Εμφάνιση του αριθμού μη αναγνωσμένων μηνυμάτων των εισερχομένων στο εικονίδιο της γραμμής εργασιών.",
   "settings.appearance.showThreadAvatars": "Εμφάνιση avatar στις λίστες μηνυμάτων",
   "settings.appearance.showThreadAvatarsHint": "Απενεργοποιήστε το για πιο συμπαγείς γραμμές. Οι λίστες με πολλούς λογαριασμούς εξακολουθούν να δείχνουν τον λογαριασμό κάθε γραμμής.",
   "settings.appearance.threadPreviewLine": "Εμφάνιση προεπισκόπησης σε δική της γραμμή",

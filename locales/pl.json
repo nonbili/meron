@@ -1501,6 +1501,8 @@
   "settings.appearance.conversationToolbarHint": "Przypięte działania są na górze rozmowy, pozostałe zostają w menu ⋯.",
   "settings.appearance.showSenderImages": "Pokaż zdjęcia nadawców",
   "settings.appearance.showSenderImagesHint": "Wysyła skrót SHA-256 adresu e-mail każdego nadawcy do Gravatara, a w ramach opcji zapasowej domenę nadawcy (i w razie potrzeby jej domenę nadrzędną) do DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Plakietka nieprzeczytanych na pasku zadań",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Pokazuj liczbę nieprzeczytanych wiadomości w skrzynce odbiorczej na ikonie paska zadań.",
   "settings.appearance.showThreadAvatars": "Pokazuj awatary na listach wiadomości",
   "settings.appearance.showThreadAvatarsHint": "Wyłącz, aby wiersze były bardziej zwarte. Listy łączące konta nadal oznaczają konto każdego wiersza.",
   "settings.appearance.threadPreviewLine": "Pokazuj podgląd w osobnym wierszu",

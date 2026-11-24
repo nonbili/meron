@@ -1501,6 +1501,8 @@
   "settings.appearance.conversationToolbarHint": "Tindakan yang disematkan ada di bagian atas percakapan; sisanya tetap di menu ⋯.",
   "settings.appearance.showSenderImages": "Tampilkan gambar pengirim",
   "settings.appearance.showSenderImagesHint": "Mengirim hash SHA-256 dari setiap alamat email pengirim ke Gravatar dan, sebagai alternatif cadangan, domain pengirim (dan jika diperlukan, domain induknya) ke DuckDuckGo.",
+  "settings.appearance.showTaskbarUnreadBadge": "Lencana belum dibaca di taskbar",
+  "settings.appearance.showTaskbarUnreadBadgeHint": "Tampilkan jumlah pesan belum dibaca di kotak masuk pada ikon taskbar.",
   "settings.appearance.showThreadAvatars": "Tampilkan avatar di daftar pesan",
   "settings.appearance.showThreadAvatarsHint": "Matikan untuk baris yang lebih ringkas. Daftar yang menggabungkan akun tetap menandai akun setiap baris.",
   "settings.appearance.threadPreviewLine": "Tampilkan pratinjau di barisnya sendiri",
