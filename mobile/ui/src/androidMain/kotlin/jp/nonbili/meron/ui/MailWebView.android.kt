@@ -51,6 +51,7 @@ actual fun MailWebView(
     onNaturalWidth: (Dp) -> Unit,
     onOverflowExtent: (Int, Int) -> Unit,
     mediaMissing: Int,
+    scrollsItself: Boolean,
 ) {
     val mediaRecovery = remember { MailMediaRecovery(mediaMissing) }
     val latestOnOverflowExtent = rememberUpdatedState(onOverflowExtent)
@@ -148,8 +149,9 @@ actual fun MailWebView(
                 settings.setSupportZoom(true)
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
-                // The view sizes to content, so it never scrolls internally --
-                // except sideways once zoomed in (see LongPressWebView).
+                // Sized to content, the view never scrolls internally -- except
+                // sideways once zoomed in, or down a long mail it is capped
+                // short of (see LongPressWebView and scrollsItself).
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 setOnLongClickListener {
@@ -277,6 +279,9 @@ actual fun MailWebView(
             }
             // Both ways explicitly, as with the settings above: the view is
             // retained, and white is WebView's own default.
+            // Shorter than its document, the view scrolls it itself and shows
+            // where it is; sized to the document, there is nothing to scroll.
+            webView.isVerticalScrollBarEnabled = scrollsItself
             webView.setBackgroundColor(if (transparentBackground) Color.TRANSPARENT else Color.WHITE)
             val documentChanged = webView.tag != html
             mediaRecovery.update(mediaMissing, documentChanged)
@@ -394,7 +399,10 @@ private class LongPressWebView(
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - lastTouchX
                 val dy = event.y - lastTouchY
-                if (ownsDrag(dx, dy, touchSlop, canScrollHorizontally(if (dx < 0) 1 else -1))) {
+                if (
+                    ownsDrag(dx, dy, touchSlop, canScrollHorizontally(if (dx < 0) 1 else -1)) ||
+                    ownsDrag(dy, dx, touchSlop, canScrollVertically(if (dy < 0) 1 else -1))
+                ) {
                     parent?.requestDisallowInterceptTouchEvent(true)
                 }
             }
@@ -404,7 +412,8 @@ private class LongPressWebView(
 }
 
 /** Whether a one-finger drag of ([dx], [dy]) from where it went down pans the
- *  zoomed page sideways rather than scrolling what the web view sits in. */
+ *  page along x rather than scrolling what the web view sits in. Called with the
+ *  axes swapped for a page the view scrolls down itself. */
 internal fun ownsDrag(
     dx: Float,
     dy: Float,
@@ -438,3 +447,5 @@ internal actual val MailWebViewFollowsSystemFontScale: Boolean = true
 internal actual val MailWebViewFitsWideContent: Boolean = true
 
 internal actual val MailWebViewPinchZooms: Boolean = true
+
+internal actual val MailWebViewScrollsItself: Boolean = true
