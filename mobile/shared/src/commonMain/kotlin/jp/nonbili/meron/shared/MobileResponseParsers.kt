@@ -914,6 +914,19 @@ private fun String.ruleResponseBody(): String =
         ?.takeIf { it.startsWith("{") }
         ?: this
 
+/** What a run of a saved rule on existing mail would take, and skip for want of a downloaded body. */
+data class RuleMatches(
+    val count: Int = 0,
+    val withoutBody: Int = 0,
+)
+
+/** The answer to `mail.ruleMatches`. */
+fun parseRuleMatchesResponse(responseJson: String): RuleMatches =
+    RuleMatches(
+        count = responseJson.findJsonLongProperty("count")?.toInt() ?: 0,
+        withoutBody = responseJson.findJsonLongProperty("without_body")?.toInt() ?: 0,
+    )
+
 /** The `count` answering `mail.ruleMatches` and `mail.runRule`. */
 fun parseRuleCountResponse(responseJson: String): Int = responseJson.findJsonLongProperty("count")?.toInt() ?: 0
 

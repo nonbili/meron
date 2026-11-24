@@ -953,6 +953,14 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun parsesWhatARunOfARuleWouldSkip() {
+        assertEquals(RuleMatches(count = 3, withoutBody = 2), parseRuleMatchesResponse("""{"count":3,"without_body":2}"""))
+        assertEquals(RuleMatches(count = 3), parseRuleMatchesResponse("""{"id":1,"result":{"count":3}}"""))
+        assertEquals(true, RuleCondition("subject_or_body", "x").readsBody)
+        assertEquals(false, RuleCondition("subject", "x").readsBody)
+    }
+
+    @Test
     fun parsesRuleStatus() {
         val status =
             parseRuleStatusResponse(

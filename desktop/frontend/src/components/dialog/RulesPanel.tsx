@@ -10,6 +10,7 @@ import { accounts$, isSendableAccount } from '../../states/accounts'
 import {
   loadRules,
   loadRuleStatus,
+  readsBody,
   ruleMatches,
   runRule,
   saveRules,
@@ -217,21 +218,24 @@ export function RulesPanel() {
   const run = async (rule: Rule) => {
     setStarting(rule.id)
     try {
-      const count = await ruleMatches(rule.id)
+      const { count, withoutBody } = await ruleMatches(rule.id)
+      // A rule reading the body can't tell about mail whose body isn't here.
+      const skipped = withoutBody > 0 ? t('rules.runWithoutBody', { count: withoutBody }) : ''
       if (count === 0) {
-        showToast(t(rule.sent ? 'rules.runSentNothing' : 'rules.runNothing'))
+        showToast([t(rule.sent ? 'rules.runSentNothing' : 'rules.runNothing'), skipped].filter(Boolean).join(' '))
         return
       }
       const removes = rule.move_to === 'trash' || (rule.move_to === 'folder' && rule.folder_account !== '')
       // Sending mail out can't be undone, so it is what the question is about.
       const forwards = !rule.sent && !!rule.forward_to
+      const question = rule.sent
+        ? t('rules.runSentConfirm', { count })
+        : forwards
+          ? t('rules.runForwardConfirm', { count, addresses: rule.forward_to })
+          : t(rule.move_to === 'trash' ? 'rules.runTrashConfirm' : 'rules.runConfirm', { count })
       const confirmed = await confirmAction({
         title: t('rules.run'),
-        message: rule.sent
-          ? t('rules.runSentConfirm', { count })
-          : forwards
-            ? t('rules.runForwardConfirm', { count, addresses: rule.forward_to })
-            : t(rule.move_to === 'trash' ? 'rules.runTrashConfirm' : 'rules.runConfirm', { count }),
+        message: [question, skipped].filter(Boolean).join('\n'),
         confirmLabel: t('rules.runAction'),
         cancelLabel: t('buttons.cancel'),
         tone: removes || forwards ? 'danger' : 'default',
@@ -293,6 +297,7 @@ export function RulesPanel() {
             folder: '',
             folder_account: '',
             forward_to: '',
+            conditions: draft.conditions.filter((condition) => !readsBody(condition.field)),
           }
         : { sent },
     )
@@ -504,6 +509,7 @@ export function RulesPanel() {
           <RuleConditions
             conditions={draft.conditions}
             matchAny={draft.match_any}
+            sent={draft.sent}
             onChange={(conditions, match_any) => change({ conditions, match_any })}
           />
         </SettingsGroup>

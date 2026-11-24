@@ -2286,7 +2286,9 @@ pub(crate) fn mobile_rule_matches(data_dir: &str, params: &Value) -> Result<Valu
     with_mobile_db(data_dir, |conn| {
         let count =
             store::count_existing_rule_matches(&conn, &id).map_err(|err| err.to_string())?;
-        Ok(json!({ "count": count }))
+        let without_body =
+            store::count_existing_rule_without_body(&conn, &id).map_err(|err| err.to_string())?;
+        Ok(json!({ "count": count, "without_body": without_body }))
     })
 }
 

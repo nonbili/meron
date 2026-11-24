@@ -900,7 +900,7 @@ async fn sync_messages_with_policy(
     let account = account.to_string();
     let folder = folder.to_string();
     // Outside the network timeout: always observe the committed result.
-    let (mut result, removal_guard) = tokio::task::spawn_blocking(move || {
+    let (mut result, removal_guard, first_seen) = tokio::task::spawn_blocking(move || {
     let account = account.as_str();
     let folder = folder.as_str();
     let db = crate::log::timed_db_lock(&engine.db, "sync_messages.persist");
@@ -1030,7 +1030,7 @@ async fn sync_messages_with_policy(
     }
     Ok::<_, anyhow::Error>((SyncMessagesResult {
         count, messages: synced_messages, arrivals,
-    }, removal_guard))
+    }, removal_guard, first_seen))
     }).await??;
 
     // The main sync is already committed. Catch-up gets its own small budget;
@@ -1089,6 +1089,16 @@ async fn sync_messages_with_policy(
             ),
         }
     }
+    // Rules reading the body see the new mail once it is here: before the
+    // tags are pushed and the actions run, so theirs go out with the rest.
+    check_rule_bodies(
+        &tag_engine,
+        &tag_account,
+        &rule_folder,
+        synced_validity,
+        &first_seen,
+    )
+    .await;
     let tags_pending = store::has_pending_tags(&tag_engine.db.lock().unwrap(), &tag_account)?;
     if tags_pending {
         spawn_tag_push(&tag_engine, &tag_account);
@@ -1112,6 +1122,9 @@ async fn sync_messages_with_policy(
         // A large message can take longer to copy than any sync may wait.
         Err(_) => spawn_rule_worker(&tag_engine, &tag_account, &rule_folder),
     }
+    // Only now, with this sync's actions and what they spared from notifying
+    // done: the backlog's actions go to a worker of their own.
+    spawn_rule_body_backlog(&tag_engine, &tag_account, &rule_folder, synced_validity);
     result
         .arrivals
         .retain(|message| !silenced.contains(&message.uid));

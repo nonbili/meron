@@ -149,8 +149,10 @@ pub(crate) async fn dispatch(
         }
         "rules.matches" => {
             let id = req_str(p, "id")?;
-            let count = store::count_existing_rule_matches(&engine.db.lock().unwrap(), &id)?;
-            Ok(json!({ "count": count }))
+            let db = engine.db.lock().unwrap();
+            let count = store::count_existing_rule_matches(&db, &id)?;
+            let without_body = store::count_existing_rule_without_body(&db, &id)?;
+            Ok(json!({ "count": count, "without_body": without_body }))
         }
         "rules.run" => {
             let id = req_str(p, "id")?;

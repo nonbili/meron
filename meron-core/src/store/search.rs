@@ -79,6 +79,66 @@ pub fn matching_uids(
     Ok(hits.into_iter().map(|header| header.uid).collect())
 }
 
+/// Text that a downloaded body counts as: its plain text, or its HTML when it
+/// has no other. NULL until it is downloaded. SQL over `messages m`.
+pub(crate) const RULE_BODY_TEXT: &str = "COALESCE(m.body, json_extract(m.json, '$.body_html'))";
+
+/// Whether a rule can read the body: downloaded, and not encrypted mail that
+/// couldn't be opened, or only partly, whose stored body says nothing of what
+/// the rest holds. SQL
+/// over `messages m`.
+pub(crate) const RULE_BODY_READABLE: &str =
+    "(COALESCE(m.body, json_extract(m.json, '$.body_html')) IS NOT NULL
+     AND NOT (COALESCE(json_extract(m.json, '$.crypto.encrypted'), 0) = 1
+              AND json_extract(m.json, '$.crypto.decrypted_with') IS NULL)
+     AND COALESCE(json_extract(m.json, '$.crypto.problem'), '')
+         NOT IN ('partly_encrypted', 'inline_in_html'))";
+
+/// Which of `uids` in `folder` have `needle` in their body, or in their
+/// subject too with `with_subject`, ignoring case. Mail whose body can't be
+/// read matches neither way: the caller waits for it.
+pub fn body_matching_uids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    needle: &str,
+    with_subject: bool,
+    uids: &[u32],
+) -> Result<Vec<u32>> {
+    let needle = needle.trim().to_lowercase();
+    if needle.is_empty() || uids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let list = uids
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut stmt = conn.prepare(&format!(
+        "SELECT m.uid, COALESCE(m.subject, ''), m.body, json_extract(m.json, '$.body_html')
+         FROM messages m
+         WHERE m.account = ?1 AND m.folder = ?2 AND m.uid IN ({list})
+           AND {RULE_BODY_READABLE}"
+    ))?;
+    let mut rows = stmt.query(params![account, folder])?;
+    let mut hits = Vec::new();
+    while let Some(row) = rows.next()? {
+        let found = |text: &str| text.to_lowercase().contains(&needle);
+        let subject: String = row.get(1)?;
+        // Mail cached with only its HTML reads as opening it would show it.
+        let body = match row.get::<_, Option<String>>(2)? {
+            Some(body) => body,
+            None => {
+                crate::parse::render_body(&row.get::<_, Option<String>>(3)?.unwrap_or_default())
+            }
+        };
+        if (with_subject && found(&subject)) || found(&body) {
+            hits.push(row.get(0)?);
+        }
+    }
+    Ok(hits)
+}
+
 fn search_messages_among(
     conn: &Connection,
     account: &str,

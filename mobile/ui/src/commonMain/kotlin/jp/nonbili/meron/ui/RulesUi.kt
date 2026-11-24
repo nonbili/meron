@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.Rule
 import jp.nonbili.meron.shared.RuleCondition
+import jp.nonbili.meron.shared.RuleMatches
 import jp.nonbili.meron.shared.RuleStatus
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import kotlinx.coroutines.delay
@@ -86,7 +87,8 @@ private var nextConditionKey = 0
 
 private fun conditionRow(condition: RuleCondition = RuleCondition()) = ConditionRow(nextConditionKey++, condition)
 
-private val RULE_FIELDS = listOf("from", "to", "subject", "words", "tag", "attachment", "unread", "starred")
+/** The fields a new row may take: `words` only ever comes from an older rule. */
+private val RULE_FIELDS = listOf("from", "to", "subject", "body", "subject_or_body", "tag", "attachment", "unread", "starred")
 
 /** Whether a condition says anything: one left blank is dropped on save. */
 private fun RuleCondition.isSet(): Boolean = !valued || value.isNotBlank()
@@ -296,7 +298,9 @@ private fun ruleFieldLabel(field: String): String =
         "from" -> tr("composer.fields.from")
         "to" -> tr("composer.fields.to")
         "subject" -> tr("composer.fields.subject")
-        "words" -> tr("search.hasWords")
+        "body" -> tr("rules.field.body")
+        "subject_or_body" -> tr("rules.field.subjectOrBody")
+        "words" -> tr("rules.field.words")
         "tag" -> tr("rules.field.tag")
         "attachment" -> tr("filters.hasAttachment")
         "unread" -> tr("filters.unread")
@@ -381,6 +385,8 @@ private fun ConditionPicker(
 private fun MeronMobileState.RuleConditionsEditor(
     rows: List<ConditionRow>,
     matchAny: Boolean,
+    // For mail the user sends, acted on before any body is downloaded.
+    sent: Boolean,
     onChange: (List<ConditionRow>, Boolean) -> Unit,
 ) {
     fun update(
@@ -388,6 +394,11 @@ private fun MeronMobileState.RuleConditionsEditor(
         next: RuleCondition,
     ) = onChange(rows.map { if (it.key == key) it.copy(condition = next) else it }, matchAny)
 
+    var tags by remember { mutableStateOf(emptyList<String>()) }
+    val wantsTags = rows.any { it.condition.field == "tag" }
+    LaunchedEffect(wantsTags) {
+        if (wantsTags) tags = loadTagCounts().map { it.tag }.sorted()
+    }
     val count = rows.size + 1 + if (rows.size > 1) 1 else 0
     var at = 0
 
@@ -429,15 +440,24 @@ private fun MeronMobileState.RuleConditionsEditor(
             val label = ruleFieldLabel(condition.field)
             val (yes, no) = ruleOperators(condition)
             val fieldOptions =
-                RULE_FIELDS.map { field ->
-                    ruleFieldLabel(field) to {
-                        // A value only carries over between fields that take the same kind.
-                        val addresses = setOf("from", "to")
-                        val picked = RuleCondition(field = field)
-                        val kept = picked.valued && (condition.field in addresses) == (field in addresses)
-                        update(row.key, condition.copy(field = field, value = if (kept) condition.value else ""))
+                // A row keeps the field it has, even one no new row is offered.
+                (RULE_FIELDS.filterNot { sent && RuleCondition(field = it).readsBody } + listOf(condition.field))
+                    .distinct()
+                    .map { field ->
+                        ruleFieldLabel(field) to {
+                            // A value only carries over between fields that take the same kind:
+                            // text can't become a tag, which has to be one there is.
+                            fun kind(of: String) =
+                                when {
+                                    !RuleCondition(field = of).valued -> ""
+                                    of == "from" || of == "to" -> "address"
+                                    of == "tag" -> "tag"
+                                    else -> "text"
+                                }
+                            val kept = kind(field).isNotEmpty() && kind(field) == kind(condition.field)
+                            update(row.key, condition.copy(field = field, value = if (kept) condition.value else ""))
+                        }
                     }
-                }
             Surface(
                 shape = connectedShape(position()),
                 color = MaterialTheme.colorScheme.surface,
@@ -477,7 +497,16 @@ private fun MeronMobileState.RuleConditionsEditor(
                     }
                     if (condition.valued) {
                         Box(Modifier.padding(end = 12.dp)) {
-                            if (condition.field == "from" || condition.field == "to") {
+                            if (condition.field == "tag") {
+                                // Picked from the tags there are: one mistyped would match
+                                // nothing, or everything when negated.
+                                val shown = if (condition.value.isEmpty() || condition.value in tags) tags else listOf(condition.value) + tags
+                                ConditionPicker(
+                                    value = condition.value.ifEmpty { tr("rules.chooseTag") },
+                                    description = label,
+                                    options = shown.map { tag -> tag to { update(row.key, condition.copy(value = tag)) } },
+                                )
+                            } else if (condition.field == "from" || condition.field == "to") {
                                 SearchOptionsAddressField(this@RuleConditionsEditor, "", label, condition.value, {}) {
                                     update(row.key, condition.copy(value = it))
                                 }
@@ -539,7 +568,7 @@ internal fun MeronMobileState.RulesPage(
     // which as a list would mean all of them.
     var scoped by remember { mutableStateOf(false) }
     // The rule waiting for a yes, and how much mail it would run on.
-    var confirmRun by remember { mutableStateOf<Pair<Rule, Int>?>(null) }
+    var confirmRun by remember { mutableStateOf<Pair<Rule, RuleMatches>?>(null) }
     var confirmDelete by remember { mutableStateOf<Rule?>(null) }
     var runNotice by remember { mutableStateOf("") }
     var runStarted by remember { mutableStateOf<Int?>(null) }
@@ -636,7 +665,10 @@ internal fun MeronMobileState.RulesPage(
     val failed = tr("rules.runFailed")
     val nothing = tr("rules.runNothing")
     val nothingSent = tr("rules.runSentNothing")
-    confirmRun?.let { (rule, count) ->
+
+    fun withoutBody(count: Int) = trs("rules.runWithoutBody", mapOf("count" to count.toString())).takeIf { count > 0 }
+    confirmRun?.let { (rule, matches) ->
+        val count = matches.count
         // Sending mail out can't be undone, so it is what the question is about.
         val message =
             when {
@@ -648,7 +680,12 @@ internal fun MeronMobileState.RulesPage(
         AlertDialog(
             onDismissRequest = { confirmRun = null },
             title = { Text(tr("rules.run")) },
-            text = { Text(tr(message, mapOf("count" to count.toString(), "addresses" to rule.forwardTo))) },
+            text = {
+                val question = tr(message, mapOf("count" to count.toString(), "addresses" to rule.forwardTo))
+                // A rule reading the body can't tell about mail whose body isn't here.
+                val skipped = tr("rules.runWithoutBody", mapOf("count" to matches.withoutBody.toString())).takeIf { matches.withoutBody > 0 }
+                Text(listOfNotNull(question, skipped).joinToString("\n"))
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -917,12 +954,24 @@ internal fun MeronMobileState.RulesPage(
                                             enabled = !saving && !rule.disabled,
                                             onClick = {
                                                 coroutines.launch {
-                                                    val count = ruleMatches(rule.id)
+                                                    val matches = ruleMatches(rule.id)
                                                     runStarted = null
-                                                    when (count) {
-                                                        null -> runNotice = failed
-                                                        0 -> runNotice = if (rule.sent) nothingSent else nothing
-                                                        else -> confirmRun = rule to count
+                                                    when {
+                                                        matches == null -> {
+                                                            runNotice = failed
+                                                        }
+
+                                                        matches.count == 0 -> {
+                                                            runNotice =
+                                                                listOfNotNull(
+                                                                    if (rule.sent) nothingSent else nothing,
+                                                                    withoutBody(matches.withoutBody),
+                                                                ).joinToString(" ")
+                                                        }
+
+                                                        else -> {
+                                                            confirmRun = rule to matches
+                                                        }
                                                     }
                                                 }
                                             },
@@ -1056,6 +1105,7 @@ internal fun MeronMobileState.RulesPage(
                             change(draft.copy(sent = false))
                         } else {
                             pickTiming("now")
+                            conditionRows = conditionRows.filterNot { it.condition.readsBody }
                             change(
                                 draft.copy(sent = true, markRead = false, moveTo = "", folder = "", folderAccount = "", forwardTo = ""),
                             )
@@ -1073,7 +1123,7 @@ internal fun MeronMobileState.RulesPage(
             }
             Spacer(Modifier.height(16.dp))
 
-            RuleConditionsEditor(conditionRows, draft.matchAny, ::changeConditions)
+            RuleConditionsEditor(conditionRows, draft.matchAny, draft.sent, ::changeConditions)
 
             if (!draft.sent) {
                 SettingsSectionLabel(tr("rules.timing"), hint = tr("rules.timingHint"))

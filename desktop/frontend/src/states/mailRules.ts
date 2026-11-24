@@ -4,10 +4,29 @@ export type RuleTrigger = 'arrival' | 'read' | 'age'
 
 export type RuleMove = '' | 'archive' | 'trash' | 'folder'
 
-/** From, To and Subject take comma-separated alternatives; the last three take no value. */
-export type RuleField = 'from' | 'to' | 'subject' | 'words' | 'tag' | 'attachment' | 'unread' | 'starred'
+/**
+ * From, To and Subject take comma-separated alternatives; the last three take no
+ * value. Body and Subject or body wait for the message to be downloaded. Words is
+ * search text, where a rule from before rows keeps what no row could say.
+ */
+export type RuleField =
+  'from' | 'to' | 'subject' | 'body' | 'subject_or_body' | 'words' | 'tag' | 'attachment' | 'unread' | 'starred'
 
-export const RULE_FIELDS: RuleField[] = ['from', 'to', 'subject', 'words', 'tag', 'attachment', 'unread', 'starred']
+/** The fields a new row may take: Words only ever comes from an older rule. */
+export const RULE_FIELDS: RuleField[] = [
+  'from',
+  'to',
+  'subject',
+  'body',
+  'subject_or_body',
+  'tag',
+  'attachment',
+  'unread',
+  'starred',
+]
+
+/** Whether a field reads the body, which a rule for sent mail can't. */
+export const readsBody = (field: RuleField) => field === 'body' || field === 'subject_or_body'
 
 export const valuedRuleField = (field: RuleField) => !['attachment', 'unread', 'starred'].includes(field)
 
@@ -64,9 +83,9 @@ export type RuleStatus = {
 }
 
 /** How many messages already in the Inbox, or in Sent for a rule for sent mail, a saved rule would run on. */
-export async function ruleMatches(id: string): Promise<number> {
-  const { count } = await invoke<{ count: number }>('mail.ruleMatches', { id })
-  return count
+export async function ruleMatches(id: string): Promise<{ count: number; withoutBody: number }> {
+  const { count, without_body } = await invoke<{ count: number; without_body?: number }>('mail.ruleMatches', { id })
+  return { count, withoutBody: without_body ?? 0 }
 }
 
 /** Runs a saved rule on the mail already in the Inbox; the work goes on in the background. */

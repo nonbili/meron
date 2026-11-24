@@ -1228,8 +1228,9 @@ data class SetTagsParams(
 
 /**
  * One thing a message has to say, or not say, for a rule to take it. [field] is `from`, `to` or
- * `subject` (comma-separated alternatives, any of which matches), `words` (search text), `tag`, or
- * `attachment`, `unread` or `starred`, which take no [value].
+ * `subject` (comma-separated alternatives, any of which matches), `body` or `subject_or_body` (one
+ * piece of text, waiting for the body to download), `words` (search text, only from an older rule),
+ * `tag`, or `attachment`, `unread` or `starred`, which take no [value].
  */
 data class RuleCondition(
     val field: String = "from",
@@ -1238,6 +1239,9 @@ data class RuleCondition(
     val negate: Boolean = false,
 ) {
     val valued: Boolean get() = this.field !in setOf("attachment", "unread", "starred")
+
+    /** Whether this reads the body: such a rule waits for it, and can't be one for sent mail. */
+    val readsBody: Boolean get() = this.field == "body" || this.field == "subject_or_body"
 
     fun toJson(): String =
         jsonObject(

@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
-import { RULE_FIELDS, valuedRuleField, type RuleCondition, type RuleField } from '../../states/mailRules'
+import { loadTagCounts } from '../../states/mailTags'
+import { readsBody, RULE_FIELDS, valuedRuleField, type RuleCondition, type RuleField } from '../../states/mailRules'
 import { RecipientInput } from '../composer/RecipientInput'
 import { SelectInput } from '../field/Field'
 import { inputClass } from '../search/SearchOptions'
@@ -10,7 +12,9 @@ const FIELD_LABELS: Record<RuleField, string> = {
   from: 'composer.fields.from',
   to: 'composer.fields.to',
   subject: 'composer.fields.subject',
-  words: 'search.hasWords',
+  body: 'rules.field.body',
+  subject_or_body: 'rules.field.subjectOrBody',
+  words: 'rules.field.words',
   tag: 'rules.field.tag',
   attachment: 'filters.hasAttachment',
   unread: 'filters.unread',
@@ -52,23 +56,40 @@ export function useConditionSummary() {
 export function RuleConditions({
   conditions,
   matchAny,
+  sent,
   onChange,
 }: {
   conditions: DraftCondition[]
   matchAny: boolean
+  /** For mail the user sends, which is acted on before any body is downloaded. */
+  sent: boolean
   onChange: (conditions: DraftCondition[], matchAny: boolean) => void
 }) {
   const { t } = useTranslation()
+  // A tag is picked from those there are, as one mistyped would match nothing,
+  // or everything when negated.
+  const [tags, setTags] = useState<string[]>([])
+  const wantsTags = conditions.some((condition) => condition.field === 'tag')
+  useEffect(() => {
+    if (!wantsTags) return
+    void loadTagCounts().then(
+      (counts) => setTags(counts.map(({ tag }) => tag).sort((a, b) => a.localeCompare(b))),
+      () => setTags([]),
+    )
+  }, [wantsTags])
   const update = (at: number, patch: Partial<RuleCondition>) =>
     onChange(
       conditions.map((condition, index) => (index === at ? { ...condition, ...patch } : condition)),
       matchAny,
     )
 
-  // A value only carries over between fields that take the same kind.
+  // A value only carries over between fields that take the same kind: text
+  // can't become a tag, which has to be one there is.
+  const kind = (field: RuleField) =>
+    !valuedRuleField(field) ? '' : field === 'from' || field === 'to' ? 'address' : field === 'tag' ? 'tag' : 'text'
   const pickField = (at: number, field: RuleField) => {
     const was = conditions[at]
-    const kept = ['from', 'to'].includes(was.field) === ['from', 'to'].includes(field) && valuedRuleField(field)
+    const kept = kind(field) !== '' && kind(field) === kind(was.field)
     update(at, { field, value: kept ? was.value : '' })
   }
 
@@ -105,7 +126,11 @@ export function RuleConditions({
                 wrapperClassName="w-36 min-w-28 shrink"
                 className="rounded-lg py-1.5 pl-2.5 text-xs"
               >
-                {RULE_FIELDS.map((field) => (
+                {/* A row keeps the field it has, even one no new row is offered. */}
+                {[
+                  ...RULE_FIELDS.filter((field) => !(sent && readsBody(field))),
+                  ...(RULE_FIELDS.includes(condition.field) ? [] : [condition.field]),
+                ].map((field) => (
                   <option key={field} value={field} className="bg-chats text-primary">
                     {t(FIELD_LABELS[field])}
                   </option>
@@ -136,6 +161,26 @@ export function RuleConditions({
                     className={`${inputClass} w-full`}
                   />
                 </label>
+              ) : condition.field === 'tag' ? (
+                <SelectInput
+                  aria-label={label}
+                  value={condition.value}
+                  onChange={(event) => update(at, { value: event.target.value })}
+                  wrapperClassName="min-w-40 flex-1"
+                  className="rounded-lg py-1.5 pl-2.5 text-xs"
+                >
+                  <option value="" disabled className="bg-chats text-secondary">
+                    {t('rules.chooseTag')}
+                  </option>
+                  {/* One the list doesn't have yet stays as it was. */}
+                  {(condition.value && !tags.includes(condition.value) ? [condition.value, ...tags] : tags).map(
+                    (tag) => (
+                      <option key={tag} value={tag} className="bg-chats text-primary">
+                        {tag}
+                      </option>
+                    ),
+                  )}
+                </SelectInput>
               ) : valuedRuleField(condition.field) ? (
                 // Narrow, it takes a line of its own rather than shrinking away.
                 <div className="flex min-w-40 flex-1">

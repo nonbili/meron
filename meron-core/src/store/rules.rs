@@ -96,8 +96,10 @@ pub enum RuleTrigger {
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RuleCondition {
     /// `from`, `to` and `subject` take comma-separated alternatives, any of
-    /// which matches; `words` is search text; `tag` one tag; `attachment`,
-    /// `unread` and `starred` take no value.
+    /// which matches; `body` and `subject_or_body` one piece of text, which
+    /// waits for the body to be downloaded; `words` is search text, what a
+    /// rule from before conditions couldn't say as rows; `tag` one tag;
+    /// `attachment`, `unread` and `starred` take no value.
     pub field: String,
     #[serde(default)]
     pub value: String,
@@ -115,7 +117,13 @@ impl RuleCondition {
         }
     }
 
-    /// The search that answers this condition, before any negation.
+    /// Whether this reads the message body, which arrives after the headers.
+    fn reads_body(&self) -> bool {
+        matches!(self.field.as_str(), "body" | "subject_or_body")
+    }
+
+    /// The search that answers this condition, before any negation. Empty
+    /// for one that [reads the body](Self::reads_body), which no search does.
     fn query(&self) -> String {
         // Search text as written: the form would re-space it.
         if self.field == "words" {
@@ -142,6 +150,10 @@ impl RuleCondition {
         self.value = self.value.trim().to_string();
         match self.field.as_str() {
             "from" | "to" | "subject" | "words" => {}
+            "body" | "subject_or_body" => {
+                anyhow::ensure!(!self.value.is_empty(), "a rule's body condition needs text");
+                return Ok(self);
+            }
             "tag" => {
                 self.value = crate::tags::normalize_tag(&self.value)
                     .ok_or_else(|| anyhow::anyhow!("a rule's tag condition needs a tag"))?;
@@ -243,7 +255,10 @@ impl Rule {
     /// rule: the same one, or one that matches nothing when it can't say it,
     /// so a rule never acts on more mail there than here.
     fn compat_query(&self) -> String {
-        if self.conditions.iter().any(|condition| condition.negate)
+        if self
+            .conditions
+            .iter()
+            .any(|condition| condition.negate || condition.reads_body())
             || (self.match_any && self.conditions.len() > 1)
         {
             return "is:read AND is:unread".to_string();
@@ -258,6 +273,50 @@ impl Rule {
         joined
     }
 
+    /// Whether a condition reads the body: then the rule waits for it.
+    fn reads_body(&self) -> bool {
+        self.conditions.iter().any(RuleCondition::reads_body)
+    }
+
+    /// Whether this acts right away on mail that arrives.
+    fn on_arrival(&self) -> bool {
+        !self.sent && self.trigger == RuleTrigger::Arrival && self.delay_seconds == 0
+    }
+
+    /// Whether this waits for the body: when it reads it, or acts right away
+    /// on an account where another rule acting right away does (`held`).
+    fn waits_for_body(&self, held: bool) -> bool {
+        self.reads_body() || (held && self.on_arrival())
+    }
+}
+
+/// Whether the rules acting right away on mail arriving in `account` wait for
+/// its body: they do once one of them reads it, so that they still run
+/// together, in their order. The first to move a message decides where it
+/// goes, and two forwarding to one address send one forward.
+fn arrivals_held(rules: &[Rule], account: &str) -> bool {
+    rules.iter().any(|rule| {
+        !rule.disabled
+            && rule.on_arrival()
+            && rule.reads_body()
+            && (rule.accounts.is_empty() || rule.accounts.iter().any(|id| id == account))
+    })
+}
+
+/// What decides which accounts' arrivals are [held](arrivals_held): when it
+/// changes, so does when the rules acting right away run there.
+fn arrival_holds(rules: &[Rule]) -> Vec<Vec<String>> {
+    let mut holds: Vec<Vec<String>> = rules
+        .iter()
+        .filter(|rule| !rule.disabled && rule.on_arrival() && rule.reads_body())
+        .map(|rule| rule.accounts.clone())
+        .collect();
+    holds.sort();
+    holds.dedup();
+    holds
+}
+
+impl Rule {
     /// What a cached nonmatch was checked against: it holds while this does.
     fn condition_key(&self) -> String {
         serde_json::json!([self.match_any, self.conditions]).to_string()
@@ -313,15 +372,23 @@ fn rule_matching_uids(
     // one before matched; for any, what none of them has yet.
     let mut open: Vec<u32> = uids.to_vec();
     // A search finds only cached mail, so "not" would take a message that is
-    // gone: only those still here are looked at.
-    if rule.conditions.iter().any(|condition| condition.negate) {
+    // gone: only those still here are looked at. And a rule that reads the
+    // body looks only at mail whose body is here.
+    let reads_body = rule.reads_body();
+    if reads_body || rule.conditions.iter().any(|condition| condition.negate) {
         let list = uids
             .iter()
             .map(u32::to_string)
             .collect::<Vec<_>>()
             .join(",");
+        let body = if reads_body {
+            format!(" AND {}", super::RULE_BODY_READABLE)
+        } else {
+            String::new()
+        };
         let mut stmt = conn.prepare(&format!(
-            "SELECT uid FROM messages WHERE account = ?1 AND folder = ?2 AND uid IN ({list})"
+            "SELECT m.uid FROM messages m
+             WHERE m.account = ?1 AND m.folder = ?2 AND m.uid IN ({list}){body}"
         ))?;
         let cached = stmt
             .query_map(params![account, folder], |row| row.get::<_, u32>(0))?
@@ -333,10 +400,20 @@ fn rule_matching_uids(
         if open.is_empty() {
             break;
         }
-        let hits: BTreeSet<u32> =
+        let hits: BTreeSet<u32> = if condition.reads_body() {
+            super::body_matching_uids(
+                conn,
+                account,
+                folder,
+                &condition.value,
+                condition.field == "subject_or_body",
+                &open,
+            )?
+        } else {
             super::matching_uids(conn, account, folder, &condition.query(), &open)?
-                .into_iter()
-                .collect();
+        }
+        .into_iter()
+        .collect();
         let (these, rest): (Vec<u32>, Vec<u32>) = std::mem::take(&mut open)
             .into_iter()
             .partition(|uid| hits.contains(uid) != condition.negate);
@@ -419,23 +496,34 @@ pub fn set_rules(conn: &Connection, incoming: Vec<Rule>) -> Result<Vec<Rule>> {
                 || (!rule.mark_read && rule.move_to.is_empty() && rule.forward_to.is_empty()),
             "a rule for sent mail can't move it, mark it read or forward it"
         );
+        anyhow::ensure!(
+            !rule.sent || !rule.reads_body(),
+            "a rule for sent mail can't check the body"
+        );
         anyhow::ensure!(rule.has_action(), "a rule needs an action");
         if rule.id.is_empty() {
             rule.id = uuid::Uuid::new_v4().to_string();
         }
         clean.push(rule);
     }
+    // Rules acting right away that start or stop waiting for the body start
+    // afresh, as a delayed rule does, rather than take up events from before.
+    let holds_changed = arrival_holds(&previous) != arrival_holds(&clean);
     for rule in &clean {
-        let timing_unchanged = previous.iter().any(|old| {
-            old.id == rule.id
+        let timing_unchanged = !(holds_changed && rule.on_arrival())
+            && previous.iter().any(|old| {
+                old.id == rule.id
                 && old.trigger == rule.trigger
+                // One that reads the body waits for it, as a delayed rule does,
+                // from events since it started to.
+                && old.reads_body() == rule.reads_body()
                 && old.delay_seconds == rule.delay_seconds
                 && (!old.disabled || rule.disabled)
                 // Expanding scope starts a fresh event window so newly added
                 // accounts cannot replay their historical events.
                 && (old.accounts.is_empty() || (!rule.accounts.is_empty()
                     && rule.accounts.iter().all(|id| old.accounts.contains(id))))
-        });
+            });
         if !timing_unchanged {
             conn.execute(
                 "INSERT OR REPLACE INTO rule_activation (rule_id, event_sequence)
@@ -704,10 +792,13 @@ fn run_immediate_rules(
     sent: bool,
 ) -> Result<()> {
     let mut actions: BTreeMap<u32, RuleAction> = BTreeMap::new();
+    let held = arrivals_held(&rules, account);
     for rule in rules {
         if rule.sent != sent
             || rule.trigger != RuleTrigger::Arrival
             || rule.delay_seconds != 0
+            // Waits for the body: see [`apply_due_rules`].
+            || (!sent && rule.waits_for_body(held))
             || rule.disabled
             || (!rule.accounts.is_empty() && !rule.accounts.iter().any(|item| item == account))
         {
@@ -736,6 +827,110 @@ fn run_immediate_rules(
 /// Check persistent event clocks during sync. Delayed work is only queued when
 /// due, so edits, disabling a rule, or marking mail unread take effect first.
 /// Each rule fires once per cached message; manual runs remain independent.
+/// Whether `rule` is one [`apply_due_rules`] runs in `account`'s `folder`:
+/// a delayed one, or one that waits for the body, as all acting right away do
+/// where arrivals are `held`.
+fn due_rule_applies(rule: &Rule, account: &str, folder: &str, held: bool) -> bool {
+    !(rule.disabled
+        || rule.sent
+        || (rule.trigger == RuleTrigger::Arrival
+            && rule.delay_seconds == 0
+            && !rule.waits_for_body(held))
+        || (!rule.accounts.is_empty() && !rule.accounts.iter().any(|id| id == account))
+        || (rule.trigger == RuleTrigger::Age && folder != EXISTING_RULE_FOLDER))
+}
+
+/// The mail in `folder` that `rule` is due to check by `now`, each with the
+/// sequence of its event, and not checked against these conditions for that
+/// event yet. With `body`, only mail whose body a rule can read (`true`), or
+/// that isn't downloaded (`false`).
+fn due_candidates(
+    conn: &Connection,
+    rule: &Rule,
+    account: &str,
+    folder: &str,
+    now: i64,
+    body: Option<bool>,
+) -> Result<Vec<(u32, i64)>> {
+    let (clock, event_sequence, eligible) = match rule.trigger {
+        RuleTrigger::Arrival => (
+            "e.arrived_at",
+            "e.arrived_sequence",
+            "e.arrived_sequence > COALESCE(a.event_sequence, 0)",
+        ),
+        RuleTrigger::Read => (
+            "CASE WHEN m.seen <> 0 THEN e.read_at END",
+            "e.read_sequence",
+            "e.read_sequence > COALESCE(a.event_sequence, 0)",
+        ),
+        RuleTrigger::Age => ("NULLIF(m.date, 0)", "m.date", "1"),
+    };
+    let body = match body {
+        None => String::new(),
+        Some(true) => format!(" AND {}", super::RULE_BODY_READABLE),
+        Some(false) => format!(" AND {} IS NULL", super::RULE_BODY_TEXT),
+    };
+    let mut stmt = conn.prepare(&format!(
+        "SELECT m.uid, {event_sequence} FROM messages m JOIN rule_events e ON e.message = m.id
+         LEFT JOIN rule_activation a ON a.rule_id = ?4
+         WHERE m.account = ?1 AND m.folder = ?2 AND m.uid <> 0
+           AND {clock} <= ?3 AND ({eligible}){body}
+           AND NOT EXISTS (SELECT 1 FROM rule_firings f WHERE f.message = m.id AND f.rule_id = ?4)
+           AND NOT EXISTS (SELECT 1 FROM rule_evaluations v
+             WHERE v.message = m.id AND v.rule_id = ?4 AND v.event_sequence = {event_sequence} AND v.query = ?5)
+         ORDER BY m.date DESC, m.uid DESC"
+    ))?;
+    Ok(stmt
+        .query_map(
+            params![
+                account,
+                folder,
+                now - rule.delay_seconds,
+                rule.id,
+                rule.condition_key()
+            ],
+            |row| Ok((row.get::<_, u32>(0)?, row.get::<_, i64>(1)?)),
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Mail in `folder`, newest first and at most `limit`, that a rule due to
+/// check it waits on the body of, for the engine to download. With
+/// `arrivals`, only for rules that act as mail arrives.
+pub fn rule_body_waiting_uids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    now: i64,
+    limit: usize,
+    arrivals: bool,
+) -> Result<Vec<u32>> {
+    let mut waiting = BTreeSet::new();
+    let rules = rules(conn)?;
+    let held = arrivals_held(&rules, account);
+    for rule in rules {
+        if rule.waits_for_body(held)
+            && due_rule_applies(&rule, account, folder, held)
+            && (rule.on_arrival() || !arrivals)
+        {
+            waiting.extend(
+                due_candidates(conn, &rule, account, folder, now, Some(false))?
+                    .into_iter()
+                    .map(|(uid, _)| uid),
+            );
+        }
+    }
+    if waiting.is_empty() {
+        return Ok(Vec::new());
+    }
+    let role = super::folder_role(conn, account, folder)?;
+    if matches!(role.as_str(), "sent" | "drafts" | "trash" | "junk") {
+        return Ok(Vec::new());
+    }
+    // UIDs grow with arrival: the newest are the highest.
+    Ok(waiting.into_iter().rev().take(limit).collect())
+}
+
 pub fn apply_due_rules(
     conn: &Connection,
     account: &str,
@@ -743,13 +938,8 @@ pub fn apply_due_rules(
     uidvalidity: u32,
     now: i64,
 ) -> Result<()> {
-    let applies = |rule: &Rule| {
-        !(rule.disabled
-            || rule.sent
-            || (rule.trigger == RuleTrigger::Arrival && rule.delay_seconds == 0)
-            || (!rule.accounts.is_empty() && !rule.accounts.iter().any(|id| id == account))
-            || (rule.trigger == RuleTrigger::Age && folder != EXISTING_RULE_FOLDER))
-    };
+    let held = arrivals_held(&rules(conn)?, account);
+    let applies = |rule: &Rule| due_rule_applies(rule, account, folder, held);
     // Runs after every folder sync: don't take the write lock without a
     // delayed rule. The rules are read again under the lock below.
     if !rules(conn)?.iter().any(applies) {
@@ -765,35 +955,10 @@ pub fn apply_due_rules(
         if !applies(&rule) {
             continue;
         }
-        let (clock, event_sequence, eligible) = match rule.trigger {
-            RuleTrigger::Arrival => (
-                "e.arrived_at",
-                "e.arrived_sequence",
-                "e.arrived_sequence > COALESCE(a.event_sequence, 0)",
-            ),
-            RuleTrigger::Read => (
-                "CASE WHEN m.seen <> 0 THEN e.read_at END",
-                "e.read_sequence",
-                "e.read_sequence > COALESCE(a.event_sequence, 0)",
-            ),
-            RuleTrigger::Age => ("NULLIF(m.date, 0)", "m.date", "1"),
-        };
         let key = rule.condition_key();
-        let mut stmt = tx.prepare(&format!(
-            "SELECT m.uid, {event_sequence} FROM messages m JOIN rule_events e ON e.message = m.id
-             LEFT JOIN rule_activation a ON a.rule_id = ?4
-             WHERE m.account = ?1 AND m.folder = ?2 AND m.uid <> 0
-               AND {clock} <= ?3 AND ({eligible})
-               AND NOT EXISTS (SELECT 1 FROM rule_firings f WHERE f.message = m.id AND f.rule_id = ?4)
-               AND NOT EXISTS (SELECT 1 FROM rule_evaluations v
-                 WHERE v.message = m.id AND v.rule_id = ?4 AND v.event_sequence = {event_sequence} AND v.query = ?5)"
-        ))?;
-        let candidates = stmt
-            .query_map(
-                params![account, folder, now - rule.delay_seconds, rule.id, key],
-                |row| Ok((row.get::<_, u32>(0)?, row.get::<_, i64>(1)?)),
-            )?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        // Mail whose body is still on its way waits: it is no nonmatch yet.
+        let body = rule.waits_for_body(held).then_some(true);
+        let candidates = due_candidates(&tx, &rule, account, folder, now, body)?;
         let mut matched = Vec::new();
         // Bound the search's UID list, and remember checks that did not match.
         // Input changes invalidate those checks through the store's triggers.
@@ -801,6 +966,16 @@ pub fn apply_due_rules(
             let uids: Vec<u32> = chunk.iter().map(|(uid, _)| *uid).collect();
             matched.extend(rule_matching_uids(&tx, account, folder, &rule, &uids)?);
             for (uid, sequence) in chunk {
+                // A rule acting on arrival checks a message once, as it
+                // arrives: what changes about it later is not news to it.
+                if rule.on_arrival() {
+                    tx.execute(
+                        "INSERT OR IGNORE INTO rule_firings (message, rule_id)
+                         SELECT id, ?4 FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+                        params![account, folder, uid, rule.id],
+                    )?;
+                    continue;
+                }
                 tx.execute(
                     "INSERT OR REPLACE INTO rule_evaluations (message, rule_id, event_sequence, query)
                      SELECT id, ?4, ?5, ?6 FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
@@ -810,7 +985,7 @@ pub fn apply_due_rules(
         }
         for uid in &matched {
             tx.execute(
-                "INSERT INTO rule_firings (message, rule_id)
+                "INSERT OR IGNORE INTO rule_firings (message, rule_id)
                  SELECT id, ?4 FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
                 params![account, folder, uid, rule.id],
             )?;
@@ -1146,6 +1321,32 @@ pub fn count_existing_rule_matches(conn: &Connection, id: &str) -> Result<usize>
     for account in rule_accounts(conn, &rule)? {
         if let Some(folder) = existing_rule_folder(conn, &account, &rule) {
             count += existing_rule_matches(conn, &account, &folder, &rule)?.len();
+        }
+    }
+    Ok(count)
+}
+
+/// How many messages a run of [`queue_existing_rule`] would skip, as a
+/// condition of it reads the body and theirs isn't downloaded, or can't be
+/// opened.
+pub fn count_existing_rule_without_body(conn: &Connection, id: &str) -> Result<usize> {
+    let rule = saved_rule(conn, id)?;
+    if !rule.reads_body() {
+        return Ok(0);
+    }
+    let mut count = 0;
+    for account in rule_accounts(conn, &rule)? {
+        if let Some(folder) = existing_rule_folder(conn, &account, &rule) {
+            count += conn.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM messages m
+                     WHERE m.account = ?1 AND m.folder = ?2 AND m.uid <> 0
+                       AND NOT {}",
+                    super::RULE_BODY_READABLE
+                ),
+                params![account, folder],
+                |row| row.get::<_, i64>(0),
+            )? as usize;
         }
     }
     Ok(count)
@@ -1522,6 +1723,312 @@ mod timing_tests {
         assert_eq!(actions[0].uidvalidity, 7);
         finish_rule_actions(&conn, "a", "INBOX", &[2], actions[0].run).unwrap();
         assert!(due(&conn, 1500).is_empty());
+    }
+
+    fn body(conn: &Connection, uid: u32, text: &str) {
+        conn.execute(
+            "UPDATE messages SET body = ?2 WHERE account = 'a' AND folder = 'INBOX' AND uid = ?1",
+            params![uid, text],
+        )
+        .unwrap();
+    }
+
+    fn body_rule(field: &str, value: &str, negate: bool) -> Rule {
+        Rule {
+            conditions: vec![RuleCondition {
+                field: field.into(),
+                value: value.into(),
+                negate,
+            }],
+            ..rule(RuleTrigger::Arrival, 0)
+        }
+    }
+
+    #[test]
+    fn a_rule_reading_the_body_waits_for_it() {
+        let conn = db();
+        set_rules(
+            &conn,
+            vec![
+                body_rule("body", "Invoice", false),
+                Rule {
+                    id: "not".into(),
+                    ..body_rule("body", "invoice", true)
+                },
+            ],
+        )
+        .unwrap();
+        mail(&conn, 1, false, 100);
+        mail(&conn, 2, false, 100);
+        apply_rules(&conn, "a", "INBOX", 7, &[1, 2]).unwrap();
+        conn.execute("UPDATE rule_events SET arrived_at = 1000", [])
+            .unwrap();
+        // Headers alone decide nothing, either way.
+        assert!(due(&conn, 1000).is_empty());
+        assert_eq!(
+            rule_body_waiting_uids(&conn, "a", "INBOX", 1000, 50, false).unwrap(),
+            [2, 1]
+        );
+        assert_eq!(
+            rule_body_waiting_uids(&conn, "a", "INBOX", 1000, 1, true).unwrap(),
+            [2]
+        );
+
+        body(&conn, 1, "please find the INVOICE attached");
+        body(&conn, 2, "lunch?");
+        let actions = due(&conn, 1000);
+        let star = |uid| {
+            let action = actions.iter().find(|action| action.uid == uid).unwrap();
+            action.rule_ids.clone()
+        };
+        assert_eq!(star(1), ["timed"]);
+        assert_eq!(star(2), ["not"]);
+        assert!(
+            rule_body_waiting_uids(&conn, "a", "INBOX", 1000, 50, false)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn rules_acting_on_arrival_wait_together_once_one_reads_the_body() {
+        let conn = db();
+        let header = |id: &str| Rule {
+            id: id.into(),
+            conditions: vec![RuleCondition {
+                field: "subject".into(),
+                value: "login".into(),
+                negate: false,
+            }],
+            star: false,
+            ..rule(RuleTrigger::Arrival, 0)
+        };
+        set_rules(
+            &conn,
+            vec![
+                Rule {
+                    id: "body".into(),
+                    star: false,
+                    move_to: "trash".into(),
+                    forward_to: "dan@example.org".into(),
+                    ..body_rule("body", "code", false)
+                },
+                Rule {
+                    move_to: "archive".into(),
+                    forward_to: "dan@example.org".into(),
+                    ..header("header")
+                },
+            ],
+        )
+        .unwrap();
+        mail(&conn, 1, false, 100);
+        apply_rules(&conn, "a", "INBOX", 7, &[1]).unwrap();
+        // The header rule matches already, but waits with the other.
+        assert!(
+            pending_rule_actions(&conn, "a", "INBOX")
+                .unwrap()
+                .is_empty()
+        );
+        conn.execute("UPDATE rule_events SET arrived_at = 1000", [])
+            .unwrap();
+        body(&conn, 1, "your code is 1234");
+        let actions = due(&conn, 1000);
+        assert_eq!(actions.len(), 1, "one run");
+        assert!(actions[0].trash, "the first in the list moves it");
+        assert_eq!(actions[0].forwards, ["dan@example.org"]);
+        assert_eq!(actions[0].rule_ids, ["body", "header"]);
+    }
+
+    #[test]
+    fn a_rule_acting_on_arrival_checks_a_message_once() {
+        let conn = db();
+        let read = Rule {
+            conditions: vec![
+                RuleCondition {
+                    field: "unread".into(),
+                    value: String::new(),
+                    negate: true,
+                },
+                RuleCondition {
+                    field: "body".into(),
+                    value: "code".into(),
+                    negate: false,
+                },
+            ],
+            ..rule(RuleTrigger::Arrival, 0)
+        };
+        set_rules(&conn, vec![read]).unwrap();
+        mail(&conn, 1, false, 100);
+        apply_rules(&conn, "a", "INBOX", 7, &[1]).unwrap();
+        conn.execute("UPDATE rule_events SET arrived_at = 1000", [])
+            .unwrap();
+        body(&conn, 1, "your code");
+        assert!(due(&conn, 1000).is_empty(), "unread as it arrived");
+        // Read later: no longer what arrived, and not news to this rule.
+        crate::store::update_message_seen(&conn, "a", "INBOX", 1, true).unwrap();
+        assert!(due(&conn, 1000).is_empty());
+    }
+
+    #[test]
+    fn starting_to_wait_for_bodies_does_not_replay_arrivals() {
+        let conn = db();
+        let header = Rule {
+            conditions: vec![RuleCondition {
+                field: "subject".into(),
+                value: "login".into(),
+                negate: false,
+            }],
+            ..rule(RuleTrigger::Arrival, 0)
+        };
+        set_rules(&conn, vec![header.clone()]).unwrap();
+        mail(&conn, 1, false, 100);
+        apply_rules(&conn, "a", "INBOX", 7, &[1]).unwrap();
+        let ran = pending_rule_actions(&conn, "a", "INBOX").unwrap();
+        finish_rule_actions(&conn, "a", "INBOX", &[1], ran[0].run).unwrap();
+        body(&conn, 1, "hello");
+        set_rules(
+            &conn,
+            vec![
+                header,
+                Rule {
+                    id: "body".into(),
+                    ..body_rule("body", "nothing like it", false)
+                },
+            ],
+        )
+        .unwrap();
+        assert!(
+            due(&conn, store_now()).is_empty(),
+            "the header rule ran on it already"
+        );
+    }
+
+    #[test]
+    fn mail_that_could_not_be_opened_has_no_body_to_read() {
+        let conn = db();
+        set_rules(&conn, vec![body_rule("body", "invoice", true)]).unwrap();
+        mail(&conn, 1, false, 100);
+        apply_rules(&conn, "a", "INBOX", 7, &[1]).unwrap();
+        conn.execute("UPDATE rule_events SET arrived_at = 1000", [])
+            .unwrap();
+        body(&conn, 1, "");
+        conn.execute(
+            "UPDATE messages SET json = json_set(json, '$.crypto', json('{\"encrypted\":true}'))",
+            [],
+        )
+        .unwrap();
+        assert!(due(&conn, 1000).is_empty(), "its body may well say invoice");
+        assert!(
+            rule_body_waiting_uids(&conn, "a", "INBOX", 1000, 50, false)
+                .unwrap()
+                .is_empty()
+        );
+        conn.execute(
+            "UPDATE messages SET json = json_set(json, '$.crypto.decrypted_with', 'ABCD')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(due(&conn, 1000).len(), 1);
+
+        // Only part of it opened: the rest may still say it.
+        conn.execute(
+            "UPDATE messages SET json = json_set(json, '$.crypto', json('{\"problem\":\"partly_encrypted\"}'))",
+            [],
+        )
+        .unwrap();
+        conn.execute("DELETE FROM rule_firings", []).unwrap();
+        conn.execute("DELETE FROM rule_evaluations", []).unwrap();
+        conn.execute("DELETE FROM rule_actions", []).unwrap();
+        assert!(due(&conn, 1000).is_empty());
+    }
+
+    #[test]
+    fn only_bodies_rules_acting_on_arrival_wait_on_hold_up_a_sync() {
+        let conn = db();
+        let age = Rule {
+            id: "age".into(),
+            trigger: RuleTrigger::Age,
+            delay_seconds: 60,
+            ..body_rule("body", "x", false)
+        };
+        set_rules(&conn, vec![age]).unwrap();
+        mail(&conn, 1, false, 100);
+        let waiting = |arrivals| {
+            rule_body_waiting_uids(&conn, "a", EXISTING_RULE_FOLDER, 1000, 50, arrivals).unwrap()
+        };
+        assert_eq!(waiting(false), [1]);
+        assert!(waiting(true).is_empty());
+    }
+
+    #[test]
+    fn mail_cached_with_only_html_is_read_as_shown() {
+        let conn = db();
+        set_rules(&conn, vec![body_rule("body", "invoice", false)]).unwrap();
+        mail(&conn, 1, false, 100);
+        mail(&conn, 2, false, 100);
+        apply_rules(&conn, "a", "INBOX", 7, &[1, 2]).unwrap();
+        conn.execute("UPDATE rule_events SET arrived_at = 1000", [])
+            .unwrap();
+        let html = |uid: u32, html: &str| {
+            conn.execute(
+                "UPDATE messages SET json = json_set(json, '$.body_html', ?2) WHERE uid = ?1",
+                params![uid, html],
+            )
+            .unwrap();
+        };
+        // As the body of mail downloaded now is: markup gone, text kept.
+        html(1, "<p>Your <span class=\"x\">invoice</span> is ready</p>");
+        html(2, "<p class=\"invoice\">Hello</p>");
+        let uids: Vec<u32> = due(&conn, 1000).iter().map(|action| action.uid).collect();
+        assert_eq!(uids, [1]);
+    }
+
+    #[test]
+    fn subject_or_body_finds_either() {
+        let conn = db();
+        set_rules(&conn, vec![body_rule("subject_or_body", "LOGIN", false)]).unwrap();
+        mail(&conn, 1, false, 100); // Its subject is "login code".
+        mail(&conn, 2, false, 100);
+        apply_rules(&conn, "a", "INBOX", 7, &[1, 2]).unwrap();
+        conn.execute("UPDATE rule_events SET arrived_at = 1000", [])
+            .unwrap();
+        conn.execute("UPDATE messages SET subject = 'hello' WHERE uid = 2", [])
+            .unwrap();
+        body(&conn, 1, "");
+        body(&conn, 2, "your login link");
+        let uids: Vec<u32> = due(&conn, 1000).iter().map(|action| action.uid).collect();
+        assert_eq!(uids, [1, 2]);
+    }
+
+    #[test]
+    fn starting_to_read_the_body_does_not_replay_old_arrivals() {
+        let conn = db();
+        set_rules(&conn, vec![rule(RuleTrigger::Arrival, 0)]).unwrap();
+        mail(&conn, 1, false, 100);
+        apply_rules(&conn, "a", "INBOX", 7, &[1]).unwrap();
+        finish_rule_actions(&conn, "a", "INBOX", &[1], 0).unwrap();
+        body(&conn, 1, "invoice");
+        set_rules(&conn, vec![body_rule("body", "invoice", false)]).unwrap();
+        assert!(due(&conn, store_now()).is_empty());
+    }
+
+    fn store_now() -> i64 {
+        crate::store::now_unix() + 10
+    }
+
+    #[test]
+    fn body_conditions_need_text_and_received_mail() {
+        let conn = db();
+        assert!(set_rules(&conn, vec![body_rule("body", " ", false)]).is_err());
+        let sent = Rule {
+            sent: true,
+            ..body_rule("body", "x", false)
+        };
+        assert!(set_rules(&conn, vec![sent]).is_err());
+        assert_eq!(
+            body_rule("subject_or_body", "x", false).compat_query(),
+            "is:read AND is:unread"
+        );
     }
 
     #[test]

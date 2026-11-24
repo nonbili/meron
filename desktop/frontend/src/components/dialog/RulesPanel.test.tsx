@@ -28,6 +28,7 @@ const ran: string[] = []
 const stopped: string[] = []
 let statusReply: RuleStatus = { log: [], running: {} }
 let matches = 0
+let withoutBody = 0
 
 function stubCore(initial: Rule[], refuse = false) {
   const saved: Rule[][] = []
@@ -36,7 +37,8 @@ function stubCore(initial: Rule[], refuse = false) {
       App: {
         Invoke: async (command: string, payload: any) => {
           if (command === 'mail.rules') return { rules: initial }
-          if (command === 'mail.ruleMatches') return { count: matches }
+          if (command === 'mail.tagList') return { tags: [{ tag: 'receipts', count: 2 }] }
+          if (command === 'mail.ruleMatches') return { count: matches, without_body: withoutBody }
           if (command === 'mail.ruleStatus') return statusReply
           if (command === 'mail.stopRule') {
             stopped.push(payload.id)
@@ -66,6 +68,7 @@ afterEach(() => {
   stopped.length = 0
   statusReply = { log: [], running: {} }
   matches = 0
+  withoutBody = 0
   settleConfirm(false)
 })
 
@@ -485,4 +488,68 @@ it('builds a rule from rows that may be negated, any of which is enough', async 
     ],
   })
   await waitFor(() => expect(view.getByText('Any of: From: shop.test · not Subject: receipt · Starred')).toBeTruthy())
+})
+
+it('picks a tag for a condition from the tags there are', async () => {
+  const saved = stubCore([])
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('No rules yet.')).toBeTruthy())
+
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+  fireEvent.change(view.getByLabelText('Condition'), { target: { value: 'subject' } })
+  fireEvent.change(view.getByLabelText('Subject'), { target: { value: 'no such tag' } })
+  fireEvent.change(view.getByLabelText('Condition'), { target: { value: 'tag' } })
+  // Text doesn't carry over into a tag, which has to be picked.
+  expect((view.getByLabelText('Tag') as HTMLSelectElement).value).toBe('')
+  expect(view.queryByRole('option', { name: 'no such tag' })).toBeNull()
+  fireEvent.change(view.getByLabelText('Comparison'), { target: { value: 'not' } })
+  await waitFor(() => expect(view.getByRole('option', { name: 'receipts' })).toBeTruthy())
+  fireEvent.change(view.getByLabelText('Tag'), { target: { value: 'receipts' } })
+  fireEvent.click(view.getByRole('switch', { name: 'Star' }))
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+
+  await waitFor(() => expect(saved.length).toBe(1))
+  expect(saved[0][0].conditions).toEqual([{ field: 'tag', value: 'receipts', negate: true }])
+  await waitFor(() => expect(view.getByText('not Tag: receipts')).toBeTruthy())
+})
+
+it('checks the body, which a rule for sent mail cannot', async () => {
+  const saved = stubCore([])
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('No rules yet.')).toBeTruthy())
+
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+  fireEvent.change(view.getByLabelText('Condition'), { target: { value: 'subject_or_body' } })
+  fireEvent.change(view.getByLabelText('Subject or body'), { target: { value: 'invoice' } })
+  fireEvent.click(view.getByRole('button', { name: 'Add condition' }))
+  expect(view.queryAllByRole('option', { name: 'Search' })).toEqual([])
+
+  // Sent mail is acted on before its body is here: such rows go.
+  fireEvent.click(view.getByText('Mail I send'))
+  expect(view.getAllByLabelText('Condition').length).toBe(1)
+  expect(view.queryAllByRole('option', { name: 'Body' })).toEqual([])
+  fireEvent.click(view.getByText('Mail I receive'))
+
+  fireEvent.click(view.getByText('Add condition'))
+  fireEvent.change(view.getAllByLabelText('Condition')[1], { target: { value: 'subject_or_body' } })
+  fireEvent.change(view.getByLabelText('Subject or body'), { target: { value: 'invoice' } })
+  fireEvent.click(view.getByRole('switch', { name: 'Star' }))
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+  await waitFor(() => expect(saved.length).toBe(1))
+  expect(saved[0][0].conditions).toEqual([{ field: 'subject_or_body', value: 'invoice', negate: false }])
+})
+
+it('keeps the search an older rule could only say as one, and says what a run skips', async () => {
+  stubCore([{ ...bills, conditions: [{ field: 'words', value: 'from:a OR to:b', negate: false }] }])
+  matches = 2
+  withoutBody = 5
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('Search: from:a OR to:b')).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: 'Run on existing mail' }))
+  await waitFor(() => expect(ui$.confirm.get()?.message).toMatch(/not downloaded yet is skipped\. Messages: 5/))
+  settleConfirm(false)
+
+  fireEvent.click(view.getByLabelText('Edit rule'))
+  expect((view.getByLabelText('Condition') as HTMLSelectElement).value).toBe('words')
+  expect(view.getByRole('option', { name: 'Search' })).toBeTruthy()
 })

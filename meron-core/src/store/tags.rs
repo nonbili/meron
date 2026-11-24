@@ -1095,7 +1095,7 @@ mod tests {
             ..Default::default()
         };
         assert!(set_rules(&conn, vec![with("from", " ")]).is_err());
-        assert!(set_rules(&conn, vec![with("body", "x")]).is_err());
+        assert!(set_rules(&conn, vec![with("header", "x")]).is_err());
         assert!(
             set_rules(&conn, vec![with("starred", "ignored")]).unwrap()[0].conditions[0]
                 .value

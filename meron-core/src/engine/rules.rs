@@ -191,6 +191,171 @@ fn ready_actions(batch: Vec<RuleAction>, unfinished: &BTreeSet<u32>) -> Vec<Rule
         .collect()
 }
 
+/// Bodies of new mail a sync downloads before it answers, for rules that act
+/// on arrival: what they do decides whether the mail notifies. More wait for
+/// the next sync.
+const RULE_ARRIVAL_BODIES_MAX: usize = 20;
+const RULE_ARRIVAL_BODIES_BUDGET: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Bodies downloaded in the background for the other rules waiting on one, as
+/// for a backlog of older mail an age rule reaches.
+const RULE_BACKLOG_BODIES_MAX: usize = 50;
+const RULE_BACKLOG_BODIES_BUDGET: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// A rule that reads the body checks a message once its body is here. Download
+/// the bodies of `arrived` mail that rules acting on arrival wait on, as the
+/// background prefetch may not get to them (or not soon), and check those
+/// rules: what they do decides whether the mail notifies. What doesn't come
+/// through is left to [`spawn_rule_body_backlog`].
+pub async fn check_rule_bodies(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uidvalidity: u32,
+    arrived: &[u32],
+) {
+    if arrived.is_empty() {
+        return;
+    }
+    download_rule_bodies(
+        engine,
+        account,
+        folder,
+        uidvalidity,
+        Some(arrived),
+        RULE_ARRIVAL_BODIES_MAX,
+        RULE_ARRIVAL_BODIES_BUDGET,
+    )
+    .await;
+}
+
+/// [`check_rule_bodies`] for the rest, in the background, so that a backlog an
+/// age rule reaches, or a body that keeps failing, doesn't hold up a sync.
+pub fn spawn_rule_body_backlog(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uidvalidity: u32,
+) {
+    let key = format!("bodies\n{account}\n{folder}");
+    if !engine.rule_workers.lock().unwrap().insert(key.clone()) {
+        return;
+    }
+    let engine = engine.clone();
+    let account = account.to_string();
+    let folder = folder.to_string();
+    tokio::spawn(async move {
+        let checked = download_rule_bodies(
+            &engine,
+            &account,
+            &folder,
+            uidvalidity,
+            None,
+            RULE_BACKLOG_BODIES_MAX,
+            RULE_BACKLOG_BODIES_BUDGET,
+        )
+        .await;
+        engine.rule_workers.lock().unwrap().remove(&key);
+        if checked {
+            if store::has_pending_tags(&engine.db.lock().unwrap(), &account).unwrap_or(false) {
+                spawn_tag_push(&engine, &account);
+            }
+            spawn_rule_worker(&engine, &account, &folder);
+        }
+    });
+}
+
+/// Download the bodies rules wait on in `folder`, only those of `arrived` mail
+/// for rules acting on arrival when given, and check those rules. Answers with
+/// whether there was anything to download.
+async fn download_rule_bodies(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uidvalidity: u32,
+    arrived: Option<&[u32]>,
+    limit: usize,
+    budget: std::time::Duration,
+) -> bool {
+    let waiting = store::rule_body_waiting_uids(
+        &engine.db.lock().unwrap(),
+        account,
+        folder,
+        store::now_unix(),
+        limit,
+        arrived.is_some(),
+    )
+    .map(|waiting| match arrived {
+        Some(arrived) => waiting
+            .into_iter()
+            .filter(|uid| arrived.contains(uid))
+            .collect(),
+        None => waiting,
+    });
+    let waiting: Vec<u32> = match waiting {
+        // The prefetch may have brought the bodies meanwhile: new mail is
+        // still checked before the sync answers.
+        Ok(waiting) if waiting.is_empty() && arrived.is_none() => return false,
+        Ok(waiting) => waiting,
+        Err(err) => {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.rules",
+                "account={account} folder={folder}: bodies for rules skipped: {err:#}"
+            );
+            return false;
+        }
+    };
+    // A mailbox recreated since its sync: these UIDs may be other mail now.
+    let current = |engine: &Arc<Engine>| {
+        store::get_folder_state(&engine.db.lock().unwrap(), account, folder)
+            .ok()
+            .flatten()
+            .is_some_and(|(validity, _)| validity == uidvalidity)
+    };
+    if !current(engine) {
+        return false;
+    }
+    let fetched = if waiting.is_empty() {
+        Ok(Ok(0))
+    } else {
+        tokio::time::timeout(
+            budget,
+            fetch_bodies_for_uids(engine, account, folder, &waiting, engine.host.media_root()),
+        )
+        .await
+    };
+    if let Some(err) = match fetched {
+        Ok(Ok(_)) => None,
+        Ok(Err(err)) => Some(format!("{err:#}")),
+        Err(_) => Some("timed out".to_string()),
+    } {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.rules",
+            "account={account} folder={folder}: bodies for rules not downloaded: {err}"
+        );
+    }
+    if !current(engine) {
+        return false;
+    }
+    // Whatever did arrive is checked now, the rest on a later sync.
+    if let Err(err) = store::apply_due_rules(
+        &engine.db.lock().unwrap(),
+        account,
+        folder,
+        uidvalidity,
+        store::now_unix(),
+    ) {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.rules",
+            "account={account} folder={folder}: rules waiting on bodies skipped: {err:#}"
+        );
+    }
+    true
+}
+
 /// Carry out the queued rule actions of `folder`, adding the UIDs that no longer
 /// need a notification to `silenced` as each is done, so a caller that gives up
 /// waiting still knows. Every step is safe to repeat, so what fails stays queued

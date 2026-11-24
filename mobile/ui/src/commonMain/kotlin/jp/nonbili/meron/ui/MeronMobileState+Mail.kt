@@ -26,6 +26,7 @@ import jp.nonbili.meron.shared.RenameRssFeedParams
 import jp.nonbili.meron.shared.RssMarkReadParams
 import jp.nonbili.meron.shared.RssMarkStarredParams
 import jp.nonbili.meron.shared.Rule
+import jp.nonbili.meron.shared.RuleMatches
 import jp.nonbili.meron.shared.RuleStatus
 import jp.nonbili.meron.shared.SetTagsParams
 import jp.nonbili.meron.shared.SyncMailParams
@@ -43,6 +44,7 @@ import jp.nonbili.meron.shared.parseFolderUnreadChanges
 import jp.nonbili.meron.shared.parseReplaceTagResponse
 import jp.nonbili.meron.shared.parseReplacedQueries
 import jp.nonbili.meron.shared.parseRuleCountResponse
+import jp.nonbili.meron.shared.parseRuleMatchesResponse
 import jp.nonbili.meron.shared.parseRuleStatusResponse
 import jp.nonbili.meron.shared.parseRulesResponse
 import jp.nonbili.meron.shared.parseSetTagsResponse
@@ -428,9 +430,9 @@ internal suspend fun MeronMobileState.saveRules(rules: List<Rule>): List<Rule>? 
         parseRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).setRules(rules) }))
     }.getOrNull()
 
-internal suspend fun MeronMobileState.ruleMatches(id: String): Int? =
+internal suspend fun MeronMobileState.ruleMatches(id: String): RuleMatches? =
     runCatching {
-        parseRuleCountResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).ruleMatches(id) }))
+        parseRuleMatchesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).ruleMatches(id) }))
     }.getOrNull()
 
 internal suspend fun MeronMobileState.runRule(id: String): Int? =

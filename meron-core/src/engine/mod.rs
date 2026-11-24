@@ -211,6 +211,10 @@ pub trait EngineHost: Send + Sync {
     fn load_secret(&self, _conn: &rusqlite::Connection, _account: &str) -> secrets::Secrets {
         secrets::Secrets::default()
     }
+    /// Where attachment files go: the bridge's own directory on mobile.
+    fn media_root(&self) -> std::path::PathBuf {
+        crate::parse::media_root()
+    }
     /// Forget an account's stored secret.
     fn delete_secret(&self, conn: &rusqlite::Connection, account: &str) -> anyhow::Result<()> {
         self.store_secret(conn, account, &secrets::Secrets::default())

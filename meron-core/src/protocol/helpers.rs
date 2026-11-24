@@ -65,6 +65,10 @@ pub(crate) struct MobileHost {
 }
 
 impl crate::engine::EngineHost for MobileHost {
+    fn media_root(&self) -> std::path::PathBuf {
+        Path::new(self.data_dir.trim()).join("attachments")
+    }
+
     fn open_db(&self) -> anyhow::Result<rusqlite::Connection> {
         let db_path = Path::new(self.data_dir.trim()).join("meron.db");
         match mobile_db_key() {
