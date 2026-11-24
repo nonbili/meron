@@ -74,7 +74,8 @@ export const ui$ = observable({
   settingsOpen: false,
   aboutOpen: false,
   changelogOpen: false,
-  // Account id whose per-account settings panel is open ("" = closed).
+  // The Settings page last selected: an account, board, or section id ("" =
+  // General). Survives closing the dialog so it reopens there.
   accountSettingsId: '',
   // Title of a settings row to scroll to, highlight, and focus once the
   // Settings dialog shows its page ("" = none). Set by openSettingsAt; the

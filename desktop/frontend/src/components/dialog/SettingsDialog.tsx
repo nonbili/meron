@@ -189,8 +189,11 @@ export function SettingsDialog() {
   const contentRef = useRef<HTMLDivElement>(null)
   useRevealSettingRow(contentRef, activeKey)
 
+  // Remember the page shown on close so reopening Settings returns to it (in
+  // memory only; a restart starts on General). Saving the displayed page, not
+  // the raw id, drops a removed account's id instead of reviving it later.
   const onClose = () => {
-    ui$.accountSettingsId.set('')
+    ui$.accountSettingsId.set(activeKey === 'general' ? '' : activeKey)
     ui$.settingsOpen.set(false)
   }
 
