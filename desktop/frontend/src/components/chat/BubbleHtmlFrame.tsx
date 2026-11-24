@@ -36,6 +36,8 @@ const measuredHeights = new Map<string, number>()
 const naturalWidths = new Map<string, number | null>()
 // Anything whose layout depends on the width it is given rather than on its text.
 const NON_TEXT_SELECTOR = 'table, img, video, iframe, svg, pre, [width], [style*="width"]'
+// Boxes that can move into a scroll wrapper without changing how they lay out.
+const WRAPPABLE_DISPLAYS = new Set(['block', 'flow-root', 'flex', 'grid', 'table', 'list-item'])
 
 // Renders an email's HTML body in a self-sizing sandboxed iframe, wraps each
 // standalone <pre> in a copy-code affordance and tracks the content height so
@@ -322,7 +324,7 @@ export function BubbleHtmlFrame({
         // would be shown and filed as if it were. The resize observer calls
         // again once there is a width.
         if (disposed || !themed || !doc.documentElement.clientWidth) return
-        wrapOverflowingTables()
+        wrapOverflowingContent()
         reportNaturalWidth()
         const measurement = measureFrameHeight(frameMetrics(doc), overflowExtent)
         overflowExtent = measurement.overflowExtent
@@ -331,54 +333,99 @@ export function BubbleHtmlFrame({
 
       // The body can't scroll sideways (the frame is `scrolling="no"` so it can
       // self-size), so anything wider than the frame would be clipped outright.
-      // Give the outermost overflowing table its own horizontal scroller — or,
+      // Give the outermost overflowing table — or fixed-width block, like a
+      // `<div style="width: 600px">` layout — its own horizontal scroller, or,
       // with auto-fit on, shrink it to the bubble, the way the mobile reader
       // fits fixed-width mail. `zoom` rather than a transform: it scales the
       // layout box too, so the height measured below is the height drawn.
-      const fitTables = new Map<HTMLTableElement, { natural: number; zoom: number }>()
-      const wrapOverflowingTables = () => {
-        const limit = doc.documentElement?.clientWidth ?? 0
-        if (!limit) return
-        for (const table of doc.querySelectorAll<HTMLTableElement>('table')) {
-          if (table.closest('.meron-table-scroll')) {
-            // An effect replay keeps the DOM wrappers but replaces this map.
-            // Track only the wrapped table itself, not its nested tables.
-            if (
-              autoFitRef.current &&
-              table.parentElement?.classList.contains('meron-table-scroll') &&
-              !fitTables.has(table)
-            ) {
-              fitTables.set(table, {
-                natural: Math.max(table.scrollWidth, table.offsetWidth),
-                zoom: Number.parseFloat(table.style.getPropertyValue('zoom')) || 1,
-              })
-            }
+      const fitTargets = new Map<HTMLElement, { natural: number; zoom: number }>()
+      // The margin box, so a fitted block's own side margins fit with it.
+      const naturalWidth = (element: HTMLElement) => {
+        const style = doc.defaultView?.getComputedStyle(element)
+        const margin = (value: string | undefined) => Math.max(0, Number.parseFloat(value ?? '') || 0)
+        return (
+          Math.max(element.scrollWidth, element.offsetWidth) + margin(style?.marginLeft) + margin(style?.marginRight)
+        )
+      }
+      const wrapForScroll = (element: HTMLElement) => {
+        const wrapper = doc.createElement('div')
+        wrapper.className = 'meron-table-scroll'
+        element.parentNode?.insertBefore(wrapper, element)
+        wrapper.appendChild(element)
+        // The width it lays out at unscaled, read once: re-reading it would
+        // mean dropping the zoom on every measurement.
+        if (autoFitRef.current) {
+          fitTargets.set(element, { natural: naturalWidth(element), zoom: 1 })
+        }
+      }
+      const overflows = (element: Element, limit: number) => {
+        const rect = element.getBoundingClientRect()
+        return rect.left < -1 || rect.right > limit + 1
+      }
+      // Descend from the body to the outermost in-flow block that sticks out
+      // past the frame. Inline and table-internal boxes can't be wrapped
+      // without changing the layout, so the walk looks through them instead.
+      const wrapOverflowingBlocks = (parent: Element, limit: number) => {
+        // A flex or grid item would lose its placement to the wrapper that
+        // took its slot, so look inside it instead.
+        const parentDisplay = doc.defaultView?.getComputedStyle(parent).display ?? ''
+        const itemsArePlaced = /\b(?:flex|grid)\b/.test(parentDisplay)
+        for (const child of Array.from(parent.children) as HTMLElement[]) {
+          if (child.classList.contains('meron-table-scroll')) continue
+          const sticksOut = overflows(child, limit)
+          if (!sticksOut && child.scrollWidth <= child.clientWidth + 1) continue
+          const style = doc.defaultView?.getComputedStyle(child)
+          // The sender already scrolls or clips this one's overflow.
+          if (!sticksOut && style && style.overflowX !== 'visible') continue
+          const wrappable =
+            !!style &&
+            !itemsArePlaced &&
+            WRAPPABLE_DISPLAYS.has(style.display) &&
+            style.float === 'none' &&
+            (style.position === 'static' || style.position === 'relative')
+          // A flex or grid container that fits but whose items run past the
+          // frame scrolls as a whole: its items can't be wrapped one by one.
+          const itemsStickOut =
+            !sticksOut &&
+            /\b(?:flex|grid)\b/.test(style?.display ?? '') &&
+            child.getBoundingClientRect().left + child.scrollWidth > limit + 1
+          if (wrappable && (sticksOut || itemsStickOut)) {
+            wrapForScroll(child)
             continue
           }
-          const rect = table.getBoundingClientRect()
-          const overflowsFrame = rect.left < -1 || rect.right > limit + 1
-          const overflowsItself = table.scrollWidth > table.clientWidth + 1
-          if (!overflowsFrame && !overflowsItself) continue
-
-          const wrapper = doc.createElement('div')
-          wrapper.className = 'meron-table-scroll'
-          table.parentNode?.insertBefore(wrapper, table)
-          wrapper.appendChild(table)
-          // The width it lays out at unscaled, read once: re-reading it would
-          // mean dropping the zoom on every measurement.
-          if (autoFitRef.current) {
-            fitTables.set(table, { natural: Math.max(table.scrollWidth, table.offsetWidth), zoom: 1 })
+          wrapOverflowingBlocks(child, limit)
+        }
+      }
+      const wrapOverflowingContent = () => {
+        const limit = doc.documentElement?.clientWidth ?? 0
+        if (!limit) return
+        // An effect replay keeps the DOM wrappers but replaces this map. Track
+        // only each wrapped element itself, not the tables nested in it.
+        if (autoFitRef.current) {
+          for (const wrapper of doc.querySelectorAll('.meron-table-scroll')) {
+            const element = wrapper.firstElementChild as HTMLElement | null
+            if (!element || fitTargets.has(element)) continue
+            fitTargets.set(element, {
+              natural: naturalWidth(element),
+              zoom: Number.parseFloat(element.style.getPropertyValue('zoom')) || 1,
+            })
           }
         }
-        for (const [table, fit] of fitTables) {
-          const room = table.parentElement?.clientWidth ?? 0
+        if (doc.body && doc.body.scrollWidth > doc.body.clientWidth + 1) wrapOverflowingBlocks(doc.body, limit)
+        for (const table of doc.querySelectorAll<HTMLTableElement>('table')) {
+          if (table.closest('.meron-table-scroll')) continue
+          const overflowsItself = table.scrollWidth > table.clientWidth + 1
+          if (overflows(table, limit) || overflowsItself) wrapForScroll(table)
+        }
+        for (const [element, fit] of fitTargets) {
+          const room = element.parentElement?.clientWidth ?? 0
           if (!room || !fit.natural) continue
           const zoom = Math.min(1, room / fit.natural)
           // Kept here, not read back off the style: the engine may serialise it
           // differently, and a write every measurement would relayout forever.
           if (Math.abs(zoom - fit.zoom) < 0.001) continue
           fit.zoom = zoom
-          table.style.setProperty('zoom', String(zoom))
+          element.style.setProperty('zoom', String(zoom))
         }
       }
 

@@ -351,9 +351,15 @@ export function prepareBubbleHtml(
       :is(td, th).line_content pre code { min-width: 0; }
       /* Escape hatch for content that still can't shrink (fixed-width layout
          tables): scroll it rather than clip it. */
+      /* !important: a sender rule like \`#outer div { min-width: 600px }\`
+         also matches the wrapper, and would push it past the frame too. */
       .meron-table-scroll {
-        max-width: 100%;
-        overflow-x: auto;
+        display: block !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
       }
       a { color: var(${v('link')}, ${DEFAULT_BUBBLE_THEME.link}); }
       .meron-code-block {
