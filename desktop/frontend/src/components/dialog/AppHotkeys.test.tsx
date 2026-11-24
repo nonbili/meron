@@ -222,6 +222,71 @@ describe('AppHotkeys', () => {
     expect(calls).toContain('mail.archive')
   })
 
+  // ⌫ on a Mac keyboard sends Backspace, so it deletes like Delete does — but
+  // only with focus in the thread list, never from a text field or elsewhere.
+  it('deletes the selected thread with Backspace or Delete from the thread list', async () => {
+    ;(window as any).go.main.App.Invoke = async (command: string) => {
+      calls.push(command)
+      return {}
+    }
+    const view = render(
+      <>
+        <AppHotkeys />
+        <input aria-label="elsewhere" />
+        <div data-thread-list>
+          <input aria-label="search" />
+          <button>row</button>
+        </div>
+      </>,
+    )
+    const deletes = () => calls.filter((command) => command === 'mail.delete').length
+
+    const search = view.getByLabelText('search')
+    search.focus()
+    fireEvent.keyDown(search, { key: 'Backspace' })
+    const elsewhere = view.getByLabelText('elsewhere')
+    elsewhere.focus()
+    fireEvent.keyDown(elsewhere, { key: 'Backspace' })
+    elsewhere.blur()
+    fireEvent.keyDown(document.body, { key: 'Backspace' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(deletes()).toBe(0)
+
+    const row = view.getByText('row')
+    for (const key of ['Backspace', 'Delete']) {
+      // The first delete takes the thread out of the list; put it back.
+      ui$.selectedThread.set('acct#INBOX#7')
+      mail$.threads.set([{ id: 'acct#INBOX#7', account_id: 'acct', folder_id: 'inbox' } as any])
+      row.focus()
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+      row.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(true)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    expect(deletes()).toBe(2)
+  })
+
+  it('leaves Backspace in the thread list alone while a modal is open', async () => {
+    ui$.settingsOpen.set(true)
+    try {
+      const view = render(
+        <>
+          <AppHotkeys />
+          <div data-thread-list>
+            <button>row</button>
+          </div>
+        </>,
+      )
+      const row = view.getByText('row')
+      row.focus()
+      fireEvent.keyDown(row, { key: 'Backspace' })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(calls.filter((command) => command === 'mail.delete')).toEqual([])
+    } finally {
+      ui$.settingsOpen.set(false)
+    }
+  })
+
   it('steps threads with Alt+arrows from the message, but not from a text field', () => {
     mail$.threads.set([
       { id: 'acct#INBOX#7', thread_id: 'acct#INBOX#7', account_id: 'acct', folder_id: 'inbox' } as any,

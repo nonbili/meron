@@ -57,6 +57,7 @@ import {
   isArrowKey,
   isBareKeystroke,
   isMac,
+  isThreadListDeleteKey,
   isTyping,
   matchShortcut,
   spaceActivatesTarget,
@@ -219,12 +220,14 @@ function deleteKeyFocusAllowed(): boolean {
   return bodyFocused() && threadListDeleteScope
 }
 
-// Delete removes the selected thread, same as the context menu action —
-// deleteThread itself picks move-to-trash vs permanent based on the folder.
+// Delete (and Backspace, which the ⌫ key on a Mac keyboard sends) removes the
+// selected thread, same as the context menu action — deleteThread itself picks
+// move-to-trash vs permanent based on the folder.
 // Active in both the chat and kanban views (selection lives in
 // ui$.selectedThread either way), unlike the other bare shortcuts.
 function handleDeleteKey(key: string, target: EventTarget | null): boolean {
-  if (key !== 'Delete' || isTyping(target) || modalOpen() || mailCovered() || !deleteKeyFocusAllowed()) return false
+  if (!isThreadListDeleteKey(key) || isTyping(target) || modalOpen() || mailCovered() || !deleteKeyFocusAllowed())
+    return false
   const threadId = activeThreadId()
   const bulkItems = selectedBulkItems()
   if (bulkItems.length > 0) {
@@ -347,7 +350,7 @@ export function AppHotkeys() {
       // wins, same precedence as the arrow keys below.
       if (!action && handleEditUndoKeyDown(event)) return
 
-      // Built-in list navigation on the arrow and Delete keys. No default chord
+      // Built-in list navigation on the arrow and Delete/Backspace keys. No default chord
       // uses them, but a user can rebind a shortcut onto one — that binding wins,
       // so the row below never runs behind its back.
       if (

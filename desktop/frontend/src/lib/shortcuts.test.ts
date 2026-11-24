@@ -6,6 +6,7 @@ import {
   formatShortcutAliases,
   isBareKeystroke,
   isMac,
+  isThreadListDeleteKey,
   isShortcutCustomized,
   matchShortcut,
   sanitizeShortcutOverrides,
@@ -120,6 +121,25 @@ describe('thread stepping aliases', () => {
     setShortcutOverrides({ 'thread.archive': { alt: true, key: 'ArrowDown' } })
     expect(matchShortcut(keydown('ArrowDown', { altKey: true }))).toBe('thread.archive')
     expect(formatShortcutAliases('thread.next')).toEqual([])
+  })
+})
+
+describe('thread list delete keys', () => {
+  afterEach(() => setShortcutOverrides({}))
+
+  it('treats Backspace (⌫ on a Mac) and Delete as delete keys, and nothing else', () => {
+    expect(isThreadListDeleteKey('Backspace')).toBe(true)
+    expect(isThreadListDeleteKey('Delete')).toBe(true)
+    expect(isThreadListDeleteKey('#')).toBe(false)
+  })
+
+  it("lists the platform's delete key beside # in the help sheet", () => {
+    expect(formatShortcutAliases('thread.delete')).toEqual([[isMac ? '⌫' : 'Delete']])
+  })
+
+  it('drops it from the sheet once a binding claims it', () => {
+    setShortcutOverrides({ 'thread.archive': { key: isMac ? 'Backspace' : 'Delete' } })
+    expect(formatShortcutAliases('thread.delete')).toEqual([])
   })
 })
 
