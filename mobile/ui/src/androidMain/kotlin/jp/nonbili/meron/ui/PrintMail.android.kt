@@ -13,6 +13,7 @@ import android.print.PrintManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -58,6 +59,8 @@ internal actual fun rememberMailPrinter(errorText: String): (String, String) -> 
             // The document CSP gates remote images; cached media uses the reader's loader.
             webView.settings.allowFileAccess = false
             webView.settings.allowContentAccess = false
+            // As in the reader: http: images on the https origin, still gated by the CSP.
+            webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             webView.webViewClient =
                 object : WebViewClient() {
                     override fun shouldInterceptRequest(
