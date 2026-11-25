@@ -60,6 +60,28 @@ class JsonUtilsTest {
     }
 
     @Test
+    fun jsonStringValueSkipsAKeyThatIsNotFollowedByAString() {
+        val json = """{"name":3,"user":{"name" : "Alice"}}"""
+
+        assertEquals("Alice", json.jsonStringValue("name"))
+    }
+
+    @Test
+    fun jsonStringValueReturnsEmptyForAnUnterminatedValue() {
+        assertEquals("", """{"name":"Ali""".jsonStringValue("name"))
+        assertEquals("", """{"name":"Ali\"""".jsonStringValue("name"))
+    }
+
+    @Test
+    fun jsonStringValueReadsAVeryLongValue() {
+        val body = "a\\\"b".repeat(200_000)
+        val json = """{"body":"$body","id":"1"}"""
+
+        assertEquals("a\"b".repeat(200_000), json.jsonStringValue("body"))
+        assertEquals("1", json.jsonStringValue("id"))
+    }
+
+    @Test
     fun jsonIntValueExtractsBasicKey() {
         val json = """{"count":42}"""
 
