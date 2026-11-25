@@ -207,6 +207,18 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun threadListKeepsSenderAddressBesideDisplayName() {
+        // The row shows the name; the sender image needs the address.
+        val threads =
+            parseThreadListResponse(
+                """{"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","from_name":"Juno Vale","from_addr":"juno@example.com","subject":"Hello"}]}}""",
+            )
+
+        assertEquals("Juno Vale", threads[0].sender)
+        assertEquals("juno@example.com", threads[0].senderAddr)
+    }
+
+    @Test
     fun contactHistoryReusesThreadCardsAndOpaqueCursor() {
         val response =
             """{"result":{"threads":[{"id":"other#Archive#t","account_id":"other","folder_id":"Archive","folder_role":"archive","subject":"Hello","from_name":"Alice","unread":true,"unread_count":2,"message_count":3,"tags":["Work"],"starred":true}],"next_cursor":"[200,\"other\\nkey\"]"}}"""
@@ -255,6 +267,7 @@ class MobileResponseParsersTest {
 
         assertEquals(1, items.size)
         assertEquals("ada@example.com", items[0].sender)
+        assertEquals("ada@example.com", items[0].senderAddr)
     }
 
     @Test

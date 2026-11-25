@@ -314,6 +314,7 @@ internal fun MeronMobileState.openLinkedThread(
                     folderRole = newest.folderRole.ifBlank { cachedFolderRole(accountId, folder) },
                     subject = newest.subject,
                     sender = newest.fromAddr.ifBlank { newest.from },
+                    senderAddr = newest.fromAddr,
                     dateEpochSeconds = newest.dateEpochSeconds,
                 ),
             )

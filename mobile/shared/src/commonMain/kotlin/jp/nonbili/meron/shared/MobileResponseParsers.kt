@@ -355,6 +355,7 @@ fun parseThreadListPage(responseJson: String): ThreadListPage {
                         .orEmpty()
                         .ifBlank { item.findJsonStringProperty("from_addr").orEmpty() }
                         .ifBlank { item.findJsonStringProperty("from").orEmpty() },
+                senderAddr = item.findJsonStringProperty("from_addr").orEmpty(),
                 preview = item.findJsonStringProperty("preview").orEmpty(),
                 unread = item.findJsonBooleanProperty("unread") ?: false,
                 unreadCount =
@@ -453,6 +454,7 @@ fun parseStarredItemsResponse(responseJson: String): List<StarredItemSummary> {
                         .orEmpty()
                         .ifBlank { item.findJsonStringProperty("from_addr").orEmpty() }
                         .ifBlank { item.findJsonStringProperty("from").orEmpty() },
+                senderAddr = item.findJsonStringProperty("from_addr").orEmpty(),
                 preview = item.findJsonStringProperty("preview").orEmpty(),
                 unread = item.findJsonBooleanProperty("unread") ?: false,
                 dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
@@ -1395,3 +1397,7 @@ private fun String.readBalancedJson(
 }
 
 fun parseSenderImageResponse(responseJson: String): String = responseJson.findJsonStringProperty("src").orEmpty()
+
+/** What a sender image is: "gravatar" (a photo to fill the circle) or
+ *  "favicon" (a small domain icon to inset, as desktop does). */
+fun parseSenderImageKind(responseJson: String): String = responseJson.findJsonStringProperty("kind").orEmpty()

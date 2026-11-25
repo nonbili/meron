@@ -1274,6 +1274,7 @@ private fun ContactThreadRow(
                 senderLabel = senderLabel,
                 showSenderImages = showSenderImages,
                 account = badgeAccount,
+                senderAddr = thread.senderAddr,
             )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

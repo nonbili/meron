@@ -123,6 +123,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
@@ -137,6 +138,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -678,6 +680,7 @@ internal fun MailRow(
                 senderLabel = senderLabel,
                 showSenderImages = showSenderImages,
                 account = badgeAccount,
+                senderAddr = thread.senderAddr,
             )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -873,9 +876,10 @@ internal fun ThreadAvatarWithAccountBadge(
     senderLabel: String,
     showSenderImages: Boolean,
     account: AccountSummary?,
+    senderAddr: String = "",
 ) {
     Box(Modifier.size(38.dp)) {
-        SenderAvatar(label = senderLabel, enabled = showSenderImages, size = 38.dp)
+        SenderAvatar(label = senderLabel, enabled = showSenderImages, size = 38.dp, email = senderAddr)
         if (account != null) {
             val label = account.displayName.ifBlank { account.email.ifBlank { account.id } }
             Box(
@@ -933,29 +937,66 @@ internal fun SenderAvatar(
     enabled: Boolean,
     size: Dp,
     fallbackName: String = label,
+    // The sender's address when the caller has it. A row's label is usually
+    // the display name alone, which has no address to look up.
+    email: String = "",
 ) {
     val core = LocalAvatarCore.current
-    val email = remember(label) { extractEmail(label) }
-    var image by remember(email, enabled, core) { mutableStateOf<ImageBitmap?>(null) }
+    val address = remember(email, label) { senderImageAddress(email, label) }
+    // Ask for the pixels the circle covers, not a fixed 96: 38dp is 114px on
+    // a 3x screen, and a smaller picture would be stretched soft.
+    val sizePx = with(LocalDensity.current) { size.roundToPx() }
+    var image by remember(address, enabled, core, sizePx) { mutableStateOf<KindedImageBitmap?>(null) }
 
-    LaunchedEffect(email, enabled, core) {
+    LaunchedEffect(address, enabled, core, sizePx) {
         image = null
-        if (enabled && email != null && core != null) {
-            image = loadSenderImage(core, email)
+        if (enabled && address != null && core != null) {
+            image = loadSenderImage(core, address, sizePx)
         }
     }
 
     val current = image
-    if (enabled && current != null) {
-        Image(
-            bitmap = current,
-            contentDescription = trf("avatar.forLabel", label),
-            modifier = Modifier.size(size).clip(CircleShape),
-        )
-    } else {
-        Avatar(fallbackName, size)
+    when {
+        !enabled || current == null -> {
+            Avatar(fallbackName, size)
+        }
+
+        // A favicon is a small domain icon, usually 16 to 64px. Like desktop,
+        // inset it on a white disc at its own scale instead of stretching it
+        // edge to edge, where it would come out blurry.
+        current.kind == SENDER_IMAGE_KIND_FAVICON -> {
+            Box(
+                Modifier
+                    .size(size)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .border(1.dp, Color.Black.copy(alpha = 0.05f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    bitmap = current.bitmap,
+                    contentDescription = trf("avatar.forLabel", label),
+                    contentScale = ContentScale.Fit,
+                    filterQuality = FilterQuality.High,
+                    modifier = Modifier.size(size * FAVICON_INSET_FRACTION),
+                )
+            }
+        }
+
+        else -> {
+            Image(
+                bitmap = current.bitmap,
+                contentDescription = trf("avatar.forLabel", label),
+                contentScale = ContentScale.Crop,
+                filterQuality = FilterQuality.High,
+                modifier = Modifier.size(size).clip(CircleShape),
+            )
+        }
     }
 }
+
+/** Desktop draws a favicon at 58% of the avatar's width (Avatar.tsx). */
+private const val FAVICON_INSET_FRACTION = 0.58f
 
 @Composable
 internal fun Avatar(

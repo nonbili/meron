@@ -118,7 +118,11 @@ data class ThreadSummary(
     val folder: String,
     val folderRole: String = "folder",
     val subject: String,
+    /** Display label: the sender's name, or the address when there is none. */
     val sender: String,
+    /** The sender's bare address, for looking up a sender image; the label
+     *  above is usually a display name and carries no address. */
+    val senderAddr: String = "",
     val preview: String = "",
     val unread: Boolean = false,
     val unreadCount: Int = 0,
@@ -151,6 +155,7 @@ data class StarredItemSummary(
     val folderRole: String = "folder",
     val subject: String,
     val sender: String,
+    val senderAddr: String = "",
     val preview: String = "",
     val unread: Boolean = false,
     val dateEpochSeconds: Long = 0,

@@ -80,6 +80,7 @@ internal fun StarredItemSummary.toThreadSummary(): ThreadSummary =
         folderRole = folderRole,
         subject = subject,
         sender = sender,
+        senderAddr = senderAddr,
         preview = preview,
         unread = unread,
         starred = true,
