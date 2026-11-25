@@ -1,0 +1,7 @@
+- Sync calendars, tasks and contacts with CalDAV, CardDAV and Google, with ICS import/export and custom repeat
+- Add a setting to turn off pulling up past the bottom to close
+- Refresh add account, compose, contacts and conversation details screens
+- Load sender images for named senders and draw them sharp
+- Fix mail links and images that failed to open or load
+- Refuse a Gmail sign-in that leaves mail access unticked
+- Make the Android mail scrolling fix opt-in
