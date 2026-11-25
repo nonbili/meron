@@ -1,0 +1,5 @@
+- Customizable floating conversation toolbar, spam action, and message source viewer.
+- Mail rules with match all/any, negation, and body conditions.
+- Separate-line message previews, Backspace to delete, and Windows taskbar unread badge.
+- Composer link and quote improvements, plus macOS drag-and-drop attachment fix.
+- Wide email scrolling, signed-only OpenPGP sending, and general UI fixes.

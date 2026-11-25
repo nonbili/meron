@@ -3,7 +3,7 @@
   "outputfilename": "meron",
   "info": {
     "productName": "Meron",
-    "productVersion": "0.6.0",
+    "productVersion": "0.6.1",
     "comments": "Messages that spark joy",
     "protocols": [
       {
