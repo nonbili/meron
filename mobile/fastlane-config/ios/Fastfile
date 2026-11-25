@@ -3,6 +3,31 @@ default_platform(:ios)
 require "shellwords"
 require "fileutils"
 
+# altool on recent Xcode logs this resume-file lookup as an ERROR even when
+# it reports "UPLOAD SUCCEEDED", and fastlane fails on any altool error output.
+def altool_resume_file_warning_only?(message)
+  marker = "[Application Loader Error Output]:"
+  return false unless message.include?(marker)
+  lines = message.split(marker, 2).last.lines.map(&:strip).reject(&:empty?)
+  !lines.empty? && lines.all? { |line| line.include?("CDUploaderStateInfoResumeFilePath") }
+end
+
+# Submitting an existing build by number does not wait for App Store Connect to
+# finish processing it, and fails with "Build number: N does not exist" while
+# it is still processing. Wait for it the way deliver does after an upload.
+def wait_for_processed_build(app_identifier, platform, app_version, build_number)
+  app = Spaceship::ConnectAPI::App.find(app_identifier)
+  UI.user_error!("App not found: #{app_identifier}") unless app
+  FastlaneCore::BuildWatcher.wait_for_build_processing_to_be_complete(
+    app_id: app.id,
+    platform: Spaceship::ConnectAPI::Platform.map(platform),
+    app_version: app_version,
+    build_version: build_number,
+    poll_interval: 15,
+    return_spaceship_testflight_build: false
+  )
+end
+
 platform :ios do
   private_lane :asc_api_key do
     key_id = ENV["APP_STORE_KEY_ID"]
@@ -149,11 +174,24 @@ platform :ios do
 
     if skip_binary_upload
       upload_options[:build_number] = build_number
-    else
-      upload_options[:ipa] = ipa_path
+      wait_for_processed_build(app_identifier, "ios", app_version, build_number) if submit_for_review
+      upload_to_app_store(upload_options)
+      next
     end
 
-    upload_to_app_store(upload_options)
+    # Upload and submit separately so a harmless altool warning that fastlane
+    # treats as a failure doesn't skip the submission.
+    begin
+      upload_to_app_store(upload_options.merge(ipa: ipa_path, submit_for_review: false))
+    rescue => e
+      raise unless altool_resume_file_warning_only?(e.message)
+      UI.important("Ignoring altool's CDUploaderStateInfoResumeFilePath warning; the upload succeeded")
+    end
+
+    if submit_for_review
+      wait_for_processed_build(app_identifier, "ios", app_version, build_number)
+      upload_to_app_store(upload_options.merge(skip_binary_upload: true, build_number: build_number))
+    end
   end
 
   desc "Upload framed screenshots to App Store Connect"

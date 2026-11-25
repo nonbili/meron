@@ -108,10 +108,24 @@ platform :mac do
 
     if skip_binary_upload
       upload_options[:build_number] = build_number
-    else
-      upload_options[:pkg] = pkg_path
+      wait_for_processed_build(app_identifier, "osx", app_version, build_number) if submit_for_review
+      upload_to_app_store(upload_options)
+      next
     end
 
-    upload_to_app_store(upload_options)
+    # Upload and submit separately so a harmless altool warning that fastlane
+    # treats as a failure doesn't skip the submission. The helpers live in the
+    # iOS Fastfile, which fastlane/Fastfile imports alongside this one.
+    begin
+      upload_to_app_store(upload_options.merge(pkg: pkg_path, submit_for_review: false))
+    rescue => e
+      raise unless altool_resume_file_warning_only?(e.message)
+      UI.important("Ignoring altool's CDUploaderStateInfoResumeFilePath warning; the upload succeeded")
+    end
+
+    if submit_for_review
+      wait_for_processed_build(app_identifier, "osx", app_version, build_number)
+      upload_to_app_store(upload_options.merge(skip_binary_upload: true, skip_metadata: true, build_number: build_number))
+    end
   end
 end
