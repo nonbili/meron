@@ -944,11 +944,17 @@ pub fn events_payload(conn: &Connection, from: i64, to: i64, include_tasks: bool
     }
     let mut items: Vec<(i64, Value)> = Vec::new();
     let mut keys = std::collections::HashSet::new();
+    // A synced calendar keeps events the user declined (Google shows them
+    // only with "Show declined events" on); they are left out here, as a
+    // declined invitation is taken out of the calendar.
+    let own = caldav::store::own_addresses(conn)?;
+    let nobody = std::collections::HashSet::new();
     for event in store::events_between(conn, from, to)? {
+        let mine = own.get(&event.calendar).unwrap_or(&nobody);
         // The same for every occurrence: worked out once, the series' first
         // date included, which may mean reading its whole object.
         let series = event_json(&event);
-        for occurrence in occurrences(&event, from, to) {
+        for occurrence in occurrences(&event, from, to, mine) {
             let start = occurrence.start;
             let mut item = series.clone();
             // Two occurrences can start together (one moved onto another), and
@@ -1103,10 +1109,18 @@ fn own_sequence(component: &calcard::icalendar::ICalendarComponent) -> i64 {
     .unwrap_or(0)
 }
 
-/// An event's occurrences that overlap `[from, to)`.
-fn occurrences(event: &CalendarEvent, from: i64, to: i64) -> Vec<Occurrence> {
+/// An event's occurrences that overlap `[from, to)`, less those the user,
+/// by one of `mine`, declined.
+fn occurrences(
+    event: &CalendarEvent,
+    from: i64,
+    to: i64,
+    mine: &std::collections::HashSet<String>,
+) -> Vec<Occurrence> {
     let overlaps =
         |start: i64, end: i64| start < to && (end > from || (end <= start && start >= from));
+    // Only an object that says DECLINED somewhere is read for it.
+    let may_be_declined = !mine.is_empty() && event.ics.to_ascii_uppercase().contains("DECLINED");
     let single = || {
         overlaps(event.start_at, event.end_at)
             .then(|| Occurrence {
@@ -1122,7 +1136,16 @@ fn occurrences(event: &CalendarEvent, from: i64, to: i64) -> Vec<Occurrence> {
             .collect()
     };
     if !event.recurring {
-        return single();
+        let declined = may_be_declined
+            && super::parse_ical(&event.ics).is_some_and(|ical| {
+                // Its one VEVENT: a lone date of a series may be an override.
+                ical.components
+                    .iter()
+                    .find(|component| component.component_type == ICalendarComponentType::VEvent)
+                    .and_then(|component| super::own_partstat(component, mine))
+                    .is_some_and(|answer| answer == "declined")
+            });
+        return if declined { Vec::new() } else { single() };
     }
     let ics = if event.ics.is_empty() {
         repeat_ics(event)
@@ -1156,6 +1179,12 @@ fn occurrences(event: &CalendarEvent, from: i64, to: i64) -> Vec<Occurrence> {
     // with RANGE=THISANDFUTURE calcard gives the same override every later
     // occurrence too, each its original time moved by the override's own move.
     let mut override_origins = std::collections::HashMap::new();
+    // Each date by the answer on its own VEVENT: the series', or an
+    // override's (one date declined, or accepted, on its own).
+    let declined = |component: &calcard::icalendar::ICalendarComponent| {
+        may_be_declined
+            && super::own_partstat(component, mine).is_some_and(|answer| answer == "declined")
+    };
     let mut out: Vec<Occurrence> = expanded
         .events
         .iter()
@@ -1237,6 +1266,7 @@ fn occurrences(event: &CalendarEvent, from: i64, to: i64) -> Vec<Occurrence> {
                 });
             // A cancelled occurrence (an override saying so) is not on.
             if !overlaps(start, end)
+                || declined(component)
                 || excluded.contains(&original)
                 || (!component.is_recurrence_override() && overridden.contains(&original))
                 || component.status() == Some(&calcard::icalendar::ICalendarStatus::Cancelled)

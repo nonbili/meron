@@ -147,6 +147,36 @@ pub fn accounts(conn: &Connection) -> Result<Vec<DavAccount>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+/// The user's addresses on each synced calendar, by calendar id: its
+/// account's login, lowercased, and the send-as addresses of a mail account
+/// on the same address.
+pub fn own_addresses(
+    conn: &Connection,
+) -> Result<std::collections::HashMap<String, std::collections::HashSet<String>>> {
+    let mut stmt = conn.prepare(
+        "SELECT c.id, lower(trim(a.username)),
+                (SELECT m.id FROM accounts m WHERE lower(trim(m.email)) = lower(trim(a.username)))
+           FROM dav_calendars c JOIN dav_accounts a ON a.id = c.account",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        ))
+    })?;
+    let mut out = std::collections::HashMap::new();
+    for row in rows {
+        let (calendar, username, mail) = row?;
+        let mut mine = std::collections::HashSet::from([username]);
+        if let Some(mail) = mail {
+            mine.extend(crate::store::self_addrs(conn, &mail));
+        }
+        out.insert(calendar, mine);
+    }
+    Ok(out)
+}
+
 pub fn account(conn: &Connection, id: &str) -> Result<Option<DavAccount>> {
     let sql = format!("SELECT {ACCOUNT_COLUMNS} FROM dav_accounts WHERE id = ?1");
     Ok(conn.query_row(&sql, params![id], read_account).optional()?)
