@@ -66,8 +66,9 @@ if [[ ! -f "$LIB_PATH" ]]; then
 fi
 
 mkdir -p "$OUT_DIR"
+# Don't strip the archive: Xcode 27's `strip -S` rewrites the objects' code
+# instead of only dropping debug info, and the result misbehaves on device
+# (rusqlite calls failing with impossible parameter counts, #194). The app's
+# own link and archive steps strip the final binary.
 cp "$LIB_PATH" "$OUT_DIR/libmeron_core.a"
-if [[ "$PROFILE" == "release" ]]; then
-  strip -S "$OUT_DIR/libmeron_core.a" 2>/dev/null || true
-fi
 echo "Packaged $OUT_DIR/libmeron_core.a"
