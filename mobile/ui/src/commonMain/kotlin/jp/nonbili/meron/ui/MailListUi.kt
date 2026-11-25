@@ -942,7 +942,7 @@ internal fun SenderAvatar(
     email: String = "",
 ) {
     val core = LocalAvatarCore.current
-    val address = remember(email, label) { extractEmail(email) ?: extractEmail(label) }
+    val address = remember(email, label) { senderImageAddress(email, label) }
     // Ask for the pixels the circle covers, not a fixed 96: 38dp is 114px on
     // a 3x screen, and a smaller picture would be stretched soft.
     val sizePx = with(LocalDensity.current) { size.roundToPx() }

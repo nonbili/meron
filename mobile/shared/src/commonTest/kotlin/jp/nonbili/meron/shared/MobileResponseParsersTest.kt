@@ -211,11 +211,11 @@ class MobileResponseParsersTest {
         // The row shows the name; the sender image needs the address.
         val threads =
             parseThreadListResponse(
-                """{"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","from_name":"Ada Lovelace","from_addr":"ada@example.com","subject":"Hello"}]}}""",
+                """{"result":{"threads":[{"id":"acc#INBOX#t","account_id":"acc","folder_id":"INBOX","from_name":"Juno Vale","from_addr":"juno@example.com","subject":"Hello"}]}}""",
             )
 
-        assertEquals("Ada Lovelace", threads[0].sender)
-        assertEquals("ada@example.com", threads[0].senderAddr)
+        assertEquals("Juno Vale", threads[0].sender)
+        assertEquals("juno@example.com", threads[0].senderAddr)
     }
 
     @Test
