@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Sõnumit ei saanud salvestada",
   "chat.current": "Praegune",
   "chat.currentConversation": "Praegune vestlus",
+  "chat.deleteConversationForeverText": "See vestlus kustutatakse jäädavalt. Seda ei saa tagasi võtta.",
   "chat.draft": "Mustand",
   "chat.dropToAttach": "Lohista siia manustamiseks",
   "chat.expandAll": "Laienda kõik",

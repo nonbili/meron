@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,6 +35,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
@@ -52,6 +55,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Print
@@ -73,9 +78,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -102,6 +107,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -115,7 +122,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -173,11 +182,15 @@ internal fun ThreadScreen(
     onMarkAsSpam: (() -> Unit)? = null,
     /** Names the feed in the list; null where the thread is not a feed. */
     onRenameFeed: ((String) -> Unit)? = null,
+    /** A feed's article opened on its own (a starred one), not the feed's page. */
+    isRssArticle: Boolean = false,
     onDelete: () -> Unit,
     onToggleStar: () -> Unit,
     /** Null when Tasks is switched off, which hides the action entirely. */
     onAddToTasks: (() -> Unit)? = null,
     onTags: (() -> Unit)? = null,
+    /** The actions pinned to the top bar, in order; the rest are in its ⋯ menu. */
+    toolbar: List<ConversationToolbarAction> = DEFAULT_CONVERSATION_TOOLBAR,
     moveFolders: List<FolderSummary>,
     copyFolders: List<FolderSummary>,
     transferAccounts: List<jp.nonbili.meron.shared.AccountSummary> = emptyList(),
@@ -295,8 +308,176 @@ internal fun ThreadScreen(
             onDismiss = { feedName = null },
         )
     }
-    LaunchedEffect(overflowOpen, thread?.accountId) {
-        if (overflowOpen) loadRecentTransferFolders()
+
+    // The bar's actions: which ones the open conversation offers, and what each
+    // does, whether it is pinned to the bar or left in the ⋯ menu.
+    fun toolbarActionAvailable(action: ConversationToolbarAction): Boolean =
+        when (action) {
+            // A feed's archive deletes the feed, which a single article can't.
+            ConversationToolbarAction.Archive -> !isRssArticle
+
+            ConversationToolbarAction.Star, ConversationToolbarAction.Search -> true
+
+            ConversationToolbarAction.Spam -> onMarkAsSpam != null
+
+            ConversationToolbarAction.Tags -> onTags != null
+
+            ConversationToolbarAction.Tasks -> onAddToTasks != null
+
+            // A feed's delete is its archive action.
+            ConversationToolbarAction.Delete,
+            ConversationToolbarAction.MoveTo,
+            ConversationToolbarAction.CopyTo,
+            ConversationToolbarAction.Print,
+            -> !isRss
+        }
+
+    // Deleting from Trash or Drafts, or deleting a feed (a feed's archive),
+    // can't be undone: those ask first, from the bar, the ⋯ menu and the footer
+    // alike. Archive and move to Trash stay one tap.
+    var confirmDelete by remember(thread?.id) { mutableStateOf(false) }
+    var confirmFeedDelete by remember(thread?.id) { mutableStateOf(false) }
+    val deletesForever = thread?.folderRole == "trash" || thread?.folderRole == "drafts"
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(deleteLabel) },
+            text = { Text(tr("chat.deleteConversationForeverText")) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        onDelete()
+                    },
+                ) {
+                    Text(deleteLabel, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text(tr("buttons.cancel")) }
+            },
+        )
+    }
+    if (confirmFeedDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmFeedDelete = false },
+            title = { Text(tr("feeds.actions.confirmDelete")) },
+            text = { Text(tr("feeds.deleteHint")) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmFeedDelete = false
+                        onArchive()
+                    },
+                ) {
+                    Text(tr("buttons.delete"), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmFeedDelete = false }) { Text(tr("buttons.cancel")) }
+            },
+        )
+    }
+
+    fun runToolbarAction(action: ConversationToolbarAction) {
+        when (action) {
+            ConversationToolbarAction.Archive -> {
+                if (isRss) confirmFeedDelete = true else onArchive()
+            }
+
+            ConversationToolbarAction.Spam -> {
+                onMarkAsSpam?.invoke()
+            }
+
+            ConversationToolbarAction.Delete -> {
+                if (deletesForever) confirmDelete = true else onDelete()
+            }
+
+            ConversationToolbarAction.Tags -> {
+                onTags?.invoke()
+            }
+
+            ConversationToolbarAction.Tasks -> {
+                onAddToTasks?.invoke()
+            }
+
+            ConversationToolbarAction.Star -> {
+                onToggleStar()
+            }
+
+            ConversationToolbarAction.Search -> {
+                searchOpen = !searchOpen
+            }
+
+            ConversationToolbarAction.MoveTo -> {
+                loadTransferFolders()
+                moveDialogOpen = true
+            }
+
+            ConversationToolbarAction.CopyTo -> {
+                loadTransferFolders()
+                copyDialogOpen = true
+            }
+
+            ConversationToolbarAction.Print -> {
+                if (printing || thread == null) return
+                printing = true
+                val subject = thread.subject
+                printScope.launch {
+                    try {
+                        printThread(subject, loadPrintMessages())
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        onPrintError(printError)
+                    } finally {
+                        printing = false
+                    }
+                }
+            }
+        }
+    }
+    // As many of the pinned actions as the bar has room for beside back and ⋯
+    // (each chip with its bar and chip margins, and a gap between them, plus the
+    // print spinner while it spins); the rest join the menu, so ⋯ and what it
+    // holds stay in reach however many are pinned.
+    // The bar lays out inside its own window insets (a side navigation bar or a
+    // cutout in landscape), so those come off the window's width first.
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val barInsets = TopAppBarDefaults.windowInsets
+    val barWidth =
+        with(density) {
+            (
+                LocalWindowInfo.current.containerSize.width -
+                    barInsets.getLeft(this, layoutDirection) -
+                    barInsets.getRight(this, layoutDirection)
+            ).toDp()
+        }
+    val barReserved = (4 + 4 + 48) * 2 + 8 + (if (printing) 32 else 0)
+    val barActionRoom = ((barWidth - barReserved.dp) / 48.dp).toInt().coerceAtLeast(0)
+    val pinnedActions = toolbar.filter(::toolbarActionAvailable).take(barActionRoom)
+
+    fun inMenu(action: ConversationToolbarAction) = action !in pinnedActions && toolbarActionAvailable(action)
+
+    fun menuAction(action: ConversationToolbarAction) {
+        overflowOpen = false
+        runToolbarAction(action)
+    }
+
+    // A menu row for an action that needs nothing beyond its icon and name.
+    @Composable
+    fun menuItem(action: ConversationToolbarAction) {
+        DropdownMenuItem(
+            text = { Text(tr(action.labelKey)) },
+            leadingIcon = { Icon(action.icon, contentDescription = null) },
+            onClick = { menuAction(action) },
+        )
+    }
+
+    // The pickers list recent destinations, opened from the menu or the bar.
+    LaunchedEffect(overflowOpen || moveDialogOpen || copyDialogOpen, thread?.accountId) {
+        if (overflowOpen || moveDialogOpen || copyDialogOpen) loadRecentTransferFolders()
     }
     val closeSearch = {
         threadSearch = ""
@@ -403,7 +584,6 @@ internal fun ThreadScreen(
     var pinnedHeaderHeightPx by remember { mutableIntStateOf(0) }
     // The conversation, captured for the frosted bands at either end of it.
     val hazeState = rememberHazeState()
-    var confirmFooterDelete by remember(thread?.id) { mutableStateOf(false) }
     val showFooter = thread != null && !isRss && messages.isNotEmpty() && conversationFooter != ConversationFooter.None
     val showReplyBar = showFooter && conversationFooter == ConversationFooter.Reply
     val replyOverlayPx by rememberUpdatedState(if (showFooter) replyBarHeightPx else 0)
@@ -808,188 +988,208 @@ internal fun ThreadScreen(
             topBar = {
                 TopAppBar(
                     // The subject is at the top of the list instead, in full;
-                    // the bar keeps only its floating buttons.
-                    title = {},
+                    // the bar keeps only its floating buttons. Searching, the
+                    // search takes the actions' place as one long chip.
+                    title = {
+                        if (searchOpen) {
+                            ConversationSearchChip(
+                                query = threadSearch,
+                                onQueryChange = { threadSearch = it },
+                                matchLabel = if (normalizedSearch.isBlank()) "" else "${if (searchMatches.isEmpty()) 0 else activeSearchIndex + 1}/${searchMatches.size}",
+                                canNavigate = searchMatches.isNotEmpty(),
+                                onPrevious = { goToSearchMatch(-1) },
+                                onNext = { goToSearchMatch(1) },
+                                modifier = Modifier.padding(end = 4.dp),
+                            )
+                        }
+                    },
                     navigationIcon = {
                         FloatingBarChip(CircleShape, Modifier.padding(start = 4.dp).width(FLOATING_BAR_CHIP_HEIGHT)) {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
+                            // Searching, back leaves the search, as the system back does.
+                            if (searchOpen) {
+                                IconButton(onClick = closeSearch) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("chat.closeThreadSearch"))
+                                }
+                            } else {
+                                IconButton(onClick = onBack) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
+                                }
                             }
                         }
                     },
                     actions = {
-                        FloatingBarChip(RoundedCornerShape(50), Modifier.padding(end = 4.dp)) {
-                            if (printing) CircularProgressIndicator(Modifier.padding(start = 12.dp).size(20.dp))
-                            // On the bar, like the desktop header's, and not the
-                            // Tasks screen's checklist icon: this files the thread.
-                            if (onTags != null) {
-                                IconButton(onClick = onTags) {
-                                    Icon(Icons.Filled.Sell, contentDescription = tr("tags.title"))
-                                }
-                            }
-                            if (onAddToTasks != null) {
-                                IconButton(onClick = onAddToTasks) {
-                                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = tr("tasks.addFromMessage"))
-                                }
-                            }
-                            IconButton(onClick = onToggleStar) {
-                                Icon(
-                                    if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    contentDescription = tr("chat.star"),
-                                    tint = if (thread?.starred == true) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Box {
-                                IconButton(onClick = { overflowOpen = true }) {
-                                    Icon(Icons.Filled.MoreVert, contentDescription = tr("chat.moreActions"))
-                                }
-                                DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
-                                    DropdownMenuItem(
-                                        text = { Text(if (isRss) tr("feeds.actions.deleteFeed") else tr("threads.actions.archiveThread")) },
-                                        leadingIcon = { Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null) },
-                                        onClick = {
-                                            overflowOpen = false
-                                            onArchive()
-                                        },
-                                    )
-                                    if (onMarkAsSpam != null) {
-                                        MarkAsSpamMenuItem {
-                                            overflowOpen = false
-                                            onMarkAsSpam()
-                                        }
-                                    }
-                                    if (isRss && onRenameFeed != null && thread != null) {
-                                        DropdownMenuItem(
-                                            text = { Text(tr("mobile.actions.renameFeed")) },
-                                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
-                                            onClick = {
-                                                overflowOpen = false
-                                                feedName = thread.subject
-                                            },
-                                        )
-                                    }
-                                    DropdownMenuItem(
-                                        text = { Text(tr("chat.searchThread")) },
-                                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                                        onClick = {
-                                            overflowOpen = false
-                                            searchOpen = !searchOpen
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(if (isRss) tr("chat.feedDetails") else tr("chat.conversationDetails")) },
-                                        leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
-                                        onClick = {
-                                            overflowOpen = false
-                                            detailsOpen = true
-                                        },
-                                    )
-                                    expandAllAction?.let { expand ->
-                                        DropdownMenuItem(
-                                            text = { Text(if (expand) tr("chat.expandAll") else tr("chat.collapseAll")) },
-                                            leadingIcon = {
+                        if (!searchOpen) {
+                            FloatingBarChip(RoundedCornerShape(50), Modifier.padding(end = 4.dp)) {
+                                if (printing) CircularProgressIndicator(Modifier.padding(start = 12.dp).size(20.dp))
+                                // The actions pinned in Settings, in their order.
+                                pinnedActions.forEach { action ->
+                                    IconButton(
+                                        onClick = { runToolbarAction(action) },
+                                        enabled = action != ConversationToolbarAction.Print || (!printing && thread != null),
+                                    ) {
+                                        when (action) {
+                                            ConversationToolbarAction.Star -> {
                                                 Icon(
-                                                    if (expand) Icons.Filled.UnfoldMore else Icons.Filled.UnfoldLess,
-                                                    contentDescription = null,
+                                                    if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                                    contentDescription = tr("chat.star"),
+                                                    tint = if (thread?.starred == true) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
-                                            },
-                                            onClick = {
-                                                overflowOpen = false
-                                                releaseFocusBeforeToggle()
-                                                // The list keeps the message at the top of
-                                                // the screen where it is as the rows
-                                                // around it change height — or, for a
-                                                // reader at the end, the end.
-                                                if (!listState.canScrollForward) endHoldRequest += 1
-                                                expandOverrides = emptyMap()
-                                                wasNewest.clear()
-                                                expandAll = expand
-                                            },
-                                        )
+                                            }
+
+                                            ConversationToolbarAction.Archive -> {
+                                                Icon(
+                                                    if (isRss) Icons.Filled.Delete else Icons.Filled.Archive,
+                                                    contentDescription = if (isRss) tr("feeds.actions.deleteFeed") else tr("threads.actions.archiveThread"),
+                                                )
+                                            }
+
+                                            ConversationToolbarAction.Delete -> {
+                                                Icon(action.icon, contentDescription = deleteLabel)
+                                            }
+
+                                            else -> {
+                                                Icon(action.icon, contentDescription = tr(action.labelKey))
+                                            }
+                                        }
                                     }
-                                    if (!isRss) {
-                                        DropdownMenuItem(
-                                            text = { Text(tr("chat.actions.printThread")) },
-                                            leadingIcon = { Icon(Icons.Filled.Print, contentDescription = null) },
-                                            trailingIcon = { if (printing) CircularProgressIndicator(Modifier.size(16.dp)) },
-                                            enabled = !printing && thread != null,
-                                            onClick = {
-                                                overflowOpen = false
-                                                printing = true
-                                                val subject = thread?.subject.orEmpty()
-                                                printScope.launch {
-                                                    try {
-                                                        printThread(subject, loadPrintMessages())
-                                                    } catch (error: kotlinx.coroutines.CancellationException) {
-                                                        throw error
-                                                    } catch (_: Exception) {
-                                                        onPrintError(printError)
-                                                    } finally {
-                                                        printing = false
-                                                    }
-                                                }
-                                            },
-                                        )
-                                        // Without the reply bar (the conversation-footer
-                                        // setting), the plain reply needs a home too: the
-                                        // traditional layout's rows don't open the reader.
-                                        if (conversationFooter != ConversationFooter.Reply && conversationReplyTarget != null) {
+                                }
+                                Box {
+                                    IconButton(onClick = { overflowOpen = true }) {
+                                        Icon(Icons.Filled.MoreVert, contentDescription = tr("chat.moreActions"))
+                                    }
+                                    DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                                        // Whatever is not pinned to the bar stays here.
+                                        if (inMenu(ConversationToolbarAction.Star)) {
                                             DropdownMenuItem(
-                                                text = { Text(tr("chat.actions.reply")) },
-                                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null) },
+                                                text = { Text(if (thread?.starred == true) tr("chat.unstar") else tr("chat.star")) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                                        contentDescription = null,
+                                                        tint = if (thread?.starred == true) chat.star else LocalContentColor.current,
+                                                    )
+                                                },
+                                                onClick = { menuAction(ConversationToolbarAction.Star) },
+                                            )
+                                        }
+                                        if (inMenu(ConversationToolbarAction.Tags)) {
+                                            menuItem(ConversationToolbarAction.Tags)
+                                        }
+                                        if (inMenu(ConversationToolbarAction.Tasks)) {
+                                            menuItem(ConversationToolbarAction.Tasks)
+                                        }
+                                        if (inMenu(ConversationToolbarAction.Archive)) {
+                                            DropdownMenuItem(
+                                                text = { Text(if (isRss) tr("feeds.actions.deleteFeed") else tr("threads.actions.archiveThread")) },
+                                                leadingIcon = { Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null) },
+                                                onClick = { menuAction(ConversationToolbarAction.Archive) },
+                                            )
+                                        }
+                                        if (inMenu(ConversationToolbarAction.Spam)) {
+                                            MarkAsSpamMenuItem { menuAction(ConversationToolbarAction.Spam) }
+                                        }
+                                        if (isRss && onRenameFeed != null && thread != null) {
+                                            DropdownMenuItem(
+                                                text = { Text(tr("mobile.actions.renameFeed")) },
+                                                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
                                                 onClick = {
                                                     overflowOpen = false
-                                                    onReplyToMessage(conversationReplyTarget)
+                                                    feedName = thread.subject
                                                 },
                                             )
                                         }
-                                        // Hidden when the reply target has no other
-                                        // recipients: a reply-all identical to the
-                                        // reply is a second name for the same action.
-                                        if (canReplyAllToThread) {
+                                        if (inMenu(ConversationToolbarAction.Search)) {
+                                            menuItem(ConversationToolbarAction.Search)
+                                        }
+                                        DropdownMenuItem(
+                                            text = { Text(if (isRss) tr("chat.feedDetails") else tr("chat.conversationDetails")) },
+                                            leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                                            onClick = {
+                                                overflowOpen = false
+                                                detailsOpen = true
+                                            },
+                                        )
+                                        expandAllAction?.let { expand ->
                                             DropdownMenuItem(
-                                                text = { Text(tr("chat.actions.replyAll")) },
-                                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.ReplyAll, contentDescription = null) },
+                                                text = { Text(if (expand) tr("chat.expandAll") else tr("chat.collapseAll")) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        if (expand) Icons.Filled.UnfoldMore else Icons.Filled.UnfoldLess,
+                                                        contentDescription = null,
+                                                    )
+                                                },
                                                 onClick = {
                                                     overflowOpen = false
-                                                    onReplyAll()
+                                                    releaseFocusBeforeToggle()
+                                                    // The list keeps the message at the top of
+                                                    // the screen where it is as the rows
+                                                    // around it change height — or, for a
+                                                    // reader at the end, the end.
+                                                    if (!listState.canScrollForward) endHoldRequest += 1
+                                                    expandOverrides = emptyMap()
+                                                    wasNewest.clear()
+                                                    expandAll = expand
                                                 },
                                             )
                                         }
-                                        DropdownMenuItem(
-                                            text = { Text(if (preferHtml) tr("chat.viewAsPlainText") else tr("chat.viewAsHtml")) },
-                                            leadingIcon = { Icon(Icons.Filled.Code, contentDescription = null) },
-                                            onClick = {
-                                                overflowOpen = false
-                                                onPreferHtmlChange(!preferHtml)
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(tr("threads.actions.moveTo")) },
-                                            leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
-                                            onClick = {
-                                                overflowOpen = false
-                                                loadTransferFolders()
-                                                moveDialogOpen = true
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(tr("threads.actions.copyTo")) },
-                                            leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
-                                            onClick = {
-                                                overflowOpen = false
-                                                loadTransferFolders()
-                                                copyDialogOpen = true
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
-                                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                            onClick = {
-                                                overflowOpen = false
-                                                onDelete()
-                                            },
-                                        )
+                                        if (!isRss) {
+                                            if (inMenu(ConversationToolbarAction.Print)) {
+                                                DropdownMenuItem(
+                                                    text = { Text(tr("chat.actions.printThread")) },
+                                                    leadingIcon = { Icon(Icons.Filled.Print, contentDescription = null) },
+                                                    trailingIcon = { if (printing) CircularProgressIndicator(Modifier.size(16.dp)) },
+                                                    enabled = !printing && thread != null,
+                                                    onClick = { menuAction(ConversationToolbarAction.Print) },
+                                                )
+                                            }
+                                            // Without the reply bar (the conversation-footer
+                                            // setting), the plain reply needs a home too: the
+                                            // traditional layout's rows don't open the reader.
+                                            if (conversationFooter != ConversationFooter.Reply && conversationReplyTarget != null) {
+                                                DropdownMenuItem(
+                                                    text = { Text(tr("chat.actions.reply")) },
+                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null) },
+                                                    onClick = {
+                                                        overflowOpen = false
+                                                        onReplyToMessage(conversationReplyTarget)
+                                                    },
+                                                )
+                                            }
+                                            // Hidden when the reply target has no other
+                                            // recipients: a reply-all identical to the
+                                            // reply is a second name for the same action.
+                                            if (canReplyAllToThread) {
+                                                DropdownMenuItem(
+                                                    text = { Text(tr("chat.actions.replyAll")) },
+                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.ReplyAll, contentDescription = null) },
+                                                    onClick = {
+                                                        overflowOpen = false
+                                                        onReplyAll()
+                                                    },
+                                                )
+                                            }
+                                            DropdownMenuItem(
+                                                text = { Text(if (preferHtml) tr("chat.viewAsPlainText") else tr("chat.viewAsHtml")) },
+                                                leadingIcon = { Icon(Icons.Filled.Code, contentDescription = null) },
+                                                onClick = {
+                                                    overflowOpen = false
+                                                    onPreferHtmlChange(!preferHtml)
+                                                },
+                                            )
+                                            if (inMenu(ConversationToolbarAction.MoveTo)) {
+                                                menuItem(ConversationToolbarAction.MoveTo)
+                                            }
+                                            if (inMenu(ConversationToolbarAction.CopyTo)) {
+                                                menuItem(ConversationToolbarAction.CopyTo)
+                                            }
+                                            if (inMenu(ConversationToolbarAction.Delete)) {
+                                                DropdownMenuItem(
+                                                    text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
+                                                    leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                                    onClick = { menuAction(ConversationToolbarAction.Delete) },
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1004,9 +1204,8 @@ internal fun ThreadScreen(
         ) { innerPadding ->
             val layoutDirection = LocalLayoutDirection.current
             val barHeight = innerPadding.calculateTopPadding()
-            // The list runs up under the app bar, except while the search bar
-            // sits between them.
-            val underBar = if (searchOpen) 0.dp else barHeight
+            // The list runs up under the app bar, search and all.
+            val underBar = barHeight
             val underBarPx = with(LocalDensity.current) { underBar.roundToPx() }
             // And down under the navigation bar, below the reply card, which
             // itself stays above it.
@@ -1062,17 +1261,6 @@ internal fun ThreadScreen(
                     .consumeWindowInsets(innerPadding)
                     .imePadding(),
             ) {
-                if (searchOpen) {
-                    ConversationSearchBar(
-                        query = threadSearch,
-                        onQueryChange = { threadSearch = it },
-                        matchLabel = if (normalizedSearch.isBlank()) "" else "${if (searchMatches.isEmpty()) 0 else activeSearchIndex + 1}/${searchMatches.size}",
-                        canNavigate = searchMatches.isNotEmpty(),
-                        onPrevious = { goToSearchMatch(-1) },
-                        onNext = { goToSearchMatch(1) },
-                        onClose = closeSearch,
-                    )
-                }
                 // Only the conversation itself pages: not while searching it,
                 // and not under the reader, gallery or details over it.
                 val swipeOpen = !searchOpen && !detailsOpen && readerMessage == null && galleryIndex == null
@@ -1379,34 +1567,8 @@ internal fun ThreadScreen(
                                     } else {
                                         deleteLabel
                                     },
-                                onDelete = {
-                                    if (thread?.folderRole == "trash" || thread?.folderRole == "drafts") {
-                                        confirmFooterDelete = true
-                                    } else {
-                                        onDelete()
-                                    }
-                                },
+                                onDelete = { runToolbarAction(ConversationToolbarAction.Delete) },
                                 modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = REPLY_CARD_TOP_MARGIN, bottom = 12.dp),
-                            )
-                        }
-                        if (confirmFooterDelete) {
-                            AlertDialog(
-                                onDismissRequest = { confirmFooterDelete = false },
-                                title = { Text(deleteLabel) },
-                                text = { Text(tr("mobile.compose.discardDraftText")) },
-                                confirmButton = {
-                                    TextButton(
-                                        onClick = {
-                                            confirmFooterDelete = false
-                                            onDelete()
-                                        },
-                                    ) {
-                                        Text(deleteLabel, color = MaterialTheme.colorScheme.error)
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { confirmFooterDelete = false }) { Text(tr("buttons.cancel")) }
-                                },
                             )
                         }
                     }
@@ -1887,42 +2049,87 @@ internal fun ConversationDetailsScreen(
     }
 }
 
+/**
+ * The conversation's search, in the top bar in place of its actions: one
+ * floating chip like theirs, holding the field, the match count and the arrows
+ * between matches. It takes the focus as it opens.
+ */
 @Composable
-internal fun ConversationSearchBar(
+private fun ConversationSearchChip(
     query: String,
     onQueryChange: (String) -> Unit,
     matchLabel: String,
     canNavigate: Boolean,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Surface(tonalElevation = 2.dp, color = MaterialTheme.colorScheme.surfaceContainer) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                placeholder = { Text(tr("chat.searchThread")) },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (query.isNotBlank()) {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(Icons.Filled.Close, contentDescription = tr("common.clearSearch"))
+    val colors = MaterialTheme.colorScheme
+    val focusRequester = remember { FocusRequester() }
+    FloatingCard(RoundedCornerShape(50), modifier.fillMaxWidth().height(FLOATING_BAR_CHIP_HEIGHT)) {
+        // The field keeps room for the query in a narrow window: the search
+        // icon goes first, then the clear button, then the count, while the
+        // arrows between matches always stay. Decided by width alone, so typing
+        // never shifts the field.
+        BoxWithConstraints {
+            val showIcon = maxWidth >= 320.dp
+            val showClear = maxWidth >= 280.dp
+            val showCount = maxWidth >= 240.dp
+            // Here, not above: this content composes during layout, and the
+            // field must be attached before it can take the focus.
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            Row(Modifier.fillMaxHeight().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (showIcon) {
+                    Icon(Icons.Filled.Search, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { if (canNavigate) onNext() }),
+                    cursorBrush = SolidColor(colors.primary),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
+                    modifier = Modifier.weight(1f).padding(start = if (showIcon) 12.dp else 0.dp, end = 4.dp).focusRequester(focusRequester),
+                    decorationBox = { field ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (query.isEmpty()) {
+                                Text(
+                                    tr("chat.searchThread"),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = colors.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            field()
+                        }
+                    },
+                )
+                // The count, the arrows and the clear button come with a query:
+                // an empty search has nothing to step through.
+                if (query.isNotEmpty()) {
+                    if (showCount) {
+                        Text(
+                            matchLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                        )
+                    }
+                    IconButton(onClick = onPrevious, enabled = canNavigate, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = tr("chat.previousMatch"))
+                    }
+                    IconButton(onClick = onNext, enabled = canNavigate, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = tr("chat.nextMatch"))
+                    }
+                    if (showClear) {
+                        IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Filled.Close, contentDescription = tr("common.clearSearch"), modifier = Modifier.size(20.dp))
                         }
                     }
-                },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            Text(matchLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(42.dp))
-            TextButton(onClick = onPrevious, enabled = canNavigate) { Text(tr("chat.previousMatch")) }
-            TextButton(onClick = onNext, enabled = canNavigate) { Text(tr("chat.nextMatch")) }
-            IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = tr("chat.closeThreadSearch"))
+                }
             }
         }
     }

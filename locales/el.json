@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Δεν ήταν δυνατή η αποθήκευση του μηνύματος",
   "chat.current": "Τρέχον",
   "chat.currentConversation": "Τρέχουσα συνομιλία",
+  "chat.deleteConversationForeverText": "Αυτή η συνομιλία θα διαγραφεί οριστικά. Αυτό δεν μπορεί να αναιρεθεί.",
   "chat.draft": "Προσχέδιο",
   "chat.dropToAttach": "Αφήστε τα για επισύναψη",
   "chat.expandAll": "Ανάπτυξη όλων",

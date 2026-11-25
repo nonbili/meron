@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Mesaj kaydedilemedi",
   "chat.current": "Mevcut",
   "chat.currentConversation": "Mevcut konuşma",
+  "chat.deleteConversationForeverText": "Bu konuşma kalıcı olarak silinecek. Bu işlem geri alınamaz.",
   "chat.draft": "Taslak",
   "chat.dropToAttach": "Eklemek için bırakın",
   "chat.expandAll": "Tümünü genişlet",

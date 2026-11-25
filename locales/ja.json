@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "メッセージを保存できませんでした",
   "chat.current": "現在",
   "chat.currentConversation": "現在の会話",
+  "chat.deleteConversationForeverText": "この会話は完全に削除されます。この操作は元に戻せません。",
   "chat.draft": "下書き",
   "chat.dropToAttach": "ドロップして添付",
   "chat.expandAll": "すべて展開",

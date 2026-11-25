@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Не вдалося зберегти лист",
   "chat.current": "Поточна",
   "chat.currentConversation": "Поточна розмова",
+  "chat.deleteConversationForeverText": "Цю розмову буде остаточно видалено. Цю дію неможливо скасувати.",
   "chat.draft": "Чернетка",
   "chat.dropToAttach": "Перетягніть, щоб прикріпити",
   "chat.expandAll": "Розгорнути все",

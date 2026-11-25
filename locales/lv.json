@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Nevarēja saglabāt ziņojumu",
   "chat.current": "Pašreizējais",
   "chat.currentConversation": "Pašreizējā saruna",
+  "chat.deleteConversationForeverText": "Šī saruna tiks neatgriezeniski dzēsta. Šo darbību nevar atsaukt.",
   "chat.draft": "Melnraksts",
   "chat.dropToAttach": "Nometiet, lai pievienotu",
   "chat.expandAll": "Izvērst visus",

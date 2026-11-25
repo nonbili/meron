@@ -1382,6 +1382,11 @@ private fun MeronMobileScreenContent(
                                 setConversationFooter(footer)
                                 saveConversationFooter(prefs, footer)
                             },
+                            conversationToolbar = conversationToolbar,
+                            onConversationToolbarChange = { actions ->
+                                conversationToolbar = actions
+                                saveConversationToolbar(prefs, actions)
+                            },
                             showUnreadBadges = showUnreadBadges,
                             onToggleUnreadBadges = {
                                 showUnreadBadges = !showUnreadBadges
@@ -1670,6 +1675,7 @@ private fun MeronMobileScreenContent(
                                                 pageThread
                                                     ?.takeIf { active && spamFolderForThread(it) != null }
                                                     ?.let { thread -> { markThreadAsSpam(thread, onMoved = popAppBack) } },
+                                            isRssArticle = pageThread?.let { threadIdIsRss(it.id) && it.rssItemKeys().isNotEmpty() } == true,
                                             // A feed's own page, not one of its entries opened on its own.
                                             onRenameFeed =
                                                 pageThread
@@ -1687,6 +1693,7 @@ private fun MeronMobileScreenContent(
                                                     selectedCoreThread = t.copy(starred = !t.starred)
                                                 }
                                             },
+                                            toolbar = conversationToolbar,
                                             onTags =
                                                 selectedCoreThread
                                                     ?.takeIf { !threadIdIsRss(it.id) }

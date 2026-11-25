@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Не удалось сохранить письмо",
   "chat.current": "Текущая",
   "chat.currentConversation": "Текущая переписка",
+  "chat.deleteConversationForeverText": "Эта переписка будет удалена безвозвратно. Это действие нельзя отменить.",
   "chat.draft": "Черновик",
   "chat.dropToAttach": "Перетащите, чтобы прикрепить",
   "chat.expandAll": "Развернуть всё",

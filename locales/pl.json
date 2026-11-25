@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Nie udało się zapisać wiadomości",
   "chat.current": "Bieżący",
   "chat.currentConversation": "Bieżąca konwersacja",
+  "chat.deleteConversationForeverText": "Ta rozmowa zostanie trwale usunięta. Tej operacji nie można cofnąć.",
   "chat.draft": "Projekt",
   "chat.dropToAttach": "Upuść, aby załączyć",
   "chat.expandAll": "Rozwiń wszystko",

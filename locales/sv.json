@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Det gick inte att spara meddelandet",
   "chat.current": "Aktuell",
   "chat.currentConversation": "Aktuell konversation",
+  "chat.deleteConversationForeverText": "Den här konversationen raderas permanent. Det går inte att ångra.",
   "chat.draft": "Förslag",
   "chat.dropToAttach": "Släpp för att bifoga",
   "chat.expandAll": "Fäll ut alla",

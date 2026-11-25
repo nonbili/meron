@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Nachricht konnte nicht gespeichert werden",
   "chat.current": "Aktuell",
   "chat.currentConversation": "Aktuelle Unterhaltung",
+  "chat.deleteConversationForeverText": "Diese Unterhaltung wird endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.",
   "chat.draft": "Entwurf",
   "chat.dropToAttach": "Zum Anhängen ablegen",
   "chat.expandAll": "Alle ausklappen",

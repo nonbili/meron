@@ -351,6 +351,7 @@
   "chat.couldNotSaveMessage": "Couldn't save message",
   "chat.current": "Current",
   "chat.currentConversation": "Current conversation",
+  "chat.deleteConversationForeverText": "This conversation will be permanently deleted. This cannot be undone.",
   "chat.draft": "Draft",
   "chat.dropToAttach": "Drop to attach",
   "chat.expandAll": "Expand all",

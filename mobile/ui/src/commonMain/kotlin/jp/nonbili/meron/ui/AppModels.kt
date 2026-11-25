@@ -177,6 +177,9 @@ internal const val PULL_UP_TO_CLOSE_PREF = "pull_up_to_close_v1"
 /** What sits at the bottom of a conversation (see [ConversationFooter]). */
 internal const val CONVERSATION_FOOTER_PREF = "conversation_footer_v1"
 
+/** Which actions sit on a conversation's top bar, in order (see ConversationToolbarUi.kt). */
+internal const val CONVERSATION_TOOLBAR_PREF = "conversation_toolbar_v1"
+
 /** Whether replies carry the message they answer, quoted under the reply text.
  *  Off by default: replies read as chat messages. */
 internal const val QUOTE_REPLIES_PREF = "quote_replies_v1"

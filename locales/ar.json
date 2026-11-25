@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "تعذر حفظ الرسالة",
   "chat.current": "الحالي",
   "chat.currentConversation": "المحادثة الحالية",
+  "chat.deleteConversationForeverText": "سيتم حذف هذه المحادثة نهائيًا. لا يمكن التراجع عن ذلك.",
   "chat.draft": "مسودة",
   "chat.dropToAttach": "أفلت الملفات لإرفاقها",
   "chat.expandAll": "توسيع الكل",

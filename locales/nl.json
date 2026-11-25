@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Kan bericht niet opslaan",
   "chat.current": "Huidig",
   "chat.currentConversation": "Huidig gesprek",
+  "chat.deleteConversationForeverText": "Dit gesprek wordt permanent verwijderd. Dit kan niet ongedaan worden gemaakt.",
   "chat.draft": "Concept",
   "chat.dropToAttach": "Neerzetten om bij te voegen",
   "chat.expandAll": "Alles uitvouwen",

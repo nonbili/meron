@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Impossible d'enregistrer le message",
   "chat.current": "Actuelle",
   "chat.currentConversation": "Conversation actuelle",
+  "chat.deleteConversationForeverText": "Cette conversation sera définitivement supprimée. Cette action est irréversible.",
   "chat.draft": "Brouillon",
   "chat.dropToAttach": "Déposer pour joindre",
   "chat.expandAll": "Tout développer",

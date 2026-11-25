@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.RssFeed
@@ -185,6 +186,8 @@ internal fun SettingsScreen(
     onToggleScrollLongHtmlMessages: () -> Unit,
     conversationFooter: ConversationFooter,
     onConversationFooterChange: (ConversationFooter) -> Unit,
+    conversationToolbar: List<ConversationToolbarAction>,
+    onConversationToolbarChange: (List<ConversationToolbarAction>) -> Unit,
     showUnreadBadges: Boolean,
     onToggleUnreadBadges: () -> Unit,
     showUnifiedInboxNav: Boolean,
@@ -263,6 +266,7 @@ internal fun SettingsScreen(
             SettingsRoutes.Encryption -> SettingsPage.Encryption
             SettingsRoutes.Calendars -> SettingsPage.Calendars
             SettingsRoutes.Theme -> SettingsPage.Theme
+            SettingsRoutes.ConversationToolbar -> SettingsPage.ConversationToolbar
             else -> SettingsPage.Root
         }
     LaunchedEffect(initialGeneral) {
@@ -343,6 +347,7 @@ internal fun SettingsScreen(
                             SettingsPage.Encryption -> tr("crypto.peers.nav")
                             SettingsPage.Calendars -> tr("settings.calendars.nav")
                             SettingsPage.Theme -> tr("common.theme")
+                            SettingsPage.ConversationToolbar -> tr("settings.appearance.conversationToolbar")
                         },
                     )
                 },
@@ -436,6 +441,8 @@ internal fun SettingsScreen(
                     onToggleScrollLongHtmlMessages = onToggleScrollLongHtmlMessages,
                     conversationFooter = conversationFooter,
                     onConversationFooterChange = onConversationFooterChange,
+                    conversationToolbarCount = conversationToolbar.size,
+                    onOpenConversationToolbar = { settingsNavController.navigate(SettingsRoutes.ConversationToolbar) },
                     remoteImageSenderCount = remoteImageSenders.size,
                     onOpenRemoteSenders = { settingsNavController.navigate(SettingsRoutes.RemoteSenders) },
                     detectOneTimeCodes = detectOneTimeCodes,
@@ -471,6 +478,14 @@ internal fun SettingsScreen(
                     onDeleteCustomTheme = onDeleteCustomTheme,
                     onShareCustomTheme = onShareCustomTheme,
                     modifier = Modifier.fillMaxSize().navigationBarsPadding(),
+                )
+            }
+
+            composable(SettingsRoutes.ConversationToolbar) {
+                ConversationToolbarPage(
+                    pinned = conversationToolbar,
+                    onChange = onConversationToolbarChange,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
 
@@ -844,6 +859,8 @@ private sealed class SettingsPage {
 
     data object Theme : SettingsPage()
 
+    data object ConversationToolbar : SettingsPage()
+
     data class AccountDetail(
         val accountId: String,
     ) : SettingsPage()
@@ -878,6 +895,7 @@ private object SettingsRoutes {
     const val Encryption = "settings/encryption"
     const val Calendars = "settings/calendars"
     const val Theme = "settings/theme"
+    const val ConversationToolbar = "settings/conversation-toolbar"
 }
 
 // Appearance, Side navigation, Kanban, Network, Sync & notifications and Data
@@ -1174,6 +1192,8 @@ internal fun SettingsMessagesPage(
     onToggleScrollLongHtmlMessages: () -> Unit,
     conversationFooter: ConversationFooter,
     onConversationFooterChange: (ConversationFooter) -> Unit,
+    conversationToolbarCount: Int,
+    onOpenConversationToolbar: () -> Unit,
     remoteImageSenderCount: Int,
     onOpenRemoteSenders: () -> Unit,
     detectOneTimeCodes: Boolean,
@@ -1247,6 +1267,15 @@ internal fun SettingsMessagesPage(
                     onToggle = onToggleScrollLongHtmlMessages,
                 )
             }
+        }
+        item {
+            SettingsRow(
+                icon = Icons.Filled.PushPin,
+                title = tr("settings.appearance.conversationToolbar"),
+                hint = tr("settings.appearance.conversationToolbarHint"),
+                onClick = onOpenConversationToolbar,
+                trailing = { Text(conversationToolbarCount.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            )
         }
         item {
             ConversationFooterRow(conversationFooter, onConversationFooterChange)

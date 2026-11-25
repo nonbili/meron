@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "메시지를 저장할 수 없습니다.",
   "chat.current": "현재",
   "chat.currentConversation": "현재 대화",
+  "chat.deleteConversationForeverText": "이 대화가 영구적으로 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
   "chat.draft": "초안",
   "chat.dropToAttach": "놓아서 첨부",
   "chat.expandAll": "모두 펼치기",

@@ -335,6 +335,10 @@ internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
                 setConversationFooter(loadConversationFooter(prefs))
             }
 
+            settingKeyFor(CONVERSATION_TOOLBAR_PREF) -> {
+                conversationToolbar = loadConversationToolbar(prefs)
+            }
+
             settingKeyFor(QUOTE_REPLIES_PREF) -> {
                 quoteReplies = loadAppBoolean(prefs, QUOTE_REPLIES_PREF, false)
             }

@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "No se pudo guardar el mensaje",
   "chat.current": "Actual",
   "chat.currentConversation": "Conversación actual",
+  "chat.deleteConversationForeverText": "Esta conversación se eliminará de forma permanente. Esta acción no se puede deshacer.",
   "chat.draft": "Borrador",
   "chat.dropToAttach": "Suelta para adjuntar",
   "chat.expandAll": "Expandir todo",

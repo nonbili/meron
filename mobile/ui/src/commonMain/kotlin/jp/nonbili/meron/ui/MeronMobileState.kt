@@ -466,6 +466,7 @@ internal class MeronMobileState(
     var sendShortcutMode by mutableStateOf(loadSendShortcutMode(prefs))
     var conversationLayout by mutableStateOf(loadConversationLayout(prefs))
     var conversationFooter by mutableStateOf(loadConversationFooter(prefs))
+    var conversationToolbar by mutableStateOf(loadConversationToolbar(prefs))
     var messageFontScale by mutableStateOf(loadMessageFontScale(prefs))
     var kanbanColumnWidth by mutableStateOf(
         loadAppInt(prefs, KANBAN_COLUMN_WIDTH_PREF, KANBAN_COLUMN_DEFAULT_WIDTH)

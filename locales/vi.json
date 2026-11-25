@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Không thể lưu tin nhắn",
   "chat.current": "Hiện tại",
   "chat.currentConversation": "Cuộc hội thoại hiện tại",
+  "chat.deleteConversationForeverText": "Cuộc trò chuyện này sẽ bị xóa vĩnh viễn. Không thể hoàn tác thao tác này.",
   "chat.draft": "Bản nháp",
   "chat.dropToAttach": "Thả để đính kèm",
   "chat.expandAll": "Mở rộng tất cả",

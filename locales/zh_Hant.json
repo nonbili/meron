@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "無法保存訊息",
   "chat.current": "目前",
   "chat.currentConversation": "目前對話",
+  "chat.deleteConversationForeverText": "此對話將被永久刪除。此操作無法復原。",
   "chat.draft": "草稿",
   "chat.dropToAttach": "拖放到此處以加入附件",
   "chat.expandAll": "全部展開",

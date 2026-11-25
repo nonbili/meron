@@ -359,6 +359,7 @@
   "chat.couldNotSaveMessage": "Tidak dapat menyimpan pesan",
   "chat.current": "Saat ini",
   "chat.currentConversation": "Percakapan saat ini",
+  "chat.deleteConversationForeverText": "Percakapan ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.",
   "chat.draft": "Draf",
   "chat.dropToAttach": "Lepaskan untuk melampirkan",
   "chat.expandAll": "Bentangkan semua",
