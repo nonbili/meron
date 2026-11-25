@@ -1119,8 +1119,16 @@ fn occurrences(
 ) -> Vec<Occurrence> {
     let overlaps =
         |start: i64, end: i64| start < to && (end > from || (end <= start && start >= from));
-    // Only an object that says DECLINED somewhere is read for it.
-    let may_be_declined = !mine.is_empty() && event.ics.to_ascii_uppercase().contains("DECLINED");
+    // Only an object that says DECLINED somewhere, in any case, is read for
+    // it: the word compared only where a `d` or `D` is found.
+    let may_be_declined = !mine.is_empty() && {
+        let bytes = event.ics.as_bytes();
+        memchr::memchr2_iter(b'd', b'D', bytes).any(|at| {
+            bytes
+                .get(at..at + b"DECLINED".len())
+                .is_some_and(|word| word.eq_ignore_ascii_case(b"DECLINED"))
+        })
+    };
     let single = || {
         overlaps(event.start_at, event.end_at)
             .then(|| Occurrence {

@@ -1442,6 +1442,22 @@ fn same_google_collection(a: &Url, b: &Url) -> bool {
     a.origin() == b.origin() && segments(a) == segments(b)
 }
 
+/// The calendar id in a Google CalDAV collection URL
+/// (`…/caldav/v2/{id}/events`), decoded; the primary calendar's is the
+/// account's address.
+pub(crate) fn google_calendar_id(url: &str) -> Option<String> {
+    let url = Url::parse(url).ok()?;
+    let mut segments = url.path_segments()?.filter(|s| !s.is_empty());
+    match (segments.next(), segments.next(), segments.next()) {
+        (Some("caldav"), Some("v2"), Some(id)) => Some(
+            percent_encoding::percent_decode_str(id)
+                .decode_utf8_lossy()
+                .into_owned(),
+        ),
+        _ => None,
+    }
+}
+
 pub(crate) fn same_google_collection_str(a: &str, b: &str) -> bool {
     match (Url::parse(a), Url::parse(b)) {
         (Ok(a), Ok(b)) => same_google_collection(&a, &b),

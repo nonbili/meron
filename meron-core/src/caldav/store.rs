@@ -147,14 +147,21 @@ pub fn accounts(conn: &Connection) -> Result<Vec<DavAccount>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
-/// The user's addresses on each synced calendar, by calendar id: its
-/// account's login, lowercased, and the send-as addresses of a mail account
-/// on the same address.
+/// The user's addresses on each synced calendar of the user's own, by
+/// calendar id: its account's login, lowercased, and the send-as addresses
+/// of a mail account on the same address.
+///
+/// On Google, only the primary calendar (whose id is the login, and where
+/// invitations are filed) is the user's: a colleague's calendar or a group
+/// calendar is left out, as an event there the user declined may still be
+/// on for its owner. Another server does not record a calendar's owner, so
+/// every calendar of the account is taken as the user's.
 pub fn own_addresses(
     conn: &Connection,
 ) -> Result<std::collections::HashMap<String, std::collections::HashSet<String>>> {
     let mut stmt = conn.prepare(
-        "SELECT c.id, lower(trim(a.username)),
+        "SELECT c.id, c.url, a.username,
+                COALESCE(json_extract(a.json, '$.google'), 0),
                 (SELECT m.id FROM accounts m WHERE lower(trim(m.email)) = lower(trim(a.username)))
            FROM dav_calendars c JOIN dav_accounts a ON a.id = c.account",
     )?;
@@ -162,13 +169,24 @@ pub fn own_addresses(
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
-            row.get::<_, Option<String>>(2)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, bool>(3)?,
+            row.get::<_, Option<String>>(4)?,
         ))
     })?;
     let mut out = std::collections::HashMap::new();
     for row in rows {
-        let (calendar, username, mail) = row?;
-        let mut mine = std::collections::HashSet::from([username]);
+        let (calendar, url, username, google, mail) = row?;
+        // ASCII-lowercased, as `calendar::is_mine` matches attendees.
+        let login = username.trim().to_ascii_lowercase();
+        // The primary is the login's own collection; a send-as alias's
+        // calendar subscribed here is still someone else's.
+        if google
+            && !super::google_calendar_id(&url).is_some_and(|id| id.to_ascii_lowercase() == login)
+        {
+            continue;
+        }
+        let mut mine = std::collections::HashSet::from([login]);
         if let Some(mail) = mail {
             mine.extend(crate::store::self_addrs(conn, &mail));
         }

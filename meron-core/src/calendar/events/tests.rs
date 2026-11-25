@@ -2688,8 +2688,14 @@ fn a_series_zone_is_named_as_a_browser_knows_it() {
     assert_eq!(event_json(&utc)["series_zone"], "UTC");
 }
 
-/// A Google calendar of `me`'s, holding `ics` as a sync would file it.
+/// `me`'s primary Google calendar, holding `ics` as a sync would file it.
 fn synced_google_event(conn: &Connection, me: &str, ics: &str) {
+    synced_google_event_in(conn, me, me, ics);
+}
+
+/// The Google calendar `calendar_id` synced by `me`'s account, holding
+/// `ics` as a sync would file it.
+fn synced_google_event_in(conn: &Connection, me: &str, calendar_id: &str, ics: &str) {
     caldav::store::save_account(
         conn,
         &caldav::store::DavAccount {
@@ -2704,7 +2710,7 @@ fn synced_google_event(conn: &Connection, me: &str, ics: &str) {
         conn,
         "dav-1",
         &[caldav::Calendar {
-            url: "https://apidata.googleusercontent.com/caldav/v2/me/events/".into(),
+            url: format!("https://apidata.googleusercontent.com/caldav/v2/{calendar_id}/events"),
             components: vec!["VEVENT".into()],
             ..Default::default()
         }],
@@ -2843,4 +2849,53 @@ fn a_synced_lone_date_of_a_series_the_user_declined_is_hidden() {
     synced_google_event(&conn, "sam@example.test", &ics);
     let payload = events_payload(&conn, OCT_1, OCT_1 + 31 * DAY, false).unwrap();
     assert_eq!(keys(&payload), vec![], "{payload}");
+}
+
+#[test]
+fn a_synced_event_the_user_declined_in_someone_elses_calendar_shows() {
+    // A colleague's calendar shared with the user: the meeting is still on
+    // for its owner, whatever the user answered.
+    for calendar in ["maya@example.com", "team@group.calendar.google.com"] {
+        let conn = conn();
+        synced_google_event_in(
+            &conn,
+            "sam@example.test",
+            calendar,
+            &google_meeting("DECLINED", ""),
+        );
+        let payload = events_payload(&conn, OCT_1, OCT_1 + 31 * DAY, false).unwrap();
+        assert_eq!(keys(&payload).len(), 1, "{calendar}: {payload}");
+    }
+}
+
+#[test]
+fn a_synced_event_declined_in_a_primary_calendar_with_an_encoded_id_is_hidden() {
+    let conn = conn();
+    synced_google_event_in(
+        &conn,
+        "sam@example.test",
+        "Sam%40Example.test",
+        &google_meeting("DECLINED", ""),
+    );
+    let payload = events_payload(&conn, OCT_1, OCT_1 + 31 * DAY, false).unwrap();
+    assert_eq!(keys(&payload), vec![], "{payload}");
+}
+
+#[test]
+fn a_synced_event_declined_in_a_send_as_aliases_calendar_shows() {
+    // The alias's own calendar, subscribed through the login's account, is
+    // not the login's primary: the meeting may still be on for its owner.
+    let conn = conn();
+    conn.execute(
+        "INSERT INTO accounts (id, email, prefs) VALUES ('mail-1', 'sam@example.test', ?1)",
+        [json!({ "aliases": [{ "email": "sam@alias.example", "name": "Sam" }] }).to_string()],
+    )
+    .unwrap();
+    let ics = google_meeting("ACCEPTED", "").replace(
+        "PARTSTAT=ACCEPTED;CN=Sam:mailto:Sam@Example.test",
+        "PARTSTAT=DECLINED;CN=Sam:mailto:sam@alias.example",
+    );
+    synced_google_event_in(&conn, "sam@example.test", "sam@alias.example", &ics);
+    let payload = events_payload(&conn, OCT_1, OCT_1 + 31 * DAY, false).unwrap();
+    assert_eq!(keys(&payload).len(), 1, "{payload}");
 }
