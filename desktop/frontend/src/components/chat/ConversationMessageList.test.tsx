@@ -347,3 +347,41 @@ describe('ConversationMessageList when a Sent copy replaces a sent bubble', () =
     expect(after).toBe(before)
   })
 })
+
+describe('ConversationMessageList top edge', () => {
+  const list = (toolbar?: ReactElement) => (
+    <ConversationMessageList
+      messages={[message('first', 'First'), message('newest', 'Newest')]}
+      showThreadLoading={false}
+      showThreadError={false}
+      onRetryThreadLoad={() => undefined}
+      messagesCursor=""
+      messagesLoadingMore={false}
+      activeThreadId="thread-1"
+      searchMatches={[]}
+      activeSearchId=""
+      jumpMessageId=""
+      galleryOffsets={new Map<string, number>()}
+      wallpaperClassName=""
+      toolbar={toolbar}
+    />
+  )
+  // The toolbar's pills and a pinned header are opaque and float on their own
+  // shadow, so nothing frosts the message under them, and the strip beside
+  // them stays clickable and readable, as in the reader tab (#151).
+  const frosted = (container: HTMLElement) => container.querySelectorAll('.backdrop-blur-md').length
+
+  it('lays nothing frosted under the floating toolbar', () => {
+    const view = render(withScroll({}, list(<div data-testid="toolbar" />)))
+    expect(view.getByTestId('toolbar')).toBeTruthy()
+    expect(frosted(view.container)).toBe(0)
+  })
+
+  it('lays nothing frosted above a pinned message header', () => {
+    settings$.conversationLayout.set('traditional')
+    const view = render(withScroll({}, list()))
+    // The newest message opens expanded, with a header that can pin.
+    expect(view.container.querySelectorAll('.group\\/pinned').length).toBe(1)
+    expect(frosted(view.container)).toBe(0)
+  })
+})

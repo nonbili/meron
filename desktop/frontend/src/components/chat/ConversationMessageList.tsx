@@ -13,8 +13,7 @@ import type { Message } from '../../types'
 import { LinkHoverPreview } from './LinkHoverPreview'
 import { MessageBubble } from './MessageBubble'
 import { MessageRow } from './MessageRow'
-import { FrostedBand } from './FrostedBand'
-import { LIST_TOP_PADDING_PX, PINNED_HEADER_GAP_PX, TOOLBAR_CLEARANCE_PX } from './conversationScroll'
+import { LIST_TOP_PADDING_PX, TOOLBAR_CLEARANCE_PX } from './conversationScroll'
 import { formatDateDivider, mediaFilename, imageSource } from './messageHelpers'
 import { MESSAGE_PAGE_EVENT } from './messagePaging'
 import { ConversationScrollContext } from './useConversationScroll'
@@ -410,18 +409,10 @@ export function ConversationMessageList({
         <div ref={bottomAnchorRef} className="message-scroll-anchor h-px" />
       </div>
       {/* Above the composer floating over the end of the list, not on it. */}
-      {toolbar && (
-        <>
-          {/* Frosts what scrolls on behind the toolbar, as under the composer;
-              down to where a pinned message header takes over. */}
-          <FrostedBand
-            fade="bottom"
-            className="left-0 right-3 top-0 z-30"
-            style={{ height: TOOLBAR_CLEARANCE_PX + PINNED_HEADER_GAP_PX }}
-          />
-          {toolbar}
-        </>
-      )}
+      {/* No frosted band under the toolbar: its pills are opaque and float on
+          their own shadow, so the message beside them stays readable and in
+          reach, as in the reader tab (#151). */}
+      {toolbar}
       <div className="pointer-events-none absolute inset-x-0 bottom-[var(--me-composer-overlap,0px)] z-30">
         <HoveredLinkPreview />
       </div>
