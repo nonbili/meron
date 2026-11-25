@@ -2448,6 +2448,7 @@ dependencies = [
  "keyring",
  "mail-builder",
  "mailparse",
+ "memchr",
  "ndk-context",
  "oo7",
  "percent-encoding",

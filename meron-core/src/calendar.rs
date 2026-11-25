@@ -420,6 +420,24 @@ fn is_mine(addr: &str, mine: &HashSet<String>) -> bool {
     mine.contains(&addr.trim().to_ascii_lowercase())
 }
 
+/// The user's own answer on one VEVENT, lowercased (`declined`, …), from the
+/// attendee line that is one of `mine`; `None` when no line is the user's.
+pub(crate) fn own_partstat(
+    component: &ICalendarComponent,
+    mine: &HashSet<String>,
+) -> Option<String> {
+    component
+        .properties(&ICalendarProperty::Attendee)
+        .find(|entry| is_mine(&addr_of(entry), mine))
+        .map(|entry| {
+            entry
+                .parameter(&ICalendarParameterName::Partstat)
+                .and_then(ICalendarParameterValue::as_text)
+                .unwrap_or("NEEDS-ACTION")
+                .to_ascii_lowercase()
+        })
+}
+
 /// The attendee line that is the user, by any of the account's addresses.
 pub fn my_attendee<'a>(invite: &'a Invite, mine: &HashSet<String>) -> Option<&'a Attendee> {
     invite
