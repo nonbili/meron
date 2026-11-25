@@ -86,6 +86,54 @@ describe('useFileDrop', () => {
     expect(textOver.preventDefault).not.toHaveBeenCalled()
   })
 
+  it('keeps the drag accepted after the Wails runtime refuses it on <html>', () => {
+    // What @wailsio/runtime does when the window's native file drop is off (macOS).
+    const wailsRefuse = (event: Event) => {
+      event.preventDefault()
+      ;(event as globalThis.DragEvent).dataTransfer!.dropEffect = 'none'
+    }
+    document.documentElement.addEventListener('dragover', wailsRefuse)
+    const element = document.createElement('div')
+    document.body.appendChild(element)
+    const { result, unmount } = renderHook(() => useFileDrop(() => {}))
+    const handler = (event: Event) => result.current.dropHandlers.onDragOver(event as unknown as DragEvent<HTMLElement>)
+    element.addEventListener('dragover', handler)
+    const send = (target: EventTarget) => {
+      const data = { types: ['Files'], files: [], dropEffect: 'none' }
+      const event = new Event('dragover', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'dataTransfer', { value: data })
+      act(() => void target.dispatchEvent(event))
+      return data.dropEffect
+    }
+    try {
+      expect(send(element)).toBe('copy')
+      // Outside the drop area the refusal stands.
+      expect(send(document.body)).toBe('none')
+    } finally {
+      document.documentElement.removeEventListener('dragover', wailsRefuse)
+      element.remove()
+      unmount()
+    }
+  })
+
+  it('ignores drags React bubbles up from a portal outside the drop area', () => {
+    const onFiles = jest.fn()
+    const element = document.createElement('div')
+    const preview = document.createElement('div')
+    const { result } = renderHook(() => useFileDrop(onFiles))
+    act(() => result.current.dropHandlers.ref(element))
+    const over = { ...dragEvent(['Files']), target: preview } as ReturnType<typeof dragEvent>
+    act(() => result.current.dropHandlers.onDragEnter(over))
+    act(() => result.current.dropHandlers.onDragOver(over))
+    expect(over.preventDefault).not.toHaveBeenCalled()
+    expect(result.current.dragging).toBe(false)
+    const drop = { ...dragEvent(['Files'], [file('a.pdf', 'application/pdf')]), target: preview } as ReturnType<
+      typeof dragEvent
+    >
+    act(() => result.current.dropHandlers.onDrop(drop))
+    expect(onFiles).not.toHaveBeenCalled()
+  })
+
   it('hands the dropped files over and clears the drop state', () => {
     const onFiles = jest.fn()
     const { result } = renderHook(() => useFileDrop(onFiles))

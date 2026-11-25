@@ -21,6 +21,25 @@ const frameDragListeners = new Set<(frame: Element, data: DataTransfer) => void>
 const dragOverListeners = new Set<() => void>()
 let fileDragSeen = false
 
+// The drag a drop area accepted in the event under way (useFileDrop's
+// onDragOver). The Wails runtime's own listener on <html>, which runs after the
+// drop areas, sets every file drag to 'none' in a window whose native file drop
+// is off (macOS); keepAcceptedDrag puts the drop area's answer back from window,
+// which hears the event last. WebKit takes the last value: left at 'none', the
+// file flies back and no drop event reaches the page.
+let acceptedDrag: DataTransfer | null = null
+let acceptedDragKept = false
+
+function keepAcceptedDrag() {
+  if (acceptedDragKept) return
+  acceptedDragKept = true
+  window.addEventListener('dragover', (event) => {
+    const data = event.dataTransfer
+    if (data && data === acceptedDrag) data.dropEffect = 'copy'
+    acceptedDrag = null
+  })
+}
+
 /** Watches a document's drags. The page's own window is watched by useFileDrop;
  *  message bodies live in iframes, whose drag events never reach it, so
  *  HtmlFrame adds each frame's document, with the `frame` element showing it.
@@ -160,9 +179,18 @@ function leftElement(event: DragEvent<HTMLElement>): boolean {
   )
 }
 
+/** Whether the drag happens outside the element in the DOM: over something
+ *  portaled out of it (an attachment preview), whose events React still bubbles
+ *  to it. Not a drop on it. */
+function outsideElement(element: HTMLElement | null, target: EventTarget | null): boolean {
+  if (!element || typeof element.contains !== 'function' || !target) return false
+  return !element.contains(target as Node)
+}
+
 export function resetFileDropStateForTests(options: { fileAddressDrops?: boolean } = {}) {
   internalDrag = false
   fileDragSeen = false
+  acceptedDrag = null
   fileAddressDrops = options.fileAddressDrops ?? false
 }
 
@@ -225,6 +253,7 @@ export function useFileDrop(
 
   useEffect(() => {
     trackInternalDrags(window)
+    keepAcceptedDrag()
     mountedRef.current = true
     const overFrame = (frame: Element, data: DataTransfer) => {
       if (enabledRef.current && elementRef.current?.contains(frame)) show(data)
@@ -292,7 +321,7 @@ export function useFileDrop(
 
   const onDragEnter = useCallback(
     (event: DragEvent<HTMLElement>) => {
-      if (!enabled || !carriesFiles(event.dataTransfer)) return
+      if (!enabled || outsideElement(elementRef.current, event.target) || !carriesFiles(event.dataTransfer)) return
       depthRef.current += 1
       show(event.dataTransfer)
     },
@@ -301,11 +330,12 @@ export function useFileDrop(
 
   const onDragOver = useCallback(
     (event: DragEvent<HTMLElement>) => {
-      if (!enabled || !carriesFiles(event.dataTransfer)) return
+      if (!enabled || outsideElement(elementRef.current, event.target) || !carriesFiles(event.dataTransfer)) return
       // Accepting the drag is what makes this a drop target; otherwise the
       // webview opens the dropped file itself.
       event.preventDefault()
       event.dataTransfer.dropEffect = 'copy'
+      acceptedDrag = event.dataTransfer
       // Also when the enter was missed: the drag came in over a message frame.
       show(event.dataTransfer)
     },
@@ -323,7 +353,7 @@ export function useFileDrop(
 
   const onDrop = useCallback(
     (event: DragEvent<HTMLElement>) => {
-      if (!enabled || !carriesFiles(event.dataTransfer)) return
+      if (!enabled || outsideElement(elementRef.current, event.target) || !carriesFiles(event.dataTransfer)) return
       depthRef.current = 0
       setDragging(false)
       const files = Array.from(event.dataTransfer.files ?? [])
