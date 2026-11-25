@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Widoczność",
   "settings.appearance.autoFitMessages": "Automatyczne dopasowanie wiadomości",
   "settings.appearance.autoFitMessagesHint": "Zmniejsza szerokie wiadomości, aby mieściły się w widoku rozmowy.",
+  "settings.appearance.scrollLongHtmlMessages": "Napraw nakładanie się tekstu podczas przewijania",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Przewijaj długie wiadomości HTML w obszarze ich treści, aby zapobiec nakładaniu się tekstu.",
   "settings.appearance.chatFullMessages": "Pokazuj pełną treść wiadomości w czacie",
   "settings.appearance.chatFullMessagesHint": "Długie wiadomości rosną do pełnej wysokości zamiast przewijać się w dymku.",
   "settings.appearance.pullUpToClose": "Przeciągnij w górę, aby zamknąć",

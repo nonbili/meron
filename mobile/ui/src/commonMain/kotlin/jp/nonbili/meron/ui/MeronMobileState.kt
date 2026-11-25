@@ -453,6 +453,7 @@ internal class MeronMobileState(
     var showThreadAvatars by mutableStateOf(loadAppBoolean(prefs, SHOW_THREAD_AVATARS_PREF, true))
     var darkMailBodies by mutableStateOf(loadAppBoolean(prefs, DARK_MAIL_BODIES_PREF, false))
     var autoFitMessages by mutableStateOf(loadAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, false))
+    var scrollLongHtmlMessages by mutableStateOf(loadAppBoolean(prefs, SCROLL_LONG_HTML_MESSAGES_PREF, false))
     var chatFullMessages by mutableStateOf(loadAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, false))
     var pullUpToClose by mutableStateOf(loadAppBoolean(prefs, PULL_UP_TO_CLOSE_PREF, true))
     var quoteReplies by mutableStateOf(loadAppBoolean(prefs, QUOTE_REPLIES_PREF, false))

@@ -73,6 +73,7 @@ import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -1452,13 +1453,17 @@ internal fun HtmlMessageBody(
                     var root = document.documentElement;
                     var body = document.body;
                     var h = 0;
+                    // Rects are viewport-relative: add back how far a view
+                    // shorter than the mail has scrolled down it.
+                    var scrolled = window.scrollY || 0;
                     if (body) {
                       var rect = body.getBoundingClientRect();
-                      h = Math.max(h, rect.top + rect.height, rect.top + body.scrollHeight);
+                      var top = rect.top + scrolled;
+                      h = Math.max(h, top + rect.height, top + body.scrollHeight);
                     }
                     if (root) {
                       var rootRect = root.getBoundingClientRect();
-                      h = Math.max(h, rootRect.top + rootRect.height);
+                      h = Math.max(h, rootRect.top + scrolled + rootRect.height);
                       if (
                         root.scrollHeight > root.clientHeight + 1 &&
                         root.scrollHeight > h + 1
@@ -1787,12 +1792,30 @@ internal fun HtmlMessageBody(
             """.trimIndent()
         }
     val measured = contentHeight > 0.dp
-    val capped = maxHeight != Dp.Unspecified && measured && contentHeight > maxHeight
+    // Where the web view scrolls a long mail itself (Android, see
+    // MailWebViewScrollsItself), it is never made taller than this: the bubble's
+    // cap, or, uncapped, most of the window, so the conversation can still
+    // bring its header and the next message into view around it.
+    val selfScrollHeight =
+        if (!MailWebViewScrollsItself || !LocalScrollLongHtmlMessages.current) {
+            Dp.Unspecified
+        } else if (maxHeight != Dp.Unspecified) {
+            maxHeight
+        } else {
+            with(LocalDensity.current) {
+                LocalWindowInfo.current.containerSize.height
+                    .toDp()
+            } * 0.75f
+        }
+    val scrollsItself = measured && selfScrollHeight != Dp.Unspecified && selfScrollHeight > 0.dp && contentHeight > selfScrollHeight
+    val capped = !scrollsItself && maxHeight != Dp.Unspecified && measured && contentHeight > maxHeight
     val webViewModifier =
         Modifier
             .fillMaxWidth()
             .then(
-                if (measured) {
+                if (scrollsItself) {
+                    Modifier.height(selfScrollHeight)
+                } else if (measured) {
                     Modifier.height(contentHeight)
                 } else {
                     // Fixed, not a minimum: in a lazy list the height is otherwise
@@ -1838,6 +1861,7 @@ internal fun HtmlMessageBody(
             modifier = webViewModifier,
             fitWideContent = fitWideContent,
             transparentBackground = darkBody,
+            scrollsItself = scrollsItself,
         )
     }
 }
@@ -1857,6 +1881,7 @@ private fun MailWebViewWithLinkMenu(
     fitWideContent: Boolean,
     transparentBackground: Boolean,
     mediaMissing: Int,
+    scrollsItself: Boolean,
 ) {
     var menuTarget by remember { mutableStateOf<MessageLinkMenuTarget?>(null) }
     Box(modifier) {
@@ -1872,6 +1897,7 @@ private fun MailWebViewWithLinkMenu(
             transparentBackground = transparentBackground,
             onQuoteToggle = onQuoteToggle,
             onNaturalWidth = onNaturalWidth,
+            scrollsItself = scrollsItself,
             modifier = Modifier.fillMaxSize(),
         )
         MessageLinkContextMenu(

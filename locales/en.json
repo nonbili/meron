@@ -1458,6 +1458,8 @@
   "settings.account.visibility": "Visibility",
   "settings.appearance.autoFitMessages": "Auto-fit messages",
   "settings.appearance.autoFitMessagesHint": "Shrink wide emails to fit the conversation view.",
+  "settings.appearance.scrollLongHtmlMessages": "Fix overlapping text while scrolling",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Scroll long HTML messages inside the message body to prevent overlapping text.",
   "settings.appearance.chatFullMessages": "Show full message content in chat",
   "settings.appearance.chatFullMessagesHint": "Long messages grow to fit instead of scrolling inside their bubble.",
   "settings.appearance.pullUpToClose": "Pull up to close",

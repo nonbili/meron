@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Видимість",
   "settings.appearance.autoFitMessages": "Автоматично підганяти ширину листів",
   "settings.appearance.autoFitMessagesHint": "Масштабувати широкі листи за шириною екрана",
+  "settings.appearance.scrollLongHtmlMessages": "Виправити накладання тексту під час прокручування",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Прокручуйте довгі HTML-листи в межах тіла листа, щоб текст не накладався.",
   "settings.appearance.chatFullMessages": "Розгортати листи в бесідах повністю",
   "settings.appearance.chatFullMessagesHint": "Завжди показувати повний текст листів замість скороченого вигляду",
   "settings.appearance.pullUpToClose": "Закривати жестом угору",

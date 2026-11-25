@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "可见性",
   "settings.appearance.autoFitMessages": "自动适应邮件宽度",
   "settings.appearance.autoFitMessagesHint": "缩小较宽的邮件，使其适合会话视图。",
+  "settings.appearance.scrollLongHtmlMessages": "修复滚动时文字重叠",
+  "settings.appearance.scrollLongHtmlMessagesHint": "在邮件正文区域内滚动长 HTML 邮件，避免文字重叠。",
   "settings.appearance.chatFullMessages": "在聊天中显示完整邮件内容",
   "settings.appearance.chatFullMessagesHint": "长邮件随内容展开，而不是在气泡内滚动。",
   "settings.appearance.pullUpToClose": "上拉关闭",

@@ -163,6 +163,7 @@ internal const val DARK_MAIL_BODIES_PREF = "dark_mail_bodies_v1"
 /** Whether conversation bubbles shrink over-wide HTML mail to fit, the way the
  *  full-screen reader always does. Off by default. */
 internal const val AUTO_FIT_MESSAGES_PREF = "auto_fit_messages_v1"
+internal const val SCROLL_LONG_HTML_MESSAGES_PREF = "scroll_long_html_messages_v1"
 
 /** Whether chat bubbles grow to fit long bodies instead of scrolling inside a
  *  capped box, so only the conversation scrolls. Off by default. */

@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "表示設定",
   "settings.appearance.autoFitMessages": "メッセージを自動調整",
   "settings.appearance.autoFitMessagesHint": "幅の広いメールを会話ビューに収まるよう縮小します。",
+  "settings.appearance.scrollLongHtmlMessages": "スクロール時の文字の重なりを修正",
+  "settings.appearance.scrollLongHtmlMessagesHint": "長いHTMLメールを本文の枠内でスクロールし、文字の重なりを防ぎます。",
   "settings.appearance.chatFullMessages": "チャットでメッセージ全体を表示",
   "settings.appearance.chatFullMessagesHint": "長いメッセージを吹き出し内でスクロールせず、内容に合わせて広げます。",
   "settings.appearance.pullUpToClose": "上に引いて閉じる",

@@ -1262,6 +1262,8 @@
   "settings.account.visibility": "Видимость",
   "settings.appearance.autoFitMessages": "Подгонять письма по ширине",
   "settings.appearance.autoFitMessagesHint": "Уменьшать широкие письма до ширины области переписки.",
+  "settings.appearance.scrollLongHtmlMessages": "Исправить наложение текста при прокрутке",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Прокручивать длинные HTML-письма внутри области текста письма, чтобы текст не накладывался.",
   "settings.appearance.chatFullMessages": "Показывать письма целиком в чате",
   "settings.appearance.chatFullMessagesHint": "Длинные письма показываются целиком, без прокрутки внутри сообщения.",
   "settings.appearance.pullUpToClose": "Закрывать жестом вверх",

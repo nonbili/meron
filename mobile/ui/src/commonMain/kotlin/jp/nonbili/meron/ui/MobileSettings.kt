@@ -62,6 +62,7 @@ internal val mobileSettings =
         MobileSetting(PrefStore.App, SHOW_THREAD_AVATARS_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, DARK_MAIL_BODIES_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, AUTO_FIT_MESSAGES_PREF, PrefType.Bool),
+        MobileSetting(PrefStore.App, SCROLL_LONG_HTML_MESSAGES_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, CHAT_FULL_MESSAGES_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, PULL_UP_TO_CLOSE_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, SHOW_UNREAD_BADGES_PREF, PrefType.Bool),

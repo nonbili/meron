@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Synlighet",
   "settings.appearance.autoFitMessages": "Anpassa meddelanden automatiskt",
   "settings.appearance.autoFitMessagesHint": "Förminska breda mejl så att de ryms i konversationsvyn.",
+  "settings.appearance.scrollLongHtmlMessages": "Åtgärda överlappande text vid rullning",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Rulla långa HTML-meddelanden inuti själva meddelandet för att undvika överlappande text.",
   "settings.appearance.chatFullMessages": "Visa hela meddelandeinnehållet i chatten",
   "settings.appearance.chatFullMessagesHint": "Långa meddelanden växer för att få plats i stället för att rulla i sin bubbla.",
   "settings.appearance.pullUpToClose": "Dra uppåt för att stänga",

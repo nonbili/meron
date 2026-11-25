@@ -181,6 +181,8 @@ internal fun SettingsScreen(
     onTogglePullUpToClose: () -> Unit,
     autoFitMessages: Boolean,
     onToggleAutoFitMessages: () -> Unit,
+    scrollLongHtmlMessages: Boolean,
+    onToggleScrollLongHtmlMessages: () -> Unit,
     conversationFooter: ConversationFooter,
     onConversationFooterChange: (ConversationFooter) -> Unit,
     showUnreadBadges: Boolean,
@@ -430,6 +432,8 @@ internal fun SettingsScreen(
                     onTogglePullUpToClose = onTogglePullUpToClose,
                     autoFitMessages = autoFitMessages,
                     onToggleAutoFitMessages = onToggleAutoFitMessages,
+                    scrollLongHtmlMessages = scrollLongHtmlMessages,
+                    onToggleScrollLongHtmlMessages = onToggleScrollLongHtmlMessages,
                     conversationFooter = conversationFooter,
                     onConversationFooterChange = onConversationFooterChange,
                     remoteImageSenderCount = remoteImageSenders.size,
@@ -1166,6 +1170,8 @@ internal fun SettingsMessagesPage(
     onTogglePullUpToClose: () -> Unit,
     autoFitMessages: Boolean,
     onToggleAutoFitMessages: () -> Unit,
+    scrollLongHtmlMessages: Boolean,
+    onToggleScrollLongHtmlMessages: () -> Unit,
     conversationFooter: ConversationFooter,
     onConversationFooterChange: (ConversationFooter) -> Unit,
     remoteImageSenderCount: Int,
@@ -1228,6 +1234,17 @@ internal fun SettingsMessagesPage(
                     hint = tr("settings.appearance.autoFitMessagesHint"),
                     checked = autoFitMessages,
                     onToggle = onToggleAutoFitMessages,
+                )
+            }
+        }
+        if (MailWebViewScrollsItself) {
+            item {
+                SettingsToggleRow(
+                    icon = Icons.Filled.UnfoldMore,
+                    title = tr("settings.appearance.scrollLongHtmlMessages"),
+                    hint = tr("settings.appearance.scrollLongHtmlMessagesHint"),
+                    checked = scrollLongHtmlMessages,
+                    onToggle = onToggleScrollLongHtmlMessages,
                 )
             }
         }

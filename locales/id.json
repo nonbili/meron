@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Visibilitas",
   "settings.appearance.autoFitMessages": "Sesuaikan ukuran pesan otomatis",
   "settings.appearance.autoFitMessagesHint": "Kecilkan email lebar agar pas dengan tampilan percakapan.",
+  "settings.appearance.scrollLongHtmlMessages": "Perbaiki teks yang tumpang tindih saat menggulir",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Gulir pesan HTML panjang di dalam isi pesan untuk mencegah teks tumpang tindih.",
   "settings.appearance.chatFullMessages": "Tampilkan konten pesan lengkap di obrolan",
   "settings.appearance.chatFullMessagesHint": "Pesan panjang diperluas agar pas, alih-alih menggulir di dalam balon obrolan.",
   "settings.appearance.pullUpToClose": "Tarik ke atas untuk menutup",

@@ -50,6 +50,10 @@ expect fun MailWebView(
     onOverflowExtent: (extent: Int, width: Int) -> Unit = { _, _ -> },
     /** Retry failed images when the core restores attachment files. */
     mediaMissing: Int = 0,
+    /** The view is shorter than its document and scrolls it itself, rather
+     *  than being sized to the whole document and moved by a Compose scroller
+     *  (see [MailWebViewScrollsItself]). */
+    scrollsItself: Boolean = false,
 )
 
 /**
@@ -76,6 +80,12 @@ internal expect val MailWebViewFollowsSystemFontScale: Boolean
 /** Whether [MailWebView]'s `fitWideContent` does anything here, so a setting
  *  built on it is only offered where it works. */
 internal expect val MailWebViewFitsWideContent: Boolean
+
+/** Whether a long document is scrolled inside [MailWebView] rather than the
+ *  view being sized to it and scrolled by Compose. On Android a view as tall as
+ *  the mail, moved by a Compose scroller, can leave copies of earlier frames
+ *  painted behind it on some GPUs (issue #59). */
+internal expect val MailWebViewScrollsItself: Boolean
 
 /** Whether the reader can pinch [MailWebView] to zoom its page, in which case
  *  the document reports a height that grows with the zoom. */

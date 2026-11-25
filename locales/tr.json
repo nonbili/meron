@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Görünürlük",
   "settings.appearance.autoFitMessages": "İletileri otomatik sığdır",
   "settings.appearance.autoFitMessagesHint": "Geniş e-postaları konuşma görünümüne sığacak şekilde küçültür.",
+  "settings.appearance.scrollLongHtmlMessages": "Kaydırırken metinlerin üst üste binmesini düzelt",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Metinlerin üst üste binmesini önlemek için uzun HTML iletilerini ileti gövdesi içinde kaydır.",
   "settings.appearance.chatFullMessages": "Sohbette ileti içeriğinin tamamını göster",
   "settings.appearance.chatFullMessagesHint": "Uzun iletiler balonlarının içinde kaymak yerine içeriğe göre uzar.",
   "settings.appearance.pullUpToClose": "Kapatmak için yukarı çek",

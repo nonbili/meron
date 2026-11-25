@@ -363,6 +363,7 @@ fun MeronApp(
             messageFontScale = state.messageFontScale,
             darkMailBodies = state.darkMailBodies,
             autoFitMessages = state.autoFitMessages,
+            scrollLongHtmlMessages = state.scrollLongHtmlMessages,
             chatFullMessages = state.chatFullMessages,
             pullUpToClose = state.pullUpToClose,
         ) {
@@ -1370,6 +1371,11 @@ private fun MeronMobileScreenContent(
                             onToggleAutoFitMessages = {
                                 autoFitMessages = !autoFitMessages
                                 saveAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, autoFitMessages)
+                            },
+                            scrollLongHtmlMessages = scrollLongHtmlMessages,
+                            onToggleScrollLongHtmlMessages = {
+                                scrollLongHtmlMessages = !scrollLongHtmlMessages
+                                saveAppBoolean(prefs, SCROLL_LONG_HTML_MESSAGES_PREF, scrollLongHtmlMessages)
                             },
                             conversationFooter = conversationFooter,
                             onConversationFooterChange = { footer ->

@@ -319,6 +319,10 @@ internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
                 autoFitMessages = loadAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, false)
             }
 
+            settingKeyFor(SCROLL_LONG_HTML_MESSAGES_PREF) -> {
+                scrollLongHtmlMessages = loadAppBoolean(prefs, SCROLL_LONG_HTML_MESSAGES_PREF, false)
+            }
+
             settingKeyFor(CHAT_FULL_MESSAGES_PREF) -> {
                 chatFullMessages = loadAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, false)
             }

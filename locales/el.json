@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Ορατότητα",
   "settings.appearance.autoFitMessages": "Αυτόματη προσαρμογή μηνυμάτων",
   "settings.appearance.autoFitMessagesHint": "Σμίκρυνση των φαρδιών μηνυμάτων ώστε να χωρούν στην προβολή συνομιλίας.",
+  "settings.appearance.scrollLongHtmlMessages": "Διόρθωση επικάλυψης κειμένου κατά την κύλιση",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Κάντε κύλιση στα μεγάλα μηνύματα HTML μέσα στο σώμα τους για να αποφύγετε την επικάλυψη κειμένου.",
   "settings.appearance.chatFullMessages": "Πλήρες περιεχόμενο μηνυμάτων στη συνομιλία",
   "settings.appearance.chatFullMessagesHint": "Τα μεγάλα μηνύματα μεγαλώνουν ώστε να χωρούν, αντί για κύλιση μέσα στο συννεφάκι τους.",
   "settings.appearance.pullUpToClose": "Σύρετε προς τα πάνω για κλείσιμο",

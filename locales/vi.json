@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Hiển thị",
   "settings.appearance.autoFitMessages": "Tự động vừa khít thư",
   "settings.appearance.autoFitMessagesHint": "Thu nhỏ email rộng cho vừa khung xem hội thoại.",
+  "settings.appearance.scrollLongHtmlMessages": "Khắc phục lỗi chữ chồng lên nhau khi cuộn",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Cuộn thư HTML dài trong phần nội dung thư để tránh chữ chồng lên nhau.",
   "settings.appearance.chatFullMessages": "Hiển thị toàn bộ nội dung thư trong trò chuyện",
   "settings.appearance.chatFullMessagesHint": "Thư dài được mở rộng cho vừa nội dung thay vì cuộn bên trong bong bóng.",
   "settings.appearance.pullUpToClose": "Kéo lên để đóng",

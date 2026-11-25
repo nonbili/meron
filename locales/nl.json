@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Zichtbaarheid",
   "settings.appearance.autoFitMessages": "Berichten automatisch aanpassen",
   "settings.appearance.autoFitMessagesHint": "Brede e-mails verkleinen zodat ze in de gespreksweergave passen.",
+  "settings.appearance.scrollLongHtmlMessages": "Overlappende tekst bij het scrollen verhelpen",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Scrol lange HTML-berichten binnen het bericht zelf om overlappende tekst te voorkomen.",
   "settings.appearance.chatFullMessages": "Volledige berichtinhoud in chat weergeven",
   "settings.appearance.chatFullMessagesHint": "Lange berichten worden vergroot in plaats van te scrollen binnen hun tekstballon.",
   "settings.appearance.pullUpToClose": "Omhoog trekken om te sluiten",

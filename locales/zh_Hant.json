@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "可見度",
   "settings.appearance.autoFitMessages": "自動調整郵件寬度",
   "settings.appearance.autoFitMessagesHint": "縮小較寬的郵件，使其符合對話檢視。",
+  "settings.appearance.scrollLongHtmlMessages": "修正捲動時文字重疊",
+  "settings.appearance.scrollLongHtmlMessagesHint": "在郵件內文區域內捲動長篇 HTML 郵件，避免文字重疊。",
   "settings.appearance.chatFullMessages": "在聊天中顯示完整郵件內容",
   "settings.appearance.chatFullMessagesHint": "長郵件隨內容展開，而不是在氣泡內捲動。",
   "settings.appearance.pullUpToClose": "上拉關閉",

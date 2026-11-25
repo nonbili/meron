@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "표시 여부",
   "settings.appearance.autoFitMessages": "메시지 자동 맞춤",
   "settings.appearance.autoFitMessagesHint": "넓은 이메일을 대화 보기에 맞게 축소합니다.",
+  "settings.appearance.scrollLongHtmlMessages": "스크롤 중 텍스트 겹침 해결",
+  "settings.appearance.scrollLongHtmlMessagesHint": "긴 HTML 메일을 본문 안에서 스크롤하여 텍스트가 겹치지 않도록 합니다.",
   "settings.appearance.chatFullMessages": "채팅에서 메시지 전체 내용 표시",
   "settings.appearance.chatFullMessagesHint": "긴 메시지를 말풍선 안에서 스크롤하지 않고 내용에 맞게 늘립니다.",
   "settings.appearance.pullUpToClose": "위로 당겨서 닫기",

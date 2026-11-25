@@ -14,21 +14,38 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import jp.nonbili.meron.shared.isMeronOAuthCallbackScheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
@@ -53,7 +70,12 @@ actual fun MailWebView(
     onNaturalWidth: (Dp) -> Unit,
     onOverflowExtent: (Int, Int) -> Unit,
     mediaMissing: Int,
+    scrollsItself: Boolean,
 ) {
+    val nestedScrollDispatcher = remember { NestedScrollDispatcher() }
+    val nestedScrollConnection = remember { object : NestedScrollConnection {} }
+    val gestureScope = rememberCoroutineScope()
+    var touchView by remember { mutableStateOf<LongPressWebView?>(null) }
     val mediaRecovery = remember { MailMediaRecovery(mediaMissing) }
     val latestOnOverflowExtent = rememberUpdatedState(onOverflowExtent)
     val latestOnNaturalWidth = rememberUpdatedState(onNaturalWidth)
@@ -88,9 +110,39 @@ actual fun MailWebView(
             (basePx.sp.toDp().value / basePx * 100).roundToInt()
         }
     AndroidView(
-        modifier = modifier,
+        modifier =
+            if (scrollsItself) {
+                modifier
+                    .nestedScroll(nestedScrollConnection, nestedScrollDispatcher)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            val slop = viewConfiguration.touchSlop
+                            var displacement = Offset.Zero
+                            while (true) {
+                                val change = awaitPointerEvent(PointerEventPass.Initial).changes.singleOrNull()
+                                if (change == null || change.id != down.id || !change.pressed || change.isConsumed) break
+                                displacement += change.position - change.previousPosition
+                                val dx = abs(displacement.x)
+                                val dy = abs(displacement.y)
+                                if (dx < slop && dy < slop) continue
+                                // Claim vertical drags before the interop view and
+                                // parent process this move. Sideways swipes still
+                                // reach the conversation's gesture handler.
+                                if (dy >= dx) {
+                                    val overSlop = if (displacement.y < 0f) displacement.y + slop else displacement.y - slop
+                                    touchView?.claimVerticalDrag(overSlop)
+                                }
+                                break
+                            }
+                        }
+                    }
+            } else {
+                modifier
+            },
         factory = { context ->
-            LongPressWebView(context).apply {
+            LongPressWebView(context, nestedScrollDispatcher, gestureScope).apply {
+                touchView = this
                 webViewClient =
                     object : WebViewClient() {
                         override fun onPageFinished(
@@ -150,8 +202,9 @@ actual fun MailWebView(
                 settings.setSupportZoom(true)
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
-                // The view sizes to content, so it never scrolls internally --
-                // except sideways once zoomed in (see LongPressWebView).
+                // Sized to content, the view never scrolls internally -- except
+                // sideways once zoomed in, or down a long mail it is capped
+                // short of (see LongPressWebView and scrollsItself).
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 setOnLongClickListener {
@@ -297,6 +350,10 @@ actual fun MailWebView(
             }
             // Both ways explicitly, as with the settings above: the view is
             // retained, and white is WebView's own default.
+            // Shorter than its document, the view scrolls it itself and shows
+            // where it is; sized to the document, there is nothing to scroll.
+            webView.scrollsItself = scrollsItself
+            webView.isVerticalScrollBarEnabled = scrollsItself
             webView.setBackgroundColor(if (transparentBackground) Color.TRANSPARENT else Color.WHITE)
             val documentChanged = webView.tag != html
             mediaRecovery.update(mediaMissing, documentChanged)
@@ -400,25 +457,58 @@ private fun encodeIllegalUriCharacters(value: String): String =
  *  Also keeps the gestures that are the page's own away from the list or reader
  *  scrolling around it, which would otherwise take the touch over (and cancel it
  *  here) as soon as a finger drifted vertically: a pinch, and a sideways drag
- *  across a page zoomed wider than the view. */
+ *  across a page zoomed wider than the view, or a vertical drag inside a
+ *  capped body when internal scrolling is enabled. */
 private class LongPressWebView(
     context: Context,
+    private val nestedScrollDispatcher: NestedScrollDispatcher,
+    private val gestureScope: CoroutineScope,
 ) : WebView(context) {
+    var scrollsItself = false
+        set(value) {
+            field = value
+            if (!value) parentFling?.cancel()
+        }
     var lastTouchX = 0f
         private set
     var lastTouchY = 0f
         private set
-    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private val touchConfiguration = ViewConfiguration.get(context)
+    private val touchSlop = touchConfiguration.scaledTouchSlop
+    private val velocityTracker = VelocityTracker()
+    private var parentFling: Job? = null
+    private var lastParentScrollY = 0f
+    private var holdsVerticalTouch = false
+    private var initialVerticalDrag: Float? = null
+    private var previousRawY = 0f
+
+    fun claimVerticalDrag(overSlop: Float) {
+        if (scrollsItself && (canScrollVertically(1) || canScrollVertically(-1))) {
+            holdsVerticalTouch = true
+            initialVerticalDrag = overSlop
+            parent?.requestDisallowInterceptTouchEvent(true)
+        }
+    }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        var unconsumedY = 0f
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                parentFling?.cancel()
                 lastTouchX = event.x
                 lastTouchY = event.y
+                previousRawY = event.rawY
+                holdsVerticalTouch = false
+                lastParentScrollY = 0f
+                if (scrollsItself) {
+                    velocityTracker.resetTracking()
+                    trackVelocity(event)
+                }
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
+                holdsVerticalTouch = false
                 parent?.requestDisallowInterceptTouchEvent(true)
             }
 
@@ -428,14 +518,59 @@ private class LongPressWebView(
                 if (ownsDrag(dx, dy, touchSlop, canScrollHorizontally(if (dx < 0) 1 else -1))) {
                     parent?.requestDisallowInterceptTouchEvent(true)
                 }
+                if (scrollsItself) trackVelocity(event)
+                unconsumedY = unconsumedVerticalDrag(event.rawY)
             }
         }
-        return super.onTouchEvent(event)
+        val handled = super.onTouchEvent(event)
+        if (unconsumedY != 0f) {
+            // Carry on scrolling the list or reader at the body's edge
+            // without starting a pull-to-dismiss gesture.
+            lastParentScrollY =
+                nestedScrollDispatcher
+                    .dispatchPostScroll(Offset.Zero, Offset(0f, unconsumedY), NestedScrollSource.SideEffect)
+                    .y
+        }
+        if (event.actionMasked == MotionEvent.ACTION_UP && scrollsItself && holdsVerticalTouch && lastParentScrollY != 0f) {
+            trackVelocity(event)
+            flingParent()
+        }
+        return handled
+    }
+
+    private fun trackVelocity(event: MotionEvent) {
+        velocityTracker.addPosition(event.eventTime, Offset(event.rawX, event.rawY))
+    }
+
+    private fun flingParent() {
+        val maxVelocity = touchConfiguration.scaledMaximumFlingVelocity.toFloat()
+        val velocityY = velocityTracker.calculateVelocity(Velocity(maxVelocity, maxVelocity)).y
+        if (abs(velocityY) < touchConfiguration.scaledMinimumFlingVelocity || velocityY * lastParentScrollY <= 0f) return
+        if (canScrollVertically(if (velocityY < 0f) 1 else -1)) return
+        parentFling =
+            gestureScope.launch {
+                nestedScrollDispatcher.dispatchPostFling(Velocity.Zero, Velocity(0f, velocityY))
+            }
+    }
+
+    private fun unconsumedVerticalDrag(rawY: Float): Float {
+        // The outer scroller can move this view during the gesture, so use
+        // screen coordinates for per-event deltas.
+        val deltaY = rawY - previousRawY
+        previousRawY = rawY
+        if (!scrollsItself || !holdsVerticalTouch) return 0f
+        val dragY = initialVerticalDrag ?: deltaY
+        initialVerticalDrag = null
+        if (dragY == 0f) return 0f
+        lastParentScrollY = 0f
+        // Compose has already seen consumed pointer changes. Hand off the
+        // movement through nested scrolling while WebView retains the touch.
+        return if (canScrollVertically(if (dragY < 0) 1 else -1)) 0f else dragY
     }
 }
 
 /** Whether a one-finger drag of ([dx], [dy]) from where it went down pans the
- *  zoomed page sideways rather than scrolling what the web view sits in. */
+ *  page along x rather than scrolling what the web view sits in. */
 internal fun ownsDrag(
     dx: Float,
     dy: Float,
@@ -469,3 +604,5 @@ internal actual val MailWebViewFollowsSystemFontScale: Boolean = true
 internal actual val MailWebViewFitsWideContent: Boolean = true
 
 internal actual val MailWebViewPinchZooms: Boolean = true
+
+internal actual val MailWebViewScrollsItself: Boolean = true

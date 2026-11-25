@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "الظهور",
   "settings.appearance.autoFitMessages": "ملاءمة الرسائل تلقائيًا",
   "settings.appearance.autoFitMessagesHint": "تصغير الرسائل العريضة لتناسب عرض المحادثة.",
+  "settings.appearance.scrollLongHtmlMessages": "إصلاح تداخل النص أثناء التمرير",
+  "settings.appearance.scrollLongHtmlMessagesHint": "مرّر رسائل HTML الطويلة داخل نص الرسالة لتجنّب تداخل النص.",
   "settings.appearance.chatFullMessages": "عرض محتوى الرسالة كاملًا في الدردشة",
   "settings.appearance.chatFullMessagesHint": "تتمدّد الرسائل الطويلة لتتسع لمحتواها بدلًا من التمرير داخل فقاعتها.",
   "settings.appearance.pullUpToClose": "اسحب لأعلى للإغلاق",

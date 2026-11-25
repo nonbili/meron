@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Visibilità",
   "settings.appearance.autoFitMessages": "Adatta automaticamente i messaggi",
   "settings.appearance.autoFitMessagesHint": "Riduce le email larghe per adattarle alla vista della conversazione.",
+  "settings.appearance.scrollLongHtmlMessages": "Correggi il testo sovrapposto durante lo scorrimento",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Scorri i messaggi HTML lunghi all’interno del corpo del messaggio per evitare che il testo si sovrapponga.",
   "settings.appearance.chatFullMessages": "Mostra il contenuto completo dei messaggi nella chat",
   "settings.appearance.chatFullMessagesHint": "I messaggi lunghi si allungano per intero invece di scorrere nel loro fumetto.",
   "settings.appearance.pullUpToClose": "Trascina in alto per chiudere",

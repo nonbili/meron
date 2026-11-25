@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -440,6 +441,8 @@ val LocalDarkMailBodies = staticCompositionLocalOf { false }
  *  MailWebView's `fitWideContent`). */
 val LocalAutoFitMessages = staticCompositionLocalOf { false }
 
+internal val LocalScrollLongHtmlMessages = compositionLocalOf { false }
+
 /** Whether chat bubbles grow to fit long bodies instead of scrolling inside a
  *  capped box (see MessageBubble). */
 val LocalChatFullMessages = staticCompositionLocalOf { false }
@@ -486,6 +489,7 @@ fun MeronTheme(
     messageFontScale: Int = DEFAULT_MESSAGE_FONT_SCALE,
     darkMailBodies: Boolean = false,
     autoFitMessages: Boolean = false,
+    scrollLongHtmlMessages: Boolean = false,
     chatFullMessages: Boolean = false,
     pullUpToClose: Boolean = true,
     content: @Composable () -> Unit,
@@ -498,6 +502,7 @@ fun MeronTheme(
         LocalMessageFontScale provides messageFontScale,
         LocalDarkMailBodies provides (darkMailBodies && spec.dark),
         LocalAutoFitMessages provides autoFitMessages,
+        LocalScrollLongHtmlMessages provides scrollLongHtmlMessages,
         LocalChatFullMessages provides chatFullMessages,
         LocalPullUpToClose provides pullUpToClose,
     ) {

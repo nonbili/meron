@@ -52,6 +52,8 @@ actual fun MailWebView(
     onNaturalWidth: (Dp) -> Unit,
     onOverflowExtent: (Int, Int) -> Unit,
     mediaMissing: Int,
+    // Unused: iOS keeps the view sized to the document (MailWebViewScrollsItself).
+    @Suppress("UNUSED_PARAMETER") scrollsItself: Boolean,
 ) {
     val latestOnOverflowExtent = rememberUpdatedState(onOverflowExtent)
     val latestOnNaturalWidth = rememberUpdatedState(onNaturalWidth)
@@ -266,3 +268,5 @@ internal actual val MailWebViewFollowsSystemFontScale: Boolean = false
 internal actual val MailWebViewFitsWideContent: Boolean = false
 
 internal actual val MailWebViewPinchZooms: Boolean = true
+
+internal actual val MailWebViewScrollsItself: Boolean = false

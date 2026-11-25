@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Visibilité",
   "settings.appearance.autoFitMessages": "Ajuster automatiquement les messages",
   "settings.appearance.autoFitMessagesHint": "Réduit les e-mails larges pour qu'ils tiennent dans la vue de conversation.",
+  "settings.appearance.scrollLongHtmlMessages": "Corriger le chevauchement du texte lors du défilement",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Fait défiler les longs messages HTML dans le corps du message pour éviter que le texte se chevauche.",
   "settings.appearance.chatFullMessages": "Afficher le contenu complet des messages dans le chat",
   "settings.appearance.chatFullMessagesHint": "Les messages longs s’agrandissent au lieu de défiler dans leur bulle.",
   "settings.appearance.pullUpToClose": "Tirer vers le haut pour fermer",

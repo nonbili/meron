@@ -1461,6 +1461,8 @@
   "settings.account.visibility": "Sichtbarkeit",
   "settings.appearance.autoFitMessages": "Nachrichten automatisch anpassen",
   "settings.appearance.autoFitMessagesHint": "Breite E-Mails verkleinern, damit sie in die Unterhaltungsansicht passen.",
+  "settings.appearance.scrollLongHtmlMessages": "Überlappenden Text beim Scrollen beheben",
+  "settings.appearance.scrollLongHtmlMessagesHint": "Lange HTML-Nachrichten im Nachrichtenbereich scrollen, um überlappenden Text zu vermeiden.",
   "settings.appearance.chatFullMessages": "Vollständigen Nachrichteninhalt im Chat anzeigen",
   "settings.appearance.chatFullMessagesHint": "Lange Nachrichten wachsen mit, statt in ihrer Sprechblase zu scrollen.",
   "settings.appearance.pullUpToClose": "Zum Schließen nach oben ziehen",
