@@ -50,6 +50,7 @@ import { pickFiles, pickImageFiles } from '../../lib/nativeFilePicker'
 import { getComposeSession, registerComposeSession } from '../../states/composeSessions'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import { ResizableImage } from './composerImage'
+import { ComposerLink } from './composerLink'
 import {
   clipboardHasImageMarkup,
   createInlineId,
@@ -286,7 +287,8 @@ export function useComposer(tabId: string) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ link: { openOnClick: false } }),
+      StarterKit.configure({ link: false }),
+      ComposerLink.configure({ openOnClick: false }),
       ExitPastedLink,
       // No HTMLAttributes: the node view does the styling on screen, and class
       // names would only go out in the mail, meaning nothing to its recipient.

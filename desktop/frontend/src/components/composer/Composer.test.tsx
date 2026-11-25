@@ -178,7 +178,7 @@ describe('Composer', () => {
     expect(view.container.querySelector('.tiptap-body')?.textContent).toContain(url)
   })
 
-  it('keeps the entire label linked when the Link dialog starts a link at the caret', () => {
+  it('inserts the URL as its own link when the Link dialog has no text to link', () => {
     const id = openComposeTab({ rich: true })!
     const { result } = renderHook(() => useComposer(id))
     const editor = result.current.editor!
@@ -191,14 +191,59 @@ describe('Composer', () => {
     fireEvent.change(toolbar.getByRole('textbox', { name: 'Link URL' }), { target: { value: url } })
     fireEvent.click(toolbar.getByRole('button', { name: 'Save' }))
 
-    const label = 'Watch the video'
+    // Links don't grow as you type at their end, as in Gmail.
     act(() => {
-      for (const character of label) editor.view.dispatch(editor.state.tr.insertText(character))
+      for (const character of ' to watch') editor.view.dispatch(editor.state.tr.insertText(character))
     })
 
-    const link = new DOMParser().parseFromString(editor.getHTML(), 'text/html').querySelector('a')
-    expect(link?.textContent).toBe(label)
+    const body = new DOMParser().parseFromString(editor.getHTML(), 'text/html').body
+    const link = body.querySelector('a')
+    expect(link?.textContent).toBe(url)
     expect(link?.getAttribute('href')).toBe(url)
+    expect(body.textContent).toBe(`${url} to watch`)
+  })
+
+  it('inserts a URL with the formatting around it, and nothing for a refused address', () => {
+    const id = openComposeTab({ rich: true })!
+    const { result } = renderHook(() => useComposer(id))
+    const editor = result.current.editor!
+    act(() => {
+      editor.commands.setContent('<p><strong>ab</strong></p>')
+      editor.commands.setTextSelection(2)
+    })
+    const toolbar = render(<ComposerToolbar editor={editor} />)
+    const save = (url: string) => {
+      fireEvent.click(toolbar.getByTitle('Link'))
+      fireEvent.change(toolbar.getByRole('textbox', { name: 'Link URL' }), { target: { value: url } })
+      fireEvent.click(toolbar.getByRole('button', { name: 'Save' }))
+    }
+
+    save('javascript:alert(1)')
+    expect(editor.getHTML()).toBe('<p><strong>ab</strong></p>')
+
+    save('https://example.com/x')
+    const link = new DOMParser().parseFromString(editor.getHTML(), 'text/html').querySelector('strong a, a strong')
+    expect(link?.textContent).toBe('https://example.com/x')
+    expect(editor.state.doc.textContent).toBe('ahttps://example.com/xb')
+  })
+
+  it('inserts a URL with the formatting picked for the next text', () => {
+    const id = openComposeTab({ rich: true })!
+    const { result } = renderHook(() => useComposer(id))
+    const editor = result.current.editor!
+    act(() => {
+      editor.commands.setContent('<p>a</p>')
+      editor.chain().setTextSelection(2).toggleBold().run()
+    })
+    const toolbar = render(<ComposerToolbar editor={editor} />)
+    fireEvent.click(toolbar.getByTitle('Link'))
+    fireEvent.change(toolbar.getByRole('textbox', { name: 'Link URL' }), {
+      target: { value: 'https://example.com/x' },
+    })
+    fireEvent.click(toolbar.getByRole('button', { name: 'Save' }))
+
+    const html = new DOMParser().parseFromString(editor.getHTML(), 'text/html')
+    expect(html.querySelector('strong a, a strong')?.textContent).toBe('https://example.com/x')
   })
 
   for (const rich of [false, true]) {

@@ -15,7 +15,7 @@ import { useTranslation } from '../../lib/i18n'
 import { MenuSurface } from '../menu/MenuSurface'
 import { useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { MarkdownIcon } from '../icons/Icons'
-import { LinkDialog } from './LinkDialog'
+import { LinkDialog, linkAtCaret } from './LinkDialog'
 
 // Shortcuts the editor turns into formatting as you type (StarterKit's input
 // rules). Syntax, not words, so it needs no translation.
@@ -161,7 +161,7 @@ export function ComposerToolbar({ editor, trailing }: { editor: Editor; trailing
           <Quote size={15} />
         </ToolbarButton>
         <ToolbarButton
-          active={editor.isActive('link')}
+          active={!!linkAtCaret(editor)}
           onClick={() => setEditingLink(true)}
           title={t('composer.toolbar.link')}
         >

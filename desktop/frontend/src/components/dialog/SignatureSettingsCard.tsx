@@ -10,6 +10,7 @@ import { accountSignaturePayload, savedSignatureHtml, unsupportedSignatureMarkup
 import type { Account, AccountSignature } from '../../types'
 import { ComposerToolbar, ToolbarButton } from '../composer/ComposerToolbar'
 import { ResizableImage } from '../composer/composerImage'
+import { ComposerLink } from '../composer/composerLink'
 import { extractClipboardImages } from '../composer/composerHelpers'
 import { SelectRow, SettingsGroup } from './AccountSettingsRows'
 
@@ -73,7 +74,8 @@ function SignatureEditor({
     // The same image node as the composer's, so a signature with a logo or an
     // animated GIF lands in a draft exactly as it was written here.
     extensions: [
-      StarterKit.configure({ link: { openOnClick: false } }),
+      StarterKit.configure({ link: false }),
+      ComposerLink.configure({ openOnClick: false }),
       ResizableImage.configure({ allowBase64: true }),
     ],
     content: value,
