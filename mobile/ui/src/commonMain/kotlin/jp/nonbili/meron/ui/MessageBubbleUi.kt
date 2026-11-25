@@ -1556,8 +1556,13 @@ internal fun HtmlMessageBody(
                   document.addEventListener('click', function (event) {
                     var target = event.target;
                     var image = target && target.closest ? target.closest('img[src]') : null;
+                    // A tap on a picture opens it in Meron's viewer, even inside a
+                    // link; the link is a long-press away (see MailWebView).
                     if (image) {
+                      // As written, which is what the gallery matches against; only
+                      // a protocol-relative src gets a scheme, or it could not open.
                       var src = image.getAttribute('src');
+                      if (src && src.indexOf('//') === 0) src = 'https:' + src;
                       if (src) {
                         event.preventDefault();
                         if (window.MeronImage && window.MeronImage.open) {

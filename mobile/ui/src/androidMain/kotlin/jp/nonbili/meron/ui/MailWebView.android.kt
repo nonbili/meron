@@ -3,6 +3,8 @@ package jp.nonbili.meron.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -148,18 +150,36 @@ actual fun MailWebView(
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 setOnLongClickListener {
-                    webViewImageUrl(hitTestResult.type, hitTestResult.extra)?.let { ref ->
-                        latestOnOpenImage.value(ref)
-                        return@setOnLongClickListener true
-                    }
-                    val url = webViewLinkUrl(hitTestResult.type, hitTestResult.extra) ?: return@setOnLongClickListener false
+                    val hit = hitTestResult
                     // The menu is Compose-side so it can open at the press, which a
                     // PopupMenu anchored to the (full-page) web view cannot do.
                     val scale = context.resources.displayMetrics.density
-                    latestOnLinkLongPress.value(
-                        url,
-                        DpOffset((lastTouchX / scale).dp, (lastTouchY / scale).dp),
-                    )
+                    val pressAt = DpOffset((lastTouchX / scale).dp, (lastTouchY / scale).dp)
+                    val imageRef = webViewImageUrl(hit.type, hit.extra)
+                    if (hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                        // A tap opens the picture; a long-press offers its link, for
+                        // a reader who wants where it points. The hit test only
+                        // carries the image's src, so ask for the anchor's href. A
+                        // link we would not open (cid:, javascript:) keeps the
+                        // picture behaviour.
+                        requestFocusNodeHref(
+                            Handler(Looper.getMainLooper()) { message ->
+                                val href = message.data.getString("url")?.let(::externalMailUrl)
+                                when {
+                                    href != null -> latestOnLinkLongPress.value(href, pressAt)
+                                    imageRef != null -> latestOnOpenImage.value(imageRef)
+                                }
+                                true
+                            }.obtainMessage(),
+                        )
+                        return@setOnLongClickListener true
+                    }
+                    imageRef?.let { ref ->
+                        latestOnOpenImage.value(ref)
+                        return@setOnLongClickListener true
+                    }
+                    val url = webViewLinkUrl(hit.type, hit.extra) ?: return@setOnLongClickListener false
+                    latestOnLinkLongPress.value(url, pressAt)
                     true
                 }
                 addJavascriptInterface(
@@ -316,12 +336,23 @@ internal fun mailMediaMimeType(filename: String): String =
         else -> "application/octet-stream"
     }
 
+// Read by pattern, not with java.net.URI: URI rejects characters a browser takes
+// in its stride (`|`, `{`, `^`, a space), which tracking links in mail are full
+// of, and a link it failed to parse used to be dropped without a word.
+private val urlScheme = Regex("""^([a-z][a-z0-9+.-]*):""", RegexOption.IGNORE_CASE)
+private val urlHost = Regex("""^[a-z][a-z0-9+.-]*://(?:[^/?#@]*@)?([^/?#:]*)""", RegexOption.IGNORE_CASE)
+
 internal fun externalMailUrl(url: String): String? {
     val value = url.trim()
     if (value.isEmpty()) return null
-    val host = runCatching { URI(value).host }.getOrNull()
+    val host = urlHost.find(value)?.groupValues?.get(1)
     if (isMailWebViewOrigin(host)) return null
-    val scheme = runCatching { URI(value).scheme?.lowercase() }.getOrNull() ?: return null
+    val scheme =
+        urlScheme
+            .find(value)
+            ?.groupValues
+            ?.get(1)
+            ?.lowercase() ?: return null
     return value.takeUnless {
         scheme in setOf("intent", "javascript", "file", "content", "data", "cid", "about") ||
             isMeronOAuthCallbackScheme(scheme)

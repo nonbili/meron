@@ -35,6 +35,17 @@ class MailWebViewLinkTest {
     }
 
     @Test
+    fun keepsLinksJavaUriRejects() {
+        assertEquals("https://t.example.com/c?u=1|2", externalMailUrl("https://t.example.com/c?u=1|2"))
+        assertEquals("""https://x.example/?q={"a":1}""", externalMailUrl("""https://x.example/?q={"a":1}"""))
+        assertEquals("https://x.example/a b", externalMailUrl("https://x.example/a b"))
+        assertEquals("https://x.example/?a=^", externalMailUrl("https://x.example/?a=^"))
+        assertNull(externalMailUrl("https://appassets.androidplatform.net/a|b"))
+        assertNull(externalMailUrl("https://user@appassets.androidplatform.net/a"))
+        assertNull(externalMailUrl("JavaScript:alert(1)|x"))
+    }
+
+    @Test
     fun normalizesSyntheticOriginImageRefs() {
         assertEquals("/media/acct/image.webp", mailImageRef("https://appassets.androidplatform.net/media/acct/image.webp"))
         assertNull(mailImageRef("https://appassets.androidplatform.net/not-media/image.webp"))
