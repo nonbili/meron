@@ -970,6 +970,11 @@ pub fn thread_message_json(
         // Where the plain body's quoted tail starts (UTF-16 offset), so clients
         // can fold it; null when there is none. HTML bodies mark theirs inline.
         "body_quote_start": cached.and_then(|message| quote::plain_quote_start(&message.body)),
+        // The plain body's links (bare URLs and Markdown `[label](url)`), at
+        // UTF-16 offsets, so clients draw them without matching URLs themselves.
+        "body_links": cached
+            .map(|message| crate::linkify::plain_body_links(&message.body))
+            .unwrap_or_default(),
         // No cached body means the on-demand IMAP fetch failed (auth/network)
         // or is still filling in the background — not that the message is
         // empty. Clients offer a retry / re-read for these.

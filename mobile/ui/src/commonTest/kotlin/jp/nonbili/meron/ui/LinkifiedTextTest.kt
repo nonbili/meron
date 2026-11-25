@@ -28,7 +28,7 @@ class LinkifiedTextTest {
     @Test
     fun keepsBalancedBracketsAndLinksWww() {
         assertEquals(
-            listOf("https://en.example.org/wiki/Foo_(bar)" to "https://en.example.org/wiki/Foo_(bar)", "www.example.com" to "http://www.example.com"),
+            listOf("https://en.example.org/wiki/Foo_(bar)" to "https://en.example.org/wiki/Foo_(bar)", "www.example.com" to "https://www.example.com"),
             findBareUrls("See https://en.example.org/wiki/Foo_(bar), or www.example.com!").map { it.text to it.href },
         )
     }

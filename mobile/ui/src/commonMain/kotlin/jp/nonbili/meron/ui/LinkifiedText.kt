@@ -75,7 +75,7 @@ internal fun findBareUrls(text: String): List<BareUrl> =
             if (host.isEmpty() || (www && !wwwHost.containsMatchIn(host))) {
                 null
             } else {
-                BareUrl(start, start + url.length, url, if (www) "http://$url" else url)
+                BareUrl(start, start + url.length, url, if (www) "https://$url" else url)
             }
         }.toList()
 

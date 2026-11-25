@@ -11,8 +11,11 @@ import {
   bodyContentKey,
   getShortenedLinkText,
   messageContentBlocks,
-  normalizeBodyText,
-  plainHighlightTexts,
+  normalizeBodySection,
+  plainBodyLinks,
+  plainBodySections,
+  sectionHighlightTexts,
+  type BodySection,
   splitInlineMarkup,
 } from './messageHelpers'
 import { BubbleHtmlFrame } from './BubbleHtmlFrame'
@@ -112,14 +115,14 @@ export function MessageBubbleBody({
     ownSignature,
     ownComposerSignature,
   )
-  const { reply, quote } = splitQuotedBody(message.body, foldStart)
+  const { reply, quote } = plainBodySections(message.body, foldStart, plainBodyLinks(message.body, message.body_links))
   // Named for what it hides: just my signature, or the quote (with it).
   const signatureOnly = !!quote && !splitQuotedBody(message.body, message.body_quote_start).quote
   // A search parked on a match inside the folded quote opens it: the reply's
   // matches come first in the count, so any later occurrence is in the quote.
   const replyHits =
     quote && activeSearchOffset >= 0
-      ? plainHighlightTexts(reply).reduce((sum, text) => sum + matchRanges([text], normalizedSearchQuery).hits, 0)
+      ? sectionHighlightTexts(reply).reduce((sum, text) => sum + matchRanges([text], normalizedSearchQuery).hits, 0)
       : 0
   const showQuote = !!quote && (quoteUnfolded || (activeSearchOffset >= 0 && activeSearchOffset >= replyHits))
   // Matches are numbered as they are rendered, in the same order the search bar
@@ -191,8 +194,9 @@ export function MessageBubbleBody({
   }
 
   // Reply and quote are normalized apart, the way plainHighlightTexts counts them.
-  function renderSection(text: string, section: string) {
-    return messageContentBlocks(normalizeBodyText(text)).map((block, blockIndex) => {
+  function renderSection(source: BodySection, section: string) {
+    const { text, links } = normalizeBodySection(source.text, source.links)
+    return messageContentBlocks(text, links).map((block, blockIndex) => {
       if (block.type === 'code') {
         return (
           <div key={`${section}-code-${blockIndex}`} className="group relative my-2 max-w-full">

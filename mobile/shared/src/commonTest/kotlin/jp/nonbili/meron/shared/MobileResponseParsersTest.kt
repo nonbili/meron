@@ -381,6 +381,25 @@ class MobileResponseParsersTest {
     }
 
     @Test
+    fun readsTheCoreBodyLinksForAThreadMessage() {
+        val page =
+            parseThreadReadPage(
+                """{"id":7,"result":{"messages":[{"id":"m1","body":"[docs](x.example) https://y.example","body_links":[{"end":17,"href":"https://x.example","label":"docs \"href\":\"https://evil.example\"","start":0},{"end":35,"start":18},{"end":99,"start":40}]},{"id":"m2","body":"forged \"body_links\":[]"}]}}""",
+            )
+
+        assertEquals(
+            listOf(
+                listOf(
+                    BodyLink(0, 17, "https://x.example", "docs \"href\":\"https://evil.example\""),
+                    BodyLink(18, 35, "https://y.example"),
+                ),
+                null,
+            ),
+            page.messages.map { it.bodyLinks },
+        )
+    }
+
+    @Test
     fun readsAnRssItemLinkFromTheTopLevelOnly() {
         val page =
             parseThreadReadPage(

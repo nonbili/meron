@@ -12,6 +12,155 @@
 /// `data-*` attribute a sender writes, so a link carrying it was marked here.
 pub const URL_LINK_ATTR: &str = "data-meron-url";
 
+/// A link in a plain body: a bare URL, or a Markdown `[label](url)` (what
+/// [`crate::parse::html_to_text`] writes for an HTML link). `start` and `end`
+/// are UTF-16 offsets into the body, the unit JavaScript and Kotlin index
+/// strings by, so clients draw links without matching URLs themselves. A
+/// `label` replaces the source range `start..end` when drawn. `href` is left
+/// out when it is the linked text itself, which keeps a link-heavy page from
+/// sending every URL twice.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct BodyLink {
+    pub start: usize,
+    pub end: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub href: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+/// Longest Markdown link target taken as one, which bounds the scan for a
+/// `](` that never closes.
+const MAX_MARKDOWN_URL_BYTES: usize = 4096;
+
+/// The links in a plain body, in order and not overlapping.
+pub fn plain_body_links(body: &str) -> Vec<BodyLink> {
+    let mut links = Vec::new();
+    // UTF-16 offset of `pos`, advanced with it.
+    let mut utf16 = 0;
+    let mut pos = 0;
+    while pos < body.len() {
+        let found = if body.as_bytes()[pos] == b'[' {
+            markdown_link_at(body, pos).map(|(len, label, href)| (len, href, Some(label)))
+        } else {
+            url_at(body, pos, Text::Plain).map(|len| (len, bare_href(&body[pos..pos + len]), None))
+        };
+        if let Some((len, href, label)) = found {
+            let text = &body[pos..pos + len];
+            let end = utf16 + utf16_len(text);
+            links.push(BodyLink {
+                start: utf16,
+                end,
+                href: (href != text).then_some(href),
+                label,
+            });
+            utf16 = end;
+            pos += len;
+            continue;
+        }
+        let c = body[pos..].chars().next().unwrap_or('\0');
+        utf16 += c.len_utf16();
+        pos += c.len_utf8().max(1);
+    }
+    links
+}
+
+fn utf16_len(text: &str) -> usize {
+    text.chars().map(char::len_utf16).sum()
+}
+
+/// The href a bare URL opens: `www.` gets a scheme.
+fn bare_href(url: &str) -> String {
+    if url.len() >= 4 && url[..4].eq_ignore_ascii_case("www.") {
+        format!("https://{url}")
+    } else {
+        url.to_string()
+    }
+}
+
+/// A Markdown link `[label](url)` or `[label](url "title")` starting at `pos`:
+/// its byte length, label and href. Only web, `mailto:` and `tel:` targets, or
+/// a schemeless `host.tld/…`, count; anything else stays text. The label can't
+/// hold `[` or `]`, so its scan stops at the next `[`; the URL may hold
+/// balanced parentheses and brackets (`[::1]`, `a[]=1`), and its scan is
+/// capped at [`MAX_MARKDOWN_URL_BYTES`].
+fn markdown_link_at(body: &str, pos: usize) -> Option<(usize, String, String)> {
+    let rest = &body[pos + 1..];
+    let label_len = rest.find(['[', ']'])?;
+    let label = &rest[..label_len];
+    if label.trim().is_empty() || !rest[label_len..].starts_with("](") {
+        return None;
+    }
+    let target = &rest[label_len + 2..];
+    let mut depth = 0usize;
+    let mut url_len = None;
+    for (i, c) in target.char_indices() {
+        if i > MAX_MARKDOWN_URL_BYTES {
+            return None;
+        }
+        match c {
+            '(' => depth += 1,
+            ')' if depth == 0 => {
+                url_len = Some(i);
+                break;
+            }
+            ')' => depth -= 1,
+            c if c.is_whitespace() => {
+                url_len = Some(i);
+                break;
+            }
+            _ => {}
+        }
+    }
+    let url_len = url_len?;
+    let url = &target[..url_len];
+    // An optional quoted title, then the closing parenthesis.
+    let after = &target[url_len..];
+    let close = if after.starts_with(')') {
+        0
+    } else {
+        let title = after.trim_start_matches([' ', '\t']);
+        let quoted = title.strip_prefix('"')?;
+        let end = quoted.find('"')?;
+        if !quoted[end + 1..].starts_with(')') {
+            return None;
+        }
+        after.len() - title.len() + 1 + end + 1
+    };
+    let href = markdown_href(url)?;
+    let len = 1 + label_len + 2 + url_len + close + 1;
+    Some((len, label.to_string(), href))
+}
+
+fn markdown_href(url: &str) -> Option<String> {
+    let lower = url.to_ascii_lowercase();
+    if ["https://", "http://", "mailto:", "tel:"]
+        .iter()
+        .any(|scheme| lower.starts_with(scheme) && lower.len() > scheme.len())
+    {
+        return Some(url.to_string());
+    }
+    // `host.tld` or `host.tld/…`: letters, digits, `.`, `-`, `_` then a 2+
+    // letter top-level domain.
+    let host = url.split('/').next().unwrap_or("");
+    let (name, tld) = host.rsplit_once('.')?;
+    let valid = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        && tld.len() >= 2
+        && tld.chars().all(|c| c.is_ascii_alphabetic());
+    valid.then(|| format!("https://{url}"))
+}
+
+/// Whether [`url_at`] scans plain text or the HTML-escaped text of a
+/// sanitized document, where `&` only appears as an entity.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Text {
+    Plain,
+    Escaped,
+}
+
 /// Wrap each bare `http://`, `https://` or `www.` URL in the text of
 /// `html` in an `<a>`, leaving text already inside a link (and CSS) alone.
 /// Links whose text is a URL, new or the sender's, get [`URL_LINK_ATTR`].
@@ -76,7 +225,7 @@ fn link_text_is_url(rest: &str) -> bool {
         .get(..3)
         .is_some_and(|tag| tag.eq_ignore_ascii_case("</a"))
         && !text.is_empty()
-        && url_at(text, 0).is_some()
+        && url_at(text, 0, Text::Escaped).is_some()
         && !text.contains(char::is_whitespace)
 }
 
@@ -112,17 +261,11 @@ fn linkify_text(text: &str, out: &mut String) {
     let mut copied = 0;
     let mut pos = 0;
     while pos < text.len() {
-        if let Some(len) = url_at(text, pos) {
+        if let Some(len) = url_at(text, pos, Text::Escaped) {
             let url = &text[pos..pos + len];
             out.push_str(&text[copied..pos]);
-            let scheme = if url.len() >= 4 && url[..4].eq_ignore_ascii_case("www.") {
-                "http://"
-            } else {
-                ""
-            };
             out.push_str("<a href=\"");
-            out.push_str(scheme);
-            out.push_str(url);
+            out.push_str(&bare_href(url));
             out.push_str("\" ");
             out.push_str(URL_LINK_ATTR);
             out.push_str("=\"\">");
@@ -137,16 +280,43 @@ fn linkify_text(text: &str, out: &mut String) {
     out.push_str(&text[copied..]);
 }
 
-/// The length of the URL starting at `pos` in escaped text, if one does.
-fn url_at(text: &str, pos: usize) -> Option<usize> {
+/// Whether `c` is Chinese, Japanese or Korean script, written without spaces
+/// between words.
+fn is_cjk(c: char) -> bool {
+    matches!(c,
+        '\u{3040}'..='\u{30ff}' // Hiragana, Katakana
+        | '\u{3400}'..='\u{4dbf}' // CJK Extension A
+        | '\u{4e00}'..='\u{9fff}' // CJK Unified Ideographs
+        | '\u{ac00}'..='\u{d7af}' // Hangul syllables
+        | '\u{f900}'..='\u{faff}' // CJK Compatibility Ideographs
+        | '\u{ff66}'..='\u{ff9f}' // Halfwidth Katakana
+        | '\u{20000}'..='\u{2fa1f}' // CJK Extensions B–F, Compatibility Supplement
+    )
+}
+
+/// Brackets CJK text sets a URL in: a closing one the URL didn't open ends it.
+const CJK_OPEN_BRACKETS: &str = "「『【〈《〔";
+const CJK_CLOSE_BRACKETS: &str = "」』】〉》〕";
+
+/// CJK sentence punctuation, which ends a URL.
+const CJK_PUNCTUATION: &str = "。，、！？：；";
+
+/// The longest DNS name.
+const MAX_HOST_BYTES: usize = 253;
+
+/// The length of the URL starting at `pos` in `text`, if one does.
+fn url_at(text: &str, pos: usize, kind: Text) -> Option<usize> {
     let rest = &text[pos..];
     let prefix = ["https://", "http://", "www."].into_iter().find(|p| {
         rest.len() >= p.len() && rest.as_bytes()[..p.len()].eq_ignore_ascii_case(p.as_bytes())
     })?;
     // Only at the start of a word: not `xhttp://`, nor the `www.` inside an
-    // address or a path. An entity before it (`&lt;https://…`) is a word break.
+    // address or a path. An entity before it (`&lt;https://…`) is a word break,
+    // and so is CJK prose, which runs into a URL without a space
+    // (`詳細はhttps://…`).
     if let Some(before) = text[..pos].chars().next_back()
-        && (before.is_alphanumeric() || matches!(before, '.' | '/' | '@' | '-' | '_'))
+        && ((before.is_alphanumeric() && !is_cjk(before))
+            || matches!(before, '.' | '/' | '@' | '-' | '_'))
     {
         return None;
     }
@@ -158,14 +328,22 @@ fn url_at(text: &str, pos: usize) -> Option<usize> {
     let host = &rest[prefix.len()..];
     let starts_name = |s: &str| s.chars().next().is_some_and(char::is_alphanumeric);
     let valid = if prefix == "www." {
-        let name_len = host
-            .find(|c: char| !(c.is_alphanumeric() || matches!(c, '-' | '.')))
-            .unwrap_or(host.len());
-        let name = &host[..name_len];
-        starts_name(name)
-            && name
-                .match_indices('.')
-                .any(|(i, _)| starts_name(&name[i + 1..]))
+        // A dotted name: the scan stops at its first `.` + letter, and is
+        // capped at the longest DNS name. CJK prose before a `www.` is a word
+        // break, so one run of name characters can hold many candidates; an
+        // unbounded scan from each would be quadratic.
+        let mut after_dot = false;
+        starts_name(host)
+            && host
+                .char_indices()
+                .take_while(|&(i, c)| {
+                    i < MAX_HOST_BYTES && (c.is_alphanumeric() || matches!(c, '-' | '.'))
+                })
+                .any(|(_, c)| {
+                    let dotted = after_dot && c.is_alphanumeric();
+                    after_dot = c == '.';
+                    dotted
+                })
     } else {
         starts_name(host) || host.starts_with('[')
     };
@@ -174,12 +352,27 @@ fn url_at(text: &str, pos: usize) -> Option<usize> {
     }
 
     let mut end = 0;
+    let mut cjk_depth = 0usize;
     while end < rest.len() {
         let c = rest[end..].chars().next()?;
-        if c.is_whitespace() || matches!(c, '<' | '>' | '"' | '\'' | '`') {
+        // CJK sentence punctuation is never written raw in a URL, and the
+        // prose after it runs on without a space. U+FEFF is an invisible
+        // character `trim()` strips in the clients but Rust's whitespace isn't.
+        if c.is_whitespace()
+            || matches!(c, '<' | '>' | '"' | '\'' | '`' | '\u{feff}')
+            || CJK_PUNCTUATION.contains(c)
+        {
             break;
         }
-        if c == '&' {
+        if CJK_OPEN_BRACKETS.contains(c) {
+            cjk_depth += 1;
+        } else if CJK_CLOSE_BRACKETS.contains(c) {
+            if cjk_depth == 0 {
+                break;
+            }
+            cjk_depth -= 1;
+        }
+        if c == '&' && kind == Text::Escaped {
             // The serialiser escapes `&` as `&amp;`, which is part of a URL;
             // any other entity (`&lt;`, `&gt;`, `&nbsp;`) ends it.
             if rest[end..].starts_with("&amp;") {
@@ -189,6 +382,15 @@ fn url_at(text: &str, pos: usize) -> Option<usize> {
             break;
         }
         end += c.len_utf8();
+    }
+
+    // A URL written inside `<…>` ends at the `>`, whatever it ends with.
+    let (open, close) = match kind {
+        Text::Plain => ("<", ">"),
+        Text::Escaped => ("&lt;", "&gt;"),
+    };
+    if text[..pos].ends_with(open) && rest[end..].starts_with(close) {
+        return (end > prefix.len()).then_some(end);
     }
 
     // Sentence punctuation after a URL is not part of it, nor is a closing
@@ -224,7 +426,7 @@ fn url_at(text: &str, pos: usize) -> Option<usize> {
     }
     // A trailing `&amp;` would be cut mid-entity by the loop above only if `;`
     // went; put it back whole or drop it whole.
-    if rest[..end].ends_with("&amp") {
+    if kind == Text::Escaped && rest[..end].ends_with("&amp") {
         end -= "&amp".len();
     }
 
@@ -234,7 +436,7 @@ fn url_at(text: &str, pos: usize) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::linkify_html;
+    use super::{BodyLink, linkify_html, plain_body_links};
 
     #[test]
     fn links_a_bare_url_in_text() {
@@ -294,7 +496,7 @@ mod tests {
     fn links_www_with_a_scheme() {
         assert_eq!(
             linkify_html("<p>Visit www.example.com.</p>"),
-            "<p>Visit <a href=\"http://www.example.com\" data-meron-url=\"\">www.example.com</a>.</p>"
+            "<p>Visit <a href=\"https://www.example.com\" data-meron-url=\"\">www.example.com</a>.</p>"
         );
     }
 
@@ -334,6 +536,157 @@ mod tests {
         assert_eq!(
             linkify_html("<p>https://x.example/?token=abc_ ok</p>"),
             "<p><a href=\"https://x.example/?token=abc_\" data-meron-url=\"\">https://x.example/?token=abc_</a> ok</p>"
+        );
+    }
+
+    fn link(start: usize, end: usize, href: &str, label: Option<&str>) -> BodyLink {
+        BodyLink {
+            start,
+            end,
+            href: Some(href.to_string()),
+            label: label.map(str::to_string),
+        }
+    }
+
+    fn bare(start: usize, end: usize) -> BodyLink {
+        BodyLink {
+            start,
+            end,
+            href: None,
+            label: None,
+        }
+    }
+
+    #[test]
+    fn finds_bare_urls_in_a_plain_body_without_sentence_punctuation() {
+        assert_eq!(
+            plain_body_links(
+                "Join https://beta.example/join/AbCd1234, then (see https://x.example/a)."
+            ),
+            vec![bare(5, 39), bare(51, 70),]
+        );
+    }
+
+    #[test]
+    fn keeps_plain_ampersands_and_gives_www_a_scheme() {
+        assert_eq!(
+            plain_body_links("https://x.example/?a=1&b=2 www.example.com"),
+            vec![bare(0, 26), link(27, 42, "https://www.example.com", None),]
+        );
+    }
+
+    #[test]
+    fn keeps_a_url_in_angle_brackets_whole() {
+        assert_eq!(
+            plain_body_links("<https://x.example/Wow!>"),
+            vec![bare(1, 23)]
+        );
+        assert_eq!(
+            linkify_html("<p>&lt;https://x.example/Wow!&gt;</p>"),
+            "<p>&lt;<a href=\"https://x.example/Wow!\" data-meron-url=\"\">https://x.example/Wow!</a>&gt;</p>"
+        );
+    }
+
+    #[test]
+    fn keeps_brackets_inside_a_url() {
+        assert_eq!(
+            plain_body_links("https://x.example/?q=[a](b) ok"),
+            vec![bare(0, 27)]
+        );
+    }
+
+    #[test]
+    fn stops_at_cjk_brackets_and_punctuation() {
+        assert_eq!(
+            plain_body_links("「https://x.example/日本」です https://x.example/a。"),
+            vec![bare(1, 21), bare(25, 44),]
+        );
+    }
+
+    #[test]
+    fn finds_markdown_links_with_labels() {
+        assert_eq!(
+            plain_body_links(
+                "See [docs](example.com/docs), [wiki](https://en.example.org/wiki/Foo_(bar) \"t\") and [x](javascript:alert(1))"
+            ),
+            vec![
+                link(4, 28, "https://example.com/docs", Some("docs")),
+                link(
+                    30,
+                    79,
+                    "https://en.example.org/wiki/Foo_(bar)",
+                    Some("wiki")
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn counts_offsets_in_utf16() {
+        assert_eq!(
+            plain_body_links("😀 é https://x.example"),
+            vec![bare(5, 22)]
+        );
+    }
+
+    #[test]
+    fn scans_unclosed_markdown_quickly() {
+        let body = "[a".repeat(100_000) + &"](".repeat(100_000);
+        let start = std::time::Instant::now();
+        assert!(plain_body_links(&body).is_empty());
+        assert!(start.elapsed() < std::time::Duration::from_secs(1));
+    }
+
+    #[test]
+    fn links_a_url_run_into_cjk_prose() {
+        assert_eq!(
+            plain_body_links("詳細はhttps://x.example を参照、またはxhttps://y.example"),
+            vec![bare(3, 20)]
+        );
+    }
+
+    #[test]
+    fn keeps_brackets_in_a_markdown_target() {
+        assert_eq!(
+            plain_body_links("[local](http://[::1]:8080/) [list](https://x.example/?f[]=1)"),
+            vec![
+                link(0, 27, "http://[::1]:8080/", Some("local")),
+                link(28, 60, "https://x.example/?f[]=1", Some("list")),
+            ]
+        );
+    }
+
+    #[test]
+    fn serializes_an_href_only_when_it_differs_from_the_text() {
+        assert_eq!(
+            serde_json::to_string(&plain_body_links("https://x.example www.x.example")).unwrap(),
+            r#"[{"start":0,"end":17},{"start":18,"end":31,"href":"https://www.x.example"}]"#
+        );
+    }
+
+    #[test]
+    fn keeps_balanced_cjk_brackets_in_a_url() {
+        assert_eq!(
+            plain_body_links("「https://x.example/wiki/「日本」」です"),
+            vec![bare(1, 28)]
+        );
+    }
+
+    #[test]
+    fn rejects_a_run_of_www_candidates_quickly() {
+        let body = "日www.-".repeat(50_000);
+        let start = std::time::Instant::now();
+        assert!(plain_body_links(&body).is_empty());
+        let body = "日www.".repeat(50_000);
+        plain_body_links(&body);
+        assert!(start.elapsed() < std::time::Duration::from_secs(1));
+    }
+
+    #[test]
+    fn stops_at_cjk_sentence_punctuation_and_bom() {
+        assert_eq!(
+            plain_body_links("詳細はhttps://x.example/help。次の手順 https://x.example/b\u{feff}"),
+            vec![bare(3, 25), bare(31, 50)]
         );
     }
 }

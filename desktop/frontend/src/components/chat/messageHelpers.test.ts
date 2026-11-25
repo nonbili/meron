@@ -18,12 +18,15 @@ import {
   mediaKeyFromSrc,
   mediaSrc,
   messageSearchText,
+  normalizeBodySection,
   normalizeBodyText,
   normalizeUrl,
   readerAttachmentImages,
   readerAttachmentVideos,
   parseAddressList,
   parseInlineMessageContent,
+  plainBodyLinks,
+  plainBodySections,
   standaloneAttachmentImages,
   splitFencedCodeBlocks,
 } from './messageHelpers'
@@ -157,18 +160,92 @@ describe('messageHelpers text and link helpers', () => {
     expect(bodyContentKey('abc')).not.toBe(bodyContentKey('abd'))
   })
 
-  it('parses inline links and markdown links', () => {
-    expect(parseInlineMessageContent('See [docs](example.com/docs) and https://example.com/raw')).toEqual([
+  it('splits text at the links it is given', () => {
+    const text = 'See [docs](example.com/docs) and https://example.com/raw'
+    expect(
+      parseInlineMessageContent(text, [
+        { start: 4, end: 28, href: 'https://example.com/docs', label: 'docs' },
+        { start: 33, end: 56, href: 'https://example.com/raw' },
+      ]),
+    ).toEqual([
       { type: 'text', content: 'See ' },
       { type: 'link', content: 'https://example.com/docs', label: 'docs' },
       { type: 'text', content: ' and ' },
       { type: 'link', content: 'https://example.com/raw' },
     ])
-    expect(parseInlineMessageContent('')).toEqual([])
+    expect(parseInlineMessageContent('', [])).toEqual([])
   })
 
-  it('splits fenced code blocks while keeping inline text parsed', () => {
-    expect(splitFencedCodeBlocks('before https://example.com\n```\nconst x = 1\n```\nafter')).toEqual([
+  it('finds bare URLs itself only for a body the core never saw', () => {
+    const body = 'Join https://beta.example/join/AbCd1234, ok'
+    expect(plainBodyLinks(body, undefined)).toEqual([{ start: 5, end: 39, href: 'https://beta.example/join/AbCd1234' }])
+    expect(plainBodyLinks(body, [])).toEqual([])
+    expect(plainBodyLinks('[mail](mailto:a@x.example)', undefined)).toEqual([
+      { start: 0, end: 26, href: 'mailto:a@x.example', label: 'mail' },
+    ])
+    expect(plainBodyLinks('[docs](https://x.example/d) and https://x.example/raw', undefined)).toEqual([
+      { start: 0, end: 27, href: 'https://x.example/d', label: 'docs' },
+      { start: 32, end: 53, href: 'https://x.example/raw' },
+    ])
+    expect(plainBodyLinks(body, [{ start: 5, end: 39 }])).toEqual([
+      { start: 5, end: 39, href: 'https://beta.example/join/AbCd1234' },
+    ])
+  })
+
+  it('moves links along with the text normalization shifts', () => {
+    const text = '\n  - see https://x.example/a\n\n\n\n* and https://x.example/b '
+    const links = [
+      { start: 9, end: 28, href: 'https://x.example/a' },
+      { start: 38, end: 57, href: 'https://x.example/b' },
+    ]
+    const normalized = normalizeBodySection(text, links)
+    expect(normalized.text).toBe('• see https://x.example/a\n\n• and https://x.example/b')
+    expect(normalized.links.map((link) => normalized.text.slice(link.start, link.end))).toEqual([
+      'https://x.example/a',
+      'https://x.example/b',
+    ])
+    expect(normalizeBodyText(text)).toBe(normalized.text)
+  })
+
+  it('moves the links of a long list in linear time', () => {
+    const line = '- https://x.example/a\n'
+    const text = line.repeat(40_000)
+    const links = Array.from({ length: 40_000 }, (_, i) => ({
+      start: i * line.length + 2,
+      end: i * line.length + 21,
+      href: 'https://x.example/a',
+    }))
+    const started = performance.now()
+    const normalized = normalizeBodySection(text, links)
+    const blocks = splitFencedCodeBlocks(`${normalized.text}\n\`\`\`\ncode\n\`\`\``, normalized.links)
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(normalized.links).toHaveLength(40_000)
+    expect(blocks[0].type === 'inline' && blocks[0].parts.filter((part) => part.type === 'link')).toHaveLength(40_000)
+  })
+
+  it('splits a body into reply and quote, each with its links', () => {
+    const body = 'see https://x.example/a\n> was https://x.example/b'
+    const links = [
+      { start: 4, end: 23, href: 'https://x.example/a' },
+      { start: 30, end: 49, href: 'https://x.example/b' },
+    ]
+    expect(plainBodySections(body, 24, links)).toEqual({
+      reply: { text: 'see https://x.example/a\n', links: [links[0]] },
+      quote: {
+        text: '> was https://x.example/b',
+        links: [{ ...links[1], start: 6, end: 25 }],
+      },
+    })
+  })
+
+  it('splits fenced code blocks while keeping inline links', () => {
+    const text = 'before https://example.com\n```\nhttps://code.example\n```\nafter https://example.org'
+    const links = [
+      { start: 7, end: 26, href: 'https://example.com' },
+      { start: 31, end: 51, href: 'https://code.example' },
+      { start: 62, end: 81, href: 'https://example.org' },
+    ]
+    expect(splitFencedCodeBlocks(text, links)).toEqual([
       {
         type: 'inline',
         parts: [
@@ -176,39 +253,90 @@ describe('messageHelpers text and link helpers', () => {
           { type: 'link', content: 'https://example.com' },
         ],
       },
-      { type: 'code', content: 'const x = 1' },
-      { type: 'inline', parts: [{ type: 'text', content: 'after' }] },
+      { type: 'code', content: 'https://code.example' },
+      {
+        type: 'inline',
+        parts: [
+          { type: 'text', content: 'after ' },
+          { type: 'link', content: 'https://example.org' },
+        ],
+      },
     ])
-    expect(splitFencedCodeBlocks('```\nunclosed')).toEqual([
-      { type: 'inline', parts: [{ type: 'text', content: '```\nunclosed' }] },
+    expect(
+      splitFencedCodeBlocks('```\nunclosed https://x.example', [{ start: 13, end: 30, href: 'https://x.example' }]),
+    ).toEqual([
+      {
+        type: 'inline',
+        parts: [
+          { type: 'text', content: '```\nunclosed ' },
+          { type: 'link', content: 'https://x.example' },
+        ],
+      },
     ])
   })
 
   it('extracts address data and searchable message text', () => {
     expect(parseAddressList('"Doe; Jane" <jane@x.com>; bob@y.com')).toEqual([
-      { name: 'Doe; Jane', email: 'jane@x.com', original: '"Doe; Jane" <jane@x.com>' },
+      {
+        name: 'Doe; Jane',
+        email: 'jane@x.com',
+        original: '"Doe; Jane" <jane@x.com>',
+      },
       { name: 'bob@y.com', email: 'bob@y.com', original: 'bob@y.com' },
     ])
     expect(extractAddr('Ada Lovelace <ada@example.com>')).toBe('ada@example.com')
     expect(extractAddr('plain@example.com')).toBe('plain@example.com')
     expect(parseAddressList('"Ada Lovelace" <ada@example.com>, bob@example.com')).toEqual([
-      { name: 'Ada Lovelace', email: 'ada@example.com', original: '"Ada Lovelace" <ada@example.com>' },
-      { name: 'bob@example.com', email: 'bob@example.com', original: 'bob@example.com' },
+      {
+        name: 'Ada Lovelace',
+        email: 'ada@example.com',
+        original: '"Ada Lovelace" <ada@example.com>',
+      },
+      {
+        name: 'bob@example.com',
+        email: 'bob@example.com',
+        original: 'bob@example.com',
+      },
     ])
     expect(parseAddressList('Display Name <display@example.com>')).toEqual([
-      { name: 'Display Name', email: 'display@example.com', original: 'Display Name <display@example.com>' },
+      {
+        name: 'Display Name',
+        email: 'display@example.com',
+        original: 'Display Name <display@example.com>',
+      },
     ])
     expect(parseAddressList('Alice <alice@example.com>, Bob Jones <bob@example.com>')).toEqual([
-      { name: 'Alice', email: 'alice@example.com', original: 'Alice <alice@example.com>' },
-      { name: 'Bob Jones', email: 'bob@example.com', original: 'Bob Jones <bob@example.com>' },
+      {
+        name: 'Alice',
+        email: 'alice@example.com',
+        original: 'Alice <alice@example.com>',
+      },
+      {
+        name: 'Bob Jones',
+        email: 'bob@example.com',
+        original: 'Bob Jones <bob@example.com>',
+      },
     ])
     expect(parseAddressList('"Doe, Jane" <jane@example.com>, john@example.com')).toEqual([
-      { name: 'Doe, Jane', email: 'jane@example.com', original: '"Doe, Jane" <jane@example.com>' },
-      { name: 'john@example.com', email: 'john@example.com', original: 'john@example.com' },
+      {
+        name: 'Doe, Jane',
+        email: 'jane@example.com',
+        original: '"Doe, Jane" <jane@example.com>',
+      },
+      {
+        name: 'john@example.com',
+        email: 'john@example.com',
+        original: 'john@example.com',
+      },
     ])
     expect(parseAddressList("O'Brien <obrien@example.com>, Pat <pat@example.com>")).toHaveLength(2)
     expect(
-      messageSearchText({ subject: 'Hello', from_name: 'Ada', from_addr: 'ada@example.com', body: 'World' } as any),
+      messageSearchText({
+        subject: 'Hello',
+        from_name: 'Ada',
+        from_addr: 'ada@example.com',
+        body: 'World',
+      } as any),
     ).toBe('hello\nada\nada@example.com\nworld')
   })
 })
@@ -239,8 +367,16 @@ describe('messageHelpers recipient summary', () => {
 describe('readerAttachmentImages', () => {
   const attachments = [
     { key: 'inline.png', mime: 'image/png', filename: 'inline.png' },
-    { url: 'data:image/png;base64,abc', mime: 'image/png', filename: 'pasted.png' },
-    { url: 'https://tracking.example/pixel.png', mime: 'image/png', filename: 'pixel.png' },
+    {
+      url: 'data:image/png;base64,abc',
+      mime: 'image/png',
+      filename: 'pasted.png',
+    },
+    {
+      url: 'https://tracking.example/pixel.png',
+      mime: 'image/png',
+      filename: 'pixel.png',
+    },
     { key: 'doc.pdf', mime: 'application/pdf', filename: 'doc.pdf' },
   ] as any[]
 
@@ -269,7 +405,11 @@ describe('readerAttachmentImages', () => {
 describe('readerAttachmentVideos', () => {
   const attachments = [
     { key: 'clip.mp4', mime: 'video/mp4', filename: 'clip.mp4' },
-    { url: 'https://cdn.example/remote.mp4?a=1&b=2', mime: 'video/mp4', filename: 'remote.mp4' },
+    {
+      url: 'https://cdn.example/remote.mp4?a=1&b=2',
+      mime: 'video/mp4',
+      filename: 'remote.mp4',
+    },
     { key: 'image.png', mime: 'image/png', filename: 'image.png' },
     { mime: 'video/mp4', filename: 'missing.mp4' },
   ] as any[]

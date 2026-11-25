@@ -37,6 +37,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.DpOffset
+import jp.nonbili.meron.shared.BodyLink
 
 internal data class InlineMessageLink(
     val start: Int,
@@ -49,60 +50,70 @@ internal data class ParsedInlineMessageText(
     val links: List<InlineMessageLink>,
 )
 
-private val inlineMessageToken =
-    Regex("""(\[[^\]]+]\([^)]+\)|(?:https?://|www\.)[^\s<>"']+)""", RegexOption.IGNORE_CASE)
-private val markdownMessageLink = Regex("""^\[([^\]]+)]\(([^)]+)\)$""")
-private val schemelessMessageUrl = Regex("""^[\w.-]+\.[a-z]{2,}(/|$)""", RegexOption.IGNORE_CASE)
-
-internal fun parseInlineMessageText(text: String): ParsedInlineMessageText {
-    if (text.isEmpty()) return ParsedInlineMessageText("", emptyList())
-
+/**
+ * A run of text as display text with link ranges, from the links the core
+ * found in it ([links] at UTF-16 offsets into [text], in order). A Markdown
+ * link shows its label in place of its source.
+ */
+internal fun parseInlineMessageText(
+    text: String,
+    links: List<BodyLink>,
+): ParsedInlineMessageText {
     val rendered = StringBuilder()
-    val links = mutableListOf<InlineMessageLink>()
-    var sourceOffset = 0
-    inlineMessageToken.findAll(text).forEach { match ->
-        rendered.append(text, sourceOffset, match.range.first)
-        val token = match.value
-        val markdown = markdownMessageLink.matchEntire(token)
-        val label = markdown?.groupValues?.get(1) ?: token
-        val rawUrl = markdown?.groupValues?.get(2) ?: token
-        val url = normalizedInlineMessageUrl(rawUrl)
-        if (url == null) {
-            rendered.append(token)
-            sourceOffset = match.range.last + 1
-            return@forEach
-        }
+    val out = mutableListOf<InlineMessageLink>()
+    var copied = 0
+    links.forEach { link ->
+        if (link.start < copied || link.end > text.length) return@forEach
+        rendered.append(text, copied, link.start)
         val start = rendered.length
-        rendered.append(label)
-        links += InlineMessageLink(start, rendered.length, url)
-        sourceOffset = match.range.last + 1
+        rendered.append(link.label ?: text.substring(link.start, link.end))
+        out += InlineMessageLink(start, rendered.length, link.href)
+        copied = link.end
     }
-    rendered.append(text, sourceOffset, text.length)
-    return ParsedInlineMessageText(rendered.toString(), links)
+    rendered.append(text, copied, text.length)
+    return ParsedInlineMessageText(rendered.toString(), out)
 }
 
-private fun normalizedInlineMessageUrl(rawUrl: String): String? =
-    when {
-        rawUrl.startsWith("https://", ignoreCase = true) ||
-            rawUrl.startsWith("http://", ignoreCase = true) ||
-            rawUrl.startsWith("mailto:", ignoreCase = true) ||
-            rawUrl.startsWith("tel:", ignoreCase = true) -> rawUrl
+// A Markdown web, mail or phone link, as a rich composer's text part writes one.
+private val localMarkdownLink =
+    Regex("""\[([^\[\]\n]+)]\(((?:https?://|mailto:|tel:)[^\s()]+)\)""", RegexOption.IGNORE_CASE)
 
-        schemelessMessageUrl.containsMatchIn(rawUrl) -> "https://$rawUrl"
+/** The links of a plain body: the core's, or for a local copy the core never
+ *  saw (a message just sent), the Markdown links and bare URLs found here. */
+internal fun plainBodyLinks(
+    body: String,
+    links: List<BodyLink>?,
+): List<BodyLink> {
+    if (links != null) return links
+    val found = mutableListOf<BodyLink>()
 
-        else -> null
+    fun bare(
+        from: Int,
+        to: Int,
+    ) {
+        findBareUrls(body.substring(from, to)).forEach { found += BodyLink(from + it.start, from + it.end, it.href) }
     }
+    var copied = 0
+    localMarkdownLink.findAll(body).forEach { match ->
+        bare(copied, match.range.first)
+        found += BodyLink(match.range.first, match.range.last + 1, match.groupValues[2], match.groupValues[1])
+        copied = match.range.last + 1
+    }
+    bare(copied, body.length)
+    return found
+}
 
 @Composable
 internal fun SelectableMessageText(
     text: String,
+    links: List<BodyLink>,
     onOpenUrl: (String) -> Unit,
     style: TextStyle,
     color: Color = Color.Unspecified,
     searchQuery: String = "",
     activeSearchMatch: Boolean = false,
 ) {
-    val parsed = parseInlineMessageText(text)
+    val parsed = remember(text, links) { parseInlineMessageText(text, links) }
     val linkColor = MaterialTheme.colorScheme.primary
     val annotated =
         buildAnnotatedString {

@@ -482,6 +482,13 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
             // Top-level for the same reason: a forged offset in the body would
             // fold away text of the sender's choosing.
             val bodyQuoteStart = entries.firstOrNull { it.first == "body_quote_start" }?.second?.toIntOrNull()
+            val body = item.findJsonStringProperty("body").orEmpty()
+            val bodyLinks =
+                entries
+                    .firstOrNull { it.first == "body_links" }
+                    ?.second
+                    ?.takeIf { it.startsWith('[') }
+                    ?.let { parseBodyLinks(it, body) }
 
             // The core's keys arrive sorted, so "reply" (whose own "to"/"cc"
             // address the sender) precedes the top-level recipients; a scan
@@ -503,7 +510,7 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
                 cc = recipients("cc"),
                 bcc = recipients("bcc"),
                 subject = item.findJsonStringProperty("subject").orEmpty(),
-                body = item.findJsonStringProperty("body").orEmpty(),
+                body = body,
                 bodyHtml = item.findJsonStringProperty("body_html").orEmpty(),
                 draftSign = item.findJsonBooleanProperty("draft_sign"),
                 crypto =
@@ -522,6 +529,7 @@ fun parseThreadReadPage(responseJson: String): ThreadReadPage {
                     },
                 mediaMissing = item.findJsonLongProperty("media_missing")?.toInt()?.coerceAtLeast(0) ?: 0,
                 bodyQuoteStart = bodyQuoteStart,
+                bodyLinks = bodyLinks,
                 dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
                 fromAddr = fromAddr,
                 replyTo = item.findJsonStringProperty("reply_to").orEmpty(),
@@ -976,6 +984,25 @@ private fun String.findJsonObjectProperty(name: String): String? {
     }
     return null
 }
+
+/** The core's `body_links`, each read from its own top-level keys so a label
+ *  can't pass for an href. The core leaves out an href that is the linked
+ *  text itself. */
+private fun parseBodyLinks(
+    json: String,
+    body: String,
+): List<BodyLink> =
+    json.jsonArrayElements().mapNotNull { element ->
+        if (!element.startsWith('{')) return@mapNotNull null
+        val entries = element.jsonObjectEntries().toMap()
+
+        fun string(name: String): String? = entries[name]?.takeIf { it.startsWith('"') }?.readJsonString(0)?.value
+        val start = entries["start"]?.toIntOrNull() ?: return@mapNotNull null
+        val end = entries["end"]?.toIntOrNull() ?: return@mapNotNull null
+        if (start < 0 || start >= end || end > body.length) return@mapNotNull null
+        val href = string("href") ?: body.substring(start, end)
+        BodyLink(start = start, end = end, href = href, label = string("label"))
+    }
 
 /** Top-level `"key": value` pairs of a JSON object, values left unparsed. */
 private fun String.jsonObjectEntries(): List<Pair<String, String>> {

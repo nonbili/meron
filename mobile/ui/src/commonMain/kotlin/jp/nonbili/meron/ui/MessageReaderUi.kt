@@ -283,6 +283,12 @@ internal fun MessageReaderScreen(
                                             else -> "(no content)"
                                         }
                                     },
+                                links =
+                                    if (message.body.isBlank()) {
+                                        emptyList()
+                                    } else {
+                                        plainBodyLinks(message.body, message.bodyLinks)
+                                    },
                                 onOpenUrl = onOpenUrl,
                                 style = messageBodyTextStyle(MaterialTheme.typography.bodyLarge),
                             )

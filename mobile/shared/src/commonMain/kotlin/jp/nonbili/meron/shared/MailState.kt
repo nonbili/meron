@@ -207,6 +207,15 @@ enum class SendStatus {
     Failed,
 }
 
+/** A link in a plain body: [start]..[end] (UTF-16) in the body, drawn as
+ *  [label] when it has one (a Markdown link), else as the URL. */
+data class BodyLink(
+    val start: Int,
+    val end: Int,
+    val href: String,
+    val label: String? = null,
+)
+
 data class MessageBody(
     val id: String,
     val folderId: String = "",
@@ -222,6 +231,9 @@ data class MessageBody(
     // UTF-16 offset where the plain body's quoted tail starts, so it can be
     // folded; null when there is none. HTML bodies mark theirs inline.
     val bodyQuoteStart: Int? = null,
+    // The plain body's links (bare URLs and Markdown `[label](url)`), found by
+    // the core, at UTF-16 offsets; null on a local copy the core never saw.
+    val bodyLinks: List<BodyLink>? = null,
     val dateEpochSeconds: Long = 0,
     val fromAddr: String = "",
     val replyTo: String = "",

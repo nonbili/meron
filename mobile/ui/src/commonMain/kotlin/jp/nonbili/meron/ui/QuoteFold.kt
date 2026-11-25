@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import jp.nonbili.meron.shared.BodyLink
 
 // Folding a message's quoted tail — the conversation a reply pastes under its
 // new text — behind a "•••" toggle, the way Gmail does (and the desktop app,
@@ -31,17 +32,31 @@ import androidx.compose.ui.unit.sp
 internal data class QuotedBody(
     val reply: String,
     val quote: String,
+    val replyLinks: List<BodyLink> = emptyList(),
+    val quoteLinks: List<BodyLink> = emptyList(),
 )
 
+/** [body] split at the core's quote offset, each part with the [links] inside
+ *  it, moved to offsets into that part. */
 internal fun splitQuotedBody(
     body: String,
     quoteStart: Int?,
-): QuotedBody =
-    if (quoteStart == null || quoteStart <= 0 || quoteStart >= body.length) {
-        QuotedBody(body, "")
+    links: List<BodyLink> = emptyList(),
+): QuotedBody {
+    fun slice(
+        from: Int,
+        text: String,
+    ) = links
+        .filter { it.start >= from && it.end <= from + text.length }
+        .map { it.copy(start = it.start - from, end = it.end - from) }
+    return if (quoteStart == null || quoteStart <= 0 || quoteStart >= body.length) {
+        QuotedBody(body, "", slice(0, body))
     } else {
-        QuotedBody(body.substring(0, quoteStart).trimEnd(), body.substring(quoteStart).trimEnd())
+        val reply = body.substring(0, quoteStart).trimEnd()
+        val quote = body.substring(quoteStart).trimEnd()
+        QuotedBody(reply, quote, slice(0, reply), slice(quoteStart, quote))
     }
+}
 
 /** Which messages' quotes the reader opened this session, so a bubble that
  *  scrolls out of the list and back — or whose web view is rebuilt — comes back

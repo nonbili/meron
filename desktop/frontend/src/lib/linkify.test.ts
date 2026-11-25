@@ -5,7 +5,7 @@ describe('findBareUrls', () => {
   it('finds http(s) and www URLs, trimming trailing punctuation', () => {
     expect(findBareUrls('see https://x.example/a. and www.example.com/b?c=1, ok').map((u) => u.href)).toEqual([
       'https://x.example/a',
-      'http://www.example.com/b?c=1',
+      'https://www.example.com/b?c=1',
     ])
     expect(findBareUrls('(https://en.wikipedia.org/wiki/Foo_(bar))')[0].text).toBe(
       'https://en.wikipedia.org/wiki/Foo_(bar)',

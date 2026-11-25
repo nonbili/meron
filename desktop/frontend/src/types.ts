@@ -169,6 +169,18 @@ export type ReplyRecipients = {
   accepts_replies?: boolean
 }
 
+/** A link in a plain body: `start..end` (UTF-16) in the body, drawn as `label`
+ *  when it has one (a Markdown link), else as the URL. */
+export type BodyLink = {
+  start: number
+  end: number
+  href: string
+  label?: string
+}
+
+/** A [BodyLink] as the core sends it: no `href` when it is the linked text. */
+export type CoreBodyLink = Omit<BodyLink, 'href'> & { href?: string }
+
 export type Message = {
   id: string
   account_id: string
@@ -197,6 +209,9 @@ export type Message = {
   /** UTF-16 offset where the plain body's quoted tail starts, so it can be
    * folded; null/absent when there is none. HTML bodies mark theirs inline. */
   body_quote_start?: number | null
+  /** The plain body's links (bare URLs and Markdown `[label](url)`), found by
+   * the core, at UTF-16 offsets; absent on a local copy the core never saw. */
+  body_links?: CoreBodyLink[]
   /** The one-time code of a verification mail, found by the core (see
    * meron-core's verification_code); null/absent for every other message. */
   verification_code?: string | null

@@ -1468,3 +1468,21 @@ fn mobile_rss_sync_omits_new_messages_without_arrivals() {
         "an unchanged feed raises no notification"
     );
 }
+
+#[test]
+fn item_message_carries_the_plain_body_links() {
+    let message = item_message(
+        "acct",
+        "sub",
+        "Feed",
+        "item",
+        "Title",
+        false,
+        false,
+        r#"{"summary":"see https://x.example/a."}"#,
+        None,
+        false,
+    );
+    assert_eq!(message["body"], "see https://x.example/a.");
+    assert_eq!(message["body_links"], json!([{ "start": 4, "end": 23 }]));
+}

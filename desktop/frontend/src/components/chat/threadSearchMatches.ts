@@ -46,7 +46,7 @@ export function messageMatchCount(message: Message, query: string, useHtmlBody: 
   // One text at a time, because the plain renderer marks each chunk on its own:
   // a match may not run from one chunk into the next there either.
   let count = 0
-  for (const text of plainHighlightTexts(message.body ?? '', message.body_quote_start))
+  for (const text of plainHighlightTexts(message.body ?? '', message.body_quote_start, message.body_links))
     count += matchRanges([text], needle).hits
   return count
 }

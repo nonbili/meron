@@ -1,4 +1,5 @@
 import { splitAddressList } from '../../lib/address'
+import { findBareUrls } from '../../lib/linkify'
 import {
   Calendar,
   Contact,
@@ -17,7 +18,7 @@ import {
   Presentation,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
-import type { Account, Attachment, Message } from '../../types'
+import type { Account, Attachment, BodyLink, CoreBodyLink, Message } from '../../types'
 import { normalizeSenderAddr } from '../../states/settings'
 import { PdfIcon, type IconProps } from '../icons/Icons'
 import { splitQuotedBody } from './quoteFold'
@@ -269,7 +270,11 @@ function dateOnly(date: Date): Date {
 export function formatMessageTime(epochSeconds: number): string {
   if (!epochSeconds) return ''
   const date = new Date(epochSeconds * 1000)
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
 }
 
 export function formatDateDivider(epochSeconds: number): string {
@@ -281,7 +286,11 @@ export function formatDateDivider(epochSeconds: number): string {
   if (date.getTime() === today.getTime()) return 'Today'
   if (date.getTime() === yesterday.getTime()) return 'Yesterday'
 
-  return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+  return date.toLocaleDateString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
 export function formatFullTimestamp(epochSeconds: number): string {
@@ -340,15 +349,96 @@ export function getShortenedLinkText(urlStr: string): string {
 }
 
 export function normalizeBodyText(text: string) {
-  return (
-    text
-      .replace(/\n{3,}/g, '\n\n')
-      // The body renderer handles links and bold but not markdown lists, so turn
-      // leading list markers (`- `, `* `, `+ `) into bullet glyphs for display.
-      .replace(/^[ \t]*[-*+] +/gm, '• ')
-      .trim()
-  )
+  return normalizeBodySection(text, []).text
 }
+
+// Collapse runs of blank lines, and turn leading list markers (`- `, `* `,
+// `+ `) into bullet glyphs for display: the body renderer handles links and
+// bold but not markdown lists.
+const BODY_NORMALIZE = /\n{3,}|^[ \t]*[-*+] +/gm
+
+/** A section of a plain body normalized for display, with its links moved to
+ *  where their text ends up. No edit reaches into a link: a URL holds no
+ *  newline, and a list marker only starts a line. */
+export function normalizeBodySection(text: string, links: BodyLink[]): { text: string; links: BodyLink[] } {
+  const edits: { at: number; removed: number; added: number }[] = []
+  const replaced = text.replace(BODY_NORMALIZE, (match: string, at: number) => {
+    const replacement = match.startsWith('\n') ? '\n\n' : '• '
+    edits.push({ at, removed: match.length, added: replacement.length })
+    return replacement
+  })
+  const leading = replaced.length - replaced.trimStart().length
+  const normalized = replaced.trim()
+  // Links come in order, so their offsets are moved in one walk over the
+  // edits, keeping up the total shift of the edits passed so far.
+  let next = 0
+  let shift = -leading
+  const move = (offset: number) => {
+    while (next < edits.length && edits[next].at + edits[next].removed <= offset) {
+      shift += edits[next].added - edits[next].removed
+      next += 1
+    }
+    return offset + shift
+  }
+  return {
+    text: normalized,
+    links: links
+      .map((link) => {
+        const start = move(link.start)
+        return { ...link, start, end: move(link.end) }
+      })
+      .filter((link) => link.start >= 0 && link.start < link.end && link.end <= normalized.length),
+  }
+}
+
+// A Markdown web, mail or phone link, as the rich composer's text part writes one.
+const LOCAL_MARKDOWN_LINK = /\[([^\[\]\n]+)\]\(((?:https?:\/\/|mailto:|tel:)[^\s()]+)\)/gi
+
+/** The links of a plain body: the core's, or for a local copy the core never
+ *  saw (a message just sent), the Markdown links and bare URLs found here. */
+export function plainBodyLinks(body: string, links: CoreBodyLink[] | undefined): BodyLink[] {
+  if (links) return links.map((link) => ({ ...link, href: link.href ?? body.slice(link.start, link.end) }))
+  const found: BodyLink[] = []
+  const bare = (from: number, to: number) => {
+    for (const url of findBareUrls(body.slice(from, to)))
+      found.push({ start: from + url.start, end: from + url.end, href: url.href })
+  }
+  let copied = 0
+  for (const match of body.matchAll(LOCAL_MARKDOWN_LINK)) {
+    bare(copied, match.index)
+    found.push({ start: match.index, end: match.index + match[0].length, href: match[2], label: match[1] })
+    copied = match.index + match[0].length
+  }
+  bare(copied, body.length)
+  return found
+}
+
+/** The links inside `from..to` of a body, relative to `from`. */
+export function sliceBodyLinks(links: BodyLink[], from: number, to: number): BodyLink[] {
+  return links
+    .filter((link) => link.start >= from && link.end <= to)
+    .map((link) => ({
+      ...link,
+      start: link.start - from,
+      end: link.end - from,
+    }))
+}
+
+/** A plain body's reply and, when there is one, its quoted tail from
+ *  `quoteStart`, each with its links. */
+export function plainBodySections(
+  body: string,
+  quoteStart: number | null | undefined,
+  links: BodyLink[],
+): { reply: BodySection; quote: BodySection | null } {
+  const { reply, quote } = splitQuotedBody(body, quoteStart)
+  return {
+    reply: { text: reply, links: sliceBodyLinks(links, 0, reply.length) },
+    quote: quote ? { text: quote, links: sliceBodyLinks(links, reply.length, body.length) } : null,
+  }
+}
+
+export type BodySection = { text: string; links: BodyLink[] }
 
 /** Cheap content key for work cached per message body: two bodies of the same
  *  length that differ still get different keys, which a length alone would not. */
@@ -360,32 +450,66 @@ export function bodyContentKey(body: string): string {
   return `${body.length}:${hash}`
 }
 
-export type MessageInlinePart = { type: 'text' | 'link'; content: string; label?: string }
+export type MessageInlinePart = {
+  type: 'text' | 'link'
+  content: string
+  label?: string
+}
 export type MessageContentBlock = { type: 'inline'; parts: MessageInlinePart[] } | { type: 'code'; content: string }
 
-export function splitFencedCodeBlocks(text: string): MessageContentBlock[] {
+export function splitFencedCodeBlocks(text: string, links: BodyLink[]): MessageContentBlock[] {
   const blocks: MessageContentBlock[] = []
   const textBuffer: string[] = []
   const codeBuffer: string[] = []
   let inCode = false
+  let fence = ''
+  // Where the buffered text starts in `text`: its lines are contiguous there,
+  // so the links inside it are a slice of `links`.
+  let textStart = 0
+  let offset = 0
+  // Blocks are flushed in order, so one cursor walks the (ordered) links.
+  let nextLink = 0
+  const linksIn = (from: number, to: number) => {
+    while (nextLink < links.length && links[nextLink].start < from) nextLink += 1
+    const inside: BodyLink[] = []
+    while (nextLink < links.length && links[nextLink].start < to) {
+      const link = links[nextLink++]
+      if (link.end <= to) inside.push({ ...link, start: link.start - from, end: link.end - from })
+    }
+    return inside
+  }
 
   const flushText = () => {
     const content = textBuffer.join('\n').replace(/\n+$/g, '')
     textBuffer.length = 0
     if (content.trim()) {
-      blocks.push({ type: 'inline', parts: parseInlineMessageContent(content) })
+      blocks.push({
+        type: 'inline',
+        parts: parseInlineMessageContent(content, linksIn(textStart, textStart + content.length)),
+      })
     }
+  }
+  const pushText = (line: string, at: number) => {
+    if (textBuffer.length === 0) textStart = at
+    textBuffer.push(line)
   }
 
   for (const line of text.split('\n')) {
+    const at = offset
+    offset += line.length + 1
     if (line.trimStart().startsWith('```')) {
       if (inCode) {
-        blocks.push({ type: 'code', content: codeBuffer.join('\n').replace(/\n+$/g, '') })
+        blocks.push({
+          type: 'code',
+          content: codeBuffer.join('\n').replace(/\n+$/g, ''),
+        })
         codeBuffer.length = 0
         inCode = false
       } else {
         flushText()
         inCode = true
+        fence = line
+        textStart = at
       }
       continue
     }
@@ -393,48 +517,48 @@ export function splitFencedCodeBlocks(text: string): MessageContentBlock[] {
     if (inCode) {
       codeBuffer.push(line)
     } else {
-      textBuffer.push(line)
+      pushText(line, at)
     }
   }
 
+  // An unclosed fence is text after all, from the fence line on.
   if (inCode) {
-    textBuffer.push('```', ...codeBuffer)
+    textBuffer.push(fence, ...codeBuffer)
   }
   flushText()
   return blocks
 }
 
-export function parseInlineMessageContent(text: string): MessageInlinePart[] {
+/** A run of text split into text and the links the core found in it (at
+ *  offsets into `text`, in order). */
+export function parseInlineMessageContent(text: string, links: BodyLink[]): MessageInlinePart[] {
   if (!text) return []
 
-  const tokenRegex = /(\[[^\]]+\]\([^)]+\)|(?:https?:\/\/|www\.)[^\s<>"']+)/g
-  const parts = text.split(tokenRegex)
-
   const elements: MessageInlinePart[] = []
-  for (const part of parts) {
-    const markdownLink = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
-    if (markdownLink) {
-      elements.push({ type: 'link', content: normalizeUrl(markdownLink[2]), label: markdownLink[1] })
-    } else if (/^(https?:\/\/|www\.)/i.test(part)) {
-      elements.push({ type: 'link', content: normalizeUrl(part) })
-    } else if (part) {
-      elements.push({ type: 'text', content: part })
-    }
+  let copied = 0
+  for (const link of links) {
+    if (link.start < copied) continue
+    if (link.start > copied) elements.push({ type: 'text', content: text.slice(copied, link.start) })
+    elements.push({ type: 'link', content: link.href, label: link.label })
+    copied = link.end
   }
-
+  if (copied < text.length) elements.push({ type: 'text', content: text.slice(copied) })
   return elements
 }
 
-/** The blocks a normalized plain body renders as: fenced code split out, the
- *  rest parsed into inline text and links. */
-export function messageContentBlocks(bodyText: string): MessageContentBlock[] {
+/** The blocks a normalized plain body section renders as: fenced code split
+ *  out, the rest split into inline text and links. */
+export function messageContentBlocks(bodyText: string, links: BodyLink[]): MessageContentBlock[] {
   const hasCodeFence = bodyText.split('\n').some((line) => line.trimStart().startsWith('```'))
   return hasCodeFence
-    ? splitFencedCodeBlocks(bodyText)
-    : [{ type: 'inline', parts: parseInlineMessageContent(bodyText) }]
+    ? splitFencedCodeBlocks(bodyText, links)
+    : [{ type: 'inline', parts: parseInlineMessageContent(bodyText, links) }]
 }
 
-export type InlineMarkupChunk = { type: 'plain' | 'bold' | 'italic' | 'code'; text: string }
+export type InlineMarkupChunk = {
+  type: 'plain' | 'bold' | 'italic' | 'code'
+  text: string
+}
 
 /** Split a run of body text into its inline markup chunks, with the markers
  *  stripped: the renderer wraps each in its element, and the search counter
@@ -457,15 +581,21 @@ export function splitInlineMarkup(content: string): InlineMarkupChunk[] {
  * marked, so they are left out — counting them would make the search bar
  * promise matches no <mark> ever lands on.
  */
-export function plainHighlightTexts(body: string, quoteStart?: number | null): string[] {
+export function plainHighlightTexts(
+  body: string,
+  quoteStart: number | null | undefined,
+  links: CoreBodyLink[] | undefined,
+): string[] {
   // The reply and its quoted tail are normalized and rendered as two sections
   // (MessageBubbleBody), so they are walked the same way here.
-  const { reply, quote } = splitQuotedBody(body, quoteStart)
+  const { reply, quote } = plainBodySections(body, quoteStart, plainBodyLinks(body, links))
   return quote ? [...sectionHighlightTexts(reply), ...sectionHighlightTexts(quote)] : sectionHighlightTexts(reply)
 }
 
-function sectionHighlightTexts(body: string): string[] {
-  const blocks = messageContentBlocks(normalizeBodyText(body))
+/** [plainHighlightTexts] for one section of a body. */
+export function sectionHighlightTexts(section: BodySection): string[] {
+  const normalized = normalizeBodySection(section.text, section.links)
+  const blocks = messageContentBlocks(normalized.text, normalized.links)
 
   const texts: string[] = []
   for (const block of blocks) {

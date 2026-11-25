@@ -1136,6 +1136,7 @@ fn item_message(
         "link": link,
         "subject": subject,
         "preview": first_line(summary),
+        "body_links": crate::linkify::plain_body_links(&body),
         "body": body,
         "body_html": body_html,
         "date": ts,

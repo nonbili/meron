@@ -49,7 +49,9 @@ describe('messageMatchCount', () => {
 
 describe('plainHighlightTexts', () => {
   it('yields the rendered text in render order, markers stripped', () => {
-    expect(plainHighlightTexts('one **two** [three](https://example.com)').join('|')).toContain('two')
-    expect(plainHighlightTexts('**bold**')).toEqual(['', 'bold', ''])
+    const body = 'one **two** [three](https://example.com)'
+    const links = [{ start: 12, end: 40, href: 'https://example.com', label: 'three' }]
+    expect(plainHighlightTexts(body, null, links)).toEqual(['one ', 'two', ' ', 'three'])
+    expect(plainHighlightTexts('**bold**', null, [])).toEqual(['', 'bold', ''])
   })
 })

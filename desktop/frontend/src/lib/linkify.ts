@@ -38,7 +38,7 @@ export function findBareUrls(text: string): BareUrl[] {
     const www = /^www\./i.test(url)
     const host = url.replace(/^(https?:\/\/|www\.)/i, '')
     if (!host || (www && !/^[^./?#]+\.[^/?#]/.test(host))) continue
-    found.push({ start, end: start + url.length, text: url, href: www ? `http://${url}` : url })
+    found.push({ start, end: start + url.length, text: url, href: www ? `https://${url}` : url })
   }
   return found
 }

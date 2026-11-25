@@ -770,7 +770,10 @@ internal fun ColumnScope.MessageBodyContent(
         // message text, matching the desktop chat reader.
         // The quoted tail folds behind a toggle (see QuoteFold), and opens on its
         // own while the in-thread search matches inside it.
-        val quoted = remember(message.body, message.bodyQuoteStart) { splitQuotedBody(message.body, message.bodyQuoteStart) }
+        val quoted =
+            remember(message.body, message.bodyQuoteStart, message.bodyLinks) {
+                splitQuotedBody(message.body, message.bodyQuoteStart, plainBodyLinks(message.body, message.bodyLinks))
+            }
         var quoteOpen by remember(message.id) { mutableStateOf(QuoteFoldMemory.isOpen(message.id)) }
         val showQuote = quoteOpen || quoteMatchesSearch(quoted.quote, searchQuery)
         val bodyStyle =
@@ -784,6 +787,7 @@ internal fun ColumnScope.MessageBodyContent(
             Column {
                 SelectableMessageText(
                     text = quoted.reply.ifBlank { "(no content)" },
+                    links = if (quoted.reply.isBlank()) emptyList() else quoted.replyLinks,
                     onOpenUrl = onOpenUrl,
                     searchQuery = searchQuery,
                     activeSearchMatch = activeSearchMatch,
@@ -802,6 +806,7 @@ internal fun ColumnScope.MessageBodyContent(
                     if (showQuote) {
                         SelectableMessageText(
                             text = quoted.quote,
+                            links = quoted.quoteLinks,
                             onOpenUrl = onOpenUrl,
                             searchQuery = searchQuery,
                             activeSearchMatch = activeSearchMatch,
