@@ -12,7 +12,6 @@ import { Avatar } from '../avatar/Avatar'
 import { AddressRow } from './AddressList'
 import { RemoteContentButton } from './RemoteContentButton'
 import { CryptoBadge } from '../crypto/CryptoBadge'
-import { FrostedBand } from './FrostedBand'
 import { TOOLBAR_CLEARANCE_PX } from './conversationScroll'
 import { MessageContent } from './MessageContent'
 import { formatFullTimestamp, formatMessageStamp, normalizeBodyText } from './messageHelpers'
@@ -242,7 +241,7 @@ export function MessageRow({
           a hairline is all that parts it from the body, which is the same
           card; the shadow is for when it rides over the text. Pinned,
           it is a card floating on the conversation, drawn like the composer at
-          the other end of it, and what shows above it is frosted. It is also one row there — the sender
+          the other end of it, on its own shadow with nothing frosted above it. It is also one row there — the sender
           and the actions, without the recipients or the details they open —
           since it sits on top of the text being read. The wrapper keeps the
           resting header's height (usePinnedHeader), so only the card inside
@@ -253,9 +252,6 @@ export function MessageRow({
       {/* Where the header rests, raised by that gap (usePinnedHeader). */}
       <div ref={pinnedRestRef} className="pointer-events-none absolute -top-1.5 left-0 h-px w-px" />
       <div ref={pinnedRef} className="group/pinned sticky -top-1.5 z-20 data-[stuck]:pointer-events-none">
-        {/* Frosted from the scroller's edge down to the middle of the resting
-            header's height, which the pinned one still covers. */}
-        <FrostedBand className="inset-x-0 -top-1.5 hidden h-[calc(50%+0.375rem)] group-data-[stuck]/pinned:block" />
         <div
           role="button"
           tabIndex={0}
