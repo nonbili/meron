@@ -1,10 +1,8 @@
 package jp.nonbili.meron.ui
 
 import androidx.compose.animation.core.animate
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
@@ -14,10 +12,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,46 +24,34 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
@@ -75,7 +59,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -94,23 +77,15 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -846,44 +821,6 @@ private fun ContactPinMenuItem(
     )
 }
 
-/** One contact as an address book holds it: where, the name, the addresses
- *  and the shared note, with Edit. */
-@Composable
-private fun BookCardSection(
-    card: BookCard,
-    onEdit: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = colors.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-    ) {
-        Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Contacts, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.onSurfaceVariant)
-                Text(
-                    bookLabel(card.bookName, card.account),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(start = 8.dp),
-                )
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Filled.Edit, contentDescription = tr("contacts.editContact"), modifier = Modifier.size(18.dp))
-                }
-            }
-            if (card.name.isNotBlank()) Text(card.name, fontWeight = FontWeight.SemiBold)
-            card.emails.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
-            if (card.note.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                ContactMarkdown(card.note)
-            }
-        }
-    }
-}
-
 /** An address book's own list: its cards by name, a page at a time. */
 @Composable
 private fun BookCardList(
@@ -984,704 +921,8 @@ private fun BookCardList(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ContactDetails(
-    state: ContactsScreenState,
-    contact: ContactSuggestion,
-    onCompose: (String) -> Unit,
-    onOpenThread: (ThreadSummary) -> Unit,
-    onCopy: (String, String) -> Unit,
-    canCompose: Boolean,
-    accounts: List<AccountSummary>,
-    foldersByAccount: Map<String, List<FolderSummary>>,
-    showSenderImages: Boolean,
-    onEditCard: (BookCard) -> Unit = {},
-    onSaveToBook: (note: String) -> Unit = {},
-    onMoveNote: (BookCard, String) -> Unit = { _, _ -> },
-) {
-    val scope = rememberCoroutineScope()
-    val colors = MaterialTheme.colorScheme
-    val copyLabel = tr("chat.copyEmailAddress")
-    var copied by remember(contact.addr) { mutableStateOf(false) }
-    val listState = rememberLazyListState()
-    val accountsById = remember(accounts) { accounts.associateBy { it.id } }
-    val ownAccount =
-        remember(accounts, contact.addr) {
-            val addr = contact.addr.trim()
-            accounts.firstOrNull { account ->
-                account.email.trim().equals(addr, ignoreCase = true) ||
-                    account.aliases.any { it.email.trim().equals(addr, ignoreCase = true) }
-            }
-        }
-    val inboxLabel = tr("folders.roles.inbox")
-    val displayName = contact.name.ifBlank { contact.addr }
-    val hasDistinctName = contact.name.isNotBlank() && !contact.name.equals(contact.addr, ignoreCase = true)
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(1500)
-            copied = false
-        }
-    }
-    LazyColumn(
-        Modifier.fillMaxSize().appScrollbar(listState),
-        state = listState,
-        contentPadding = PaddingValues(bottom = 24.dp + navigationBarInset()),
-    ) {
-        item(key = "header:${contact.addr}") {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                // Our own address is drawn as the account, not as whatever the
-                // address resolves to (the favicon of our own domain, say).
-                if (ownAccount != null) {
-                    AccountBadgeAvatar(
-                        label = ownAccount.displayName.ifBlank { displayName },
-                        avatarUrl = ownAccount.avatarUrl,
-                        size = 48.dp,
-                        fallbackIcon = accountAvatarFallbackIcon(ownAccount),
-                    )
-                } else {
-                    SenderAvatar(
-                        formatContactSuggestion(contact),
-                        enabled = showSenderImages,
-                        size = 48.dp,
-                        fallbackName = displayName,
-                    )
-                }
-                Column(
-                    Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        if (!hasDistinctName) {
-                            ContactCopyAddressButton(
-                                copied = copied,
-                                onClick = {
-                                    onCopy(copyLabel, contact.addr)
-                                    copied = true
-                                },
-                            )
-                        }
-                    }
-                    if (hasDistinctName) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            SelectionContainer(Modifier.weight(1f, fill = false)) {
-                                Text(
-                                    contact.addr,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colors.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            ContactCopyAddressButton(
-                                copied = copied,
-                                onClick = {
-                                    onCopy(copyLabel, contact.addr)
-                                    copied = true
-                                },
-                            )
-                        }
-                    }
-                }
-                if (canCompose) {
-                    FilledTonalIconButton(
-                        onClick = { onCompose(formatContactSuggestion(contact)) },
-                        colors =
-                            IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = colors.primaryContainer,
-                                contentColor = colors.onPrimaryContainer,
-                            ),
-                        modifier = Modifier.size(40.dp),
-                    ) {
-                        Icon(
-                            Icons.Outlined.Email,
-                            contentDescription = tr("composer.actions.newMessage"),
-                            modifier = Modifier.size(19.dp),
-                        )
-                    }
-                }
-            }
-        }
-        // Saved in address books: each card, shared with other clients.
-        if (state.cardsFailed == contact.addr) {
-            item(key = "cards:failed") {
-                TextButton(onClick = { scope.launch { state.loadCards(contact.addr) } }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                    Text(tr("contacts.addressBookRetry"))
-                }
-            }
-        }
-        val cards = if (state.cardsAddr == contact.addr) state.cards else emptyList()
-        items(cards, key = { "card:${it.bookId}\n${it.id}" }) { card -> BookCardSection(card, onEdit = { onEditCard(card) }) }
-        item(key = "note:${contact.addr}") { ContactNotes(state, contact.addr) }
-        // The note kept only on this device can move to a card, or go with a
-        // new one: the user's choice, as anyone with the book will see it.
-        if (state.cardsAddr == contact.addr && state.books.isNotEmpty()) {
-            item(key = "note-actions:${contact.addr}") {
-                val note = state.note(contact.addr)
-                val localNote = if (note.loaded) note.saved.trim() else ""
-                FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (cards.isEmpty()) {
-                        OutlinedButton(
-                            enabled = note.loaded || note.error,
-                            onClick = { onSaveToBook(localNote) },
-                        ) { Text(tr("contacts.saveToAddressBook")) }
-                    } else if (localNote.isNotBlank()) {
-                        cards.forEach { card ->
-                            OutlinedButton(onClick = { onMoveNote(card, localNote) }) {
-                                Text(tr("contacts.moveNote", mapOf("book" to card.bookName)), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        item(key = "section:conversations") {
-            HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
-            ContactSectionTitle(tr("contacts.recentConversations"))
-        }
-        items(state.threads, key = { it.id }) { thread ->
-            ContactThreadRow(
-                thread = thread,
-                account = accountsById[thread.accountId],
-                // History spans folders, so each row names where it lives.
-                folderLabel =
-                    thread.folder
-                        .takeIf { it.isNotBlank() }
-                        ?.let { folder ->
-                            threadFolderLabel(folder, foldersByAccount[thread.accountId].orEmpty(), inboxLabel)
-                        }.orEmpty(),
-                showSenderImages = showSenderImages,
-                onOpen = { onOpenThread(thread) },
-            )
-            HorizontalDivider(
-                Modifier.padding(start = 66.dp, end = 16.dp),
-                color = colors.outlineVariant.copy(alpha = 0.35f),
-            )
-        }
-        if (state.historyLoading) item(key = "history:loading") { ContactLoading() }
-        if (state.historyError) {
-            item(key = "history:error") {
-                ContactFailure { scope.launch { state.loadHistory(more = state.historyLoaded) } }
-            }
-        }
-        if (state.historyLoaded && !state.historyLoading && !state.historyError) {
-            if (state.threads.isEmpty()) {
-                item(key = "history:empty") {
-                    Text(
-                        tr("contacts.noConversations"),
-                        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
-            }
-            if (state.cursor.isNotEmpty()) {
-                item(key = "history:more") {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                        OutlinedButton(onClick = { scope.launch { state.loadHistory(more = true) } }) {
-                            Text(tr("threads.actions.loadMore"))
-                        }
-                    }
-                }
-            }
-            item(key = "history:footnote") {
-                Text(
-                    tr("contacts.cachedHistory"),
-                    Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.onSurfaceVariant.copy(alpha = 0.75f),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ContactCopyAddressButton(
-    copied: Boolean,
-    onClick: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier.size(26.dp),
-    ) {
-        Icon(
-            if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
-            contentDescription = tr(if (copied) "common.copied" else "chat.copyEmailAddress"),
-            tint = if (copied) colors.primary else colors.onSurfaceVariant,
-            modifier = Modifier.size(14.dp),
-        )
-    }
-}
-
-@Composable
-private fun ContactThreadRow(
-    thread: ThreadSummary,
-    account: AccountSummary?,
-    folderLabel: String,
-    showSenderImages: Boolean,
-    onOpen: () -> Unit,
-) {
-    val unread = thread.unread
-    val colors = MaterialTheme.colorScheme
-    val chat = LocalChatColors.current
-    val senderLabel = thread.sender.ifBlank { thread.accountId }
-    val showAvatar = LocalShowThreadAvatars.current
-    val accountColor = account?.let { accountColorOrNull(it.color) }
-    val badgeAccount = account.takeIf { accountColor == null }
-    val hasDraft = thread.hasDraft || thread.folderRole == "drafts"
-    val draftBadge = tr("chat.draft")
-    val rowBackground =
-        if (unread) {
-            colors.primary.copy(alpha = 0.06f).compositeOver(colors.background)
-        } else {
-            colors.background
-        }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(rowBackground)
-            .accountColorEdge(accountColor)
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        if (showAvatar) {
-            ThreadAvatarWithAccountBadge(
-                senderLabel = senderLabel,
-                showSenderImages = showSenderImages,
-                account = badgeAccount,
-                senderAddr = thread.senderAddr,
-            )
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Row(
-                    Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (!showAvatar && badgeAccount != null) InlineAccountBadge(badgeAccount)
-                    val me = tr("threads.me")
-                    Text(
-                        if (thread.senders.size > 1) {
-                            val names = thread.senders.map { it.ifBlank { me } }
-                            if (thread.sendersTruncated) {
-                                names.first() + " .. " + names.drop(1).joinToString(", ")
-                            } else {
-                                names.joinToString(", ")
-                            }
-                        } else {
-                            senderLabel.substringBefore('@')
-                        },
-                        fontSize = 13.sp,
-                        fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                        color = colors.onSurface,
-                    )
-                    if (thread.messageCount > 1) {
-                        Text(
-                            thread.messageCount.toString(),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = colors.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 4.dp),
-                        )
-                    }
-                }
-                if (folderLabel.isNotBlank()) {
-                    Surface(
-                        modifier = Modifier.widthIn(max = 96.dp),
-                        shape = RoundedCornerShape(4.dp),
-                        color = colors.surfaceContainerHigh,
-                    ) {
-                        Text(
-                            folderLabel,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = colors.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                if (thread.dateEpochSeconds > 0) {
-                    Text(
-                        formatInboxTimestamp(thread.dateEpochSeconds),
-                        fontSize = 11.sp,
-                        fontWeight = if (unread) FontWeight.Medium else FontWeight.Normal,
-                        color = if (unread) colors.onSurface else colors.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-                if (unread) {
-                    val unreadContentDescription = tr("filters.unread")
-                    Box(
-                        Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(colors.primary)
-                            .semantics { contentDescription = unreadContentDescription },
-                    )
-                }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                if (thread.starred) {
-                    Icon(
-                        Icons.Filled.Star,
-                        contentDescription = null,
-                        tint = chat.star,
-                        modifier = Modifier.size(14.dp),
-                    )
-                }
-                Text(
-                    buildAnnotatedString {
-                        if (hasDraft) {
-                            withStyle(
-                                SpanStyle(
-                                    color = colors.error,
-                                    fontWeight = FontWeight.Normal,
-                                ),
-                            ) {
-                                append(draftBadge)
-                                append(" ")
-                            }
-                        }
-                        withStyle(
-                            SpanStyle(
-                                color = colors.onSurface,
-                                fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Medium,
-                            ),
-                        ) {
-                            append(thread.subject.ifBlank { "(no subject)" })
-                        }
-                        if (thread.preview.isNotBlank()) {
-                            withStyle(SpanStyle(color = colors.onSurfaceVariant, fontWeight = FontWeight.Normal)) {
-                                append(" — ${thread.preview}")
-                            }
-                        }
-                    },
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            MailRowTagChips(thread.tags, Modifier.padding(top = 4.dp))
-            if (thread.files.isNotEmpty()) {
-                MailRowAttachmentChips(thread.files, Modifier.padding(top = 4.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ContactNotes(
-    state: ContactsScreenState,
-    addr: String,
-) {
-    val note = state.note(addr)
-    val scope = rememberCoroutineScope()
-    val colors = MaterialTheme.colorScheme
-    var preview by remember(addr) { mutableStateOf(false) }
-    val noteFocusRequester = remember { FocusRequester() }
-    val editorOpen = note.editing || note.dirty
-    val showPreview = preview && note.text.isNotBlank()
-    LaunchedEffect(note.editing, showPreview) {
-        if (note.editing && !showPreview) {
-            runCatching { noteFocusRequester.requestFocus() }
-        }
-    }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 28.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                tr("contacts.notes"),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            if (note.loaded && !editorOpen && note.text.isNotEmpty()) {
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable {
-                            note.editing = true
-                            preview = false
-                        }.padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.Edit,
-                        contentDescription = null,
-                        tint = colors.onSurfaceVariant,
-                        modifier = Modifier.size(13.dp),
-                    )
-                    Text(
-                        tr("contacts.notesEdit"),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-        when {
-            !note.loaded && note.error -> {
-                ContactFailure { scope.launch { state.loadNote(addr) } }
-            }
-
-            !note.loaded -> {
-                ContactLoading()
-            }
-
-            editorOpen -> {
-                // No WebView/HTML, image fetching or automatic links in private notes.
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = colors.surface,
-                    border = BorderStroke(1.dp, colors.outlineVariant),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(Modifier.fillMaxWidth()) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            ContactNoteTabButton(
-                                label = tr("contacts.notesWrite"),
-                                active = !showPreview,
-                                enabled = true,
-                                onClick = { preview = false },
-                            )
-                            ContactNoteTabButton(
-                                label = tr("contacts.notesPreview"),
-                                active = showPreview,
-                                enabled = note.text.isNotBlank(),
-                                onClick = { preview = true },
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Icon(
-                                MarkdownMarkIcon,
-                                contentDescription = tr("contacts.markdownHint"),
-                                tint = colors.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(end = 4.dp).size(18.dp),
-                            )
-                        }
-                        HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
-                        if (showPreview) {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 104.dp)
-                                    .padding(12.dp),
-                            ) {
-                                ContactMarkdown(note.text)
-                            }
-                        } else {
-                            val notesLabel = tr("contacts.notes")
-                            BasicTextField(
-                                value = note.text,
-                                onValueChange = { note.text = it },
-                                cursorBrush = SolidColor(colors.primary),
-                                textStyle =
-                                    MaterialTheme.typography.bodyMedium.copy(
-                                        color = colors.onSurface,
-                                        lineHeight = 20.sp,
-                                    ),
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 104.dp, max = 240.dp)
-                                        .padding(12.dp)
-                                        .focusRequester(noteFocusRequester)
-                                        .semantics { contentDescription = notesLabel },
-                                decorationBox = { innerTextField ->
-                                    Box(Modifier.fillMaxWidth()) {
-                                        if (note.text.isEmpty()) {
-                                            Text(
-                                                tr("contacts.notesPlaceholder"),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = colors.onSurfaceVariant.copy(alpha = 0.7f),
-                                            )
-                                        }
-                                        innerTextField()
-                                    }
-                                },
-                            )
-                        }
-                        HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .background(colors.surfaceContainer.copy(alpha = 0.5f))
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    note.text = note.saved
-                                    note.editing = false
-                                    note.error = false
-                                    preview = false
-                                },
-                                enabled = !note.saving,
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier.height(32.dp),
-                            ) {
-                                Text(tr("buttons.cancel"), style = MaterialTheme.typography.labelMedium)
-                            }
-                            Button(
-                                onClick = { scope.launch { state.saveNote(addr) } },
-                                enabled = note.dirty && !note.saving,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
-                                modifier = Modifier.height(32.dp),
-                            ) {
-                                Text(
-                                    tr(if (note.saving) "contacts.notesSaving" else "contacts.notesSave"),
-                                    style = MaterialTheme.typography.labelMedium,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            note.text.isNotEmpty() -> {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = colors.surfaceContainer.copy(alpha = 0.55f),
-                    border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Box(Modifier.fillMaxWidth().padding(12.dp)) {
-                        ContactMarkdown(note.text)
-                    }
-                }
-            }
-
-            else -> {
-                Surface(
-                    onClick = {
-                        note.editing = true
-                        preview = false
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    color = colors.surfaceContainer.copy(alpha = 0.4f),
-                    border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.7f)),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = null,
-                            tint = colors.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            tr("contacts.notesPlaceholder"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-        if (note.loaded && note.error) {
-            Text(
-                tr("contacts.notesSaveError"),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.error,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ContactNoteTabButton(
-    label: String,
-    active: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (active) colors.surfaceContainerHigh else colors.surface)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-            color =
-                when {
-                    !enabled -> colors.onSurfaceVariant.copy(alpha = 0.4f)
-                    active -> colors.onSurface
-                    else -> colors.onSurfaceVariant
-                },
-        )
-    }
-}
-
-@Composable
-private fun ContactSectionTitle(text: String) {
+internal fun ContactSectionTitle(text: String) {
     Text(
         text,
         Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
@@ -1691,59 +932,15 @@ private fun ContactSectionTitle(text: String) {
     )
 }
 
-/** The Markdown mark (CC0, dcurtis/markdown-mark), matching desktop's MarkdownIcon. */
-private val MarkdownMarkIcon: ImageVector by lazy {
-    ImageVector
-        .Builder(
-            name = "MarkdownMark",
-            defaultWidth = 24.dp,
-            defaultHeight = 24.dp,
-            viewportWidth = 24f,
-            viewportHeight = 24f,
-        ).apply {
-            val stroke = SolidColor(androidx.compose.ui.graphics.Color.Black)
-            path(
-                stroke = stroke,
-                strokeLineWidth = 2f,
-                strokeLineCap = StrokeCap.Round,
-                strokeLineJoin = StrokeJoin.Round,
-            ) {
-                // Rounded rect x=2, y=5, width=20, height=14, rx=2
-                moveTo(4f, 5f)
-                lineTo(20f, 5f)
-                quadTo(22f, 5f, 22f, 7f)
-                lineTo(22f, 17f)
-                quadTo(22f, 19f, 20f, 19f)
-                lineTo(4f, 19f)
-                quadTo(2f, 19f, 2f, 17f)
-                lineTo(2f, 7f)
-                quadTo(2f, 5f, 4f, 5f)
-                close()
-                // "M": M6 15V9l3 3 3-3v6
-                moveTo(6f, 15f)
-                lineTo(6f, 9f)
-                lineTo(9f, 12f)
-                lineTo(12f, 9f)
-                lineTo(12f, 15f)
-                // Down arrow: M17 9v6m-2-2 2 2 2-2
-                moveTo(17f, 9f)
-                lineTo(17f, 15f)
-                moveTo(15f, 13f)
-                lineTo(17f, 15f)
-                lineTo(19f, 13f)
-            }
-        }.build()
-}
-
 @Composable
-private fun ContactLoading() {
+internal fun ContactLoading() {
     Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
     }
 }
 
 @Composable
-private fun ContactFailure(onRetry: () -> Unit) {
+internal fun ContactFailure(onRetry: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(
         Modifier
