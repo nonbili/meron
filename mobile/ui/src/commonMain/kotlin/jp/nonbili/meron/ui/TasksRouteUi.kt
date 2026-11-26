@@ -514,27 +514,13 @@ internal fun ViewsDrawer(
             tasksEnabled = tasksEnabled,
             calendarEnabled = calendarEnabled,
             onSelectUnified = {
+                openCoreMailbox(UNIFIED_ACCOUNT_ID)
                 screen = Screen.Mail
-                if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
-                    selectCoreMailbox(UNIFIED_ACCOUNT_ID)
-                    syncCoreThreads(
-                        accountOverride = UNIFIED_ACCOUNT_ID,
-                        folderOverride = selectedCoreFolder,
-                        syncFirst = false,
-                    )
-                }
                 scope.launch { drawerState.close() }
             },
             onSelectAccount = { account ->
+                openCoreMailbox(account.id)
                 screen = Screen.Mail
-                if (selectedCoreAccountId != account.id) {
-                    selectCoreMailbox(account.id)
-                    syncCoreThreads(
-                        accountOverride = account.id,
-                        folderOverride = selectedCoreFolder,
-                        syncFirst = false,
-                    )
-                }
                 scope.launch { drawerState.close() }
             },
             onSelectKanbanBoard = { board ->

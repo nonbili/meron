@@ -648,8 +648,10 @@ internal fun EmptyState(
                 Icon(icon, contentDescription = null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(16.dp))
                 Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (text.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (actionLabel != null && onAction != null) {
                     Spacer(Modifier.height(20.dp))
                     Button(onClick = onAction) { Text(actionLabel) }

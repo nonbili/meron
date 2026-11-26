@@ -242,13 +242,14 @@ fn list_mobile_unified_threads(data_dir: &str, params: &Value) -> Result<Value, 
         .map_err(|err| format!("{err:#}"))?;
 
     let mut pages = Vec::new();
+    let mut unsynced_folders = Vec::new();
     for (account_id, folder) in folders {
         let mut account_params = params.clone();
         let object = account_params
             .as_object_mut()
             .ok_or_else(|| "params must be an object".to_string())?;
         object.insert("account_id".to_string(), Value::String(account_id.clone()));
-        object.insert("folder_id".to_string(), Value::String(folder));
+        object.insert("folder_id".to_string(), Value::String(folder.clone()));
         let from = account_cursors
             .get(&account_id)
             .cloned()
@@ -263,13 +264,21 @@ fn list_mobile_unified_threads(data_dir: &str, params: &Value) -> Result<Value, 
         }
         object.insert("limit".to_string(), json!(from.fetch_limit(limit)));
         let result = list_mobile_threads(data_dir, &account_params);
+        if result
+            .as_ref()
+            .is_ok_and(|page| page["folder_synced"] == false)
+        {
+            unsynced_folders.push(json!({ "account_id": account_id, "folder_id": folder }));
+        }
         pages.push(crate::unified::AccountPage {
             account_id,
             from,
             result,
         });
     }
-    Ok(crate::unified::merge_pages(pages, "threads", limit))
+    let mut page = crate::unified::merge_pages(pages, "threads", limit);
+    page["unsynced_folders"] = json!(unsynced_folders);
+    Ok(page)
 }
 
 fn open_mobile_db(data_dir: &str) -> Result<rusqlite::Connection, String> {

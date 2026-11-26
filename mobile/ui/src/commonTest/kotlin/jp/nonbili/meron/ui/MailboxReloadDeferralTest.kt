@@ -27,6 +27,108 @@ import kotlin.test.assertEquals
  */
 class MailboxReloadDeferralTest {
     @Test
+    fun openingAnUnsyncedFolderWaitsForSyncAndDoesNotSyncAgainWhenEmpty() =
+        runBlocking {
+            val core =
+                GatedCore().apply {
+                    folderSynced = false
+                    gate.complete(Unit)
+                }
+            val state = state(core, this)
+            state.initialThreadsLoaded = false
+
+            state.openCoreMailbox("a", "INBOX")
+            waitUntil { core.syncCalls.size == 1 }
+            assertEquals(true, state.syncingUnfetchedMailbox)
+            assertEquals(false, state.initialThreadsLoaded)
+            core.syncGate.complete(Unit)
+            waitUntil { !state.syncing }
+            assertEquals(emptyList(), state.coreThreads)
+            assertEquals(null, state.initialMailboxSyncFailed)
+
+            state.openCoreMailbox("a", "INBOX")
+            waitUntil { !state.syncing }
+            assertEquals(1, core.syncCalls.size)
+        }
+
+    @Test
+    fun filterChangeJoinsThePendingFirstSyncAndPreservesItsFailure() =
+        runBlocking {
+            val core =
+                GatedCore().apply {
+                    folderSynced = false
+                    failSync = true
+                    gate.complete(Unit)
+                }
+            val state = state(core, this)
+
+            state.openCoreMailbox("a", "INBOX")
+            waitUntil { core.syncCalls.size == 1 }
+
+            state.mailFilter = FilterMode.Unread
+            state.syncCoreThreads(syncFirst = false)
+            waitUntil { core.threadListCalls >= 2 && (state.syncingUnfetchedMailbox || !state.syncing) }
+            assertEquals(true, state.syncingUnfetchedMailbox)
+            assertEquals(1, core.syncCalls.size)
+
+            core.syncGate.complete(Unit)
+            waitUntil { !state.syncing }
+            assertEquals(mailboxSyncKey("a", "INBOX"), state.initialMailboxSyncFailed)
+            assertEquals(FilterMode.Unread, state.visibleMailboxKey?.filter)
+        }
+
+    @Test
+    fun firstSyncFailureSurvivesCacheReloadAndCanBeRetried() =
+        runBlocking {
+            val core =
+                GatedCore().apply {
+                    folderSynced = false
+                    failSync = true
+                    gate.complete(Unit)
+                    syncGate.complete(Unit)
+                }
+            val state = state(core, this)
+            val inbox = mailboxSyncKey("a", "INBOX")
+
+            state.openCoreMailbox("a", "INBOX")
+            waitUntil { !state.syncing }
+            assertEquals(inbox, state.initialMailboxSyncFailed)
+
+            state.syncCoreThreads(syncFirst = false)
+            waitUntil { !state.syncing }
+            assertEquals(inbox, state.initialMailboxSyncFailed)
+            assertEquals(1, core.syncCalls.size)
+
+            core.failSync = false
+            state.syncCoreThreads(syncFirst = false, syncUnfetched = true)
+            waitUntil { !state.syncing }
+            assertEquals(null, state.initialMailboxSyncFailed)
+            assertEquals(2, core.syncCalls.size)
+        }
+
+    @Test
+    fun openingUnifiedFolderSyncsOnlyTheResolvedUnsyncedMailbox() =
+        runBlocking {
+            val core =
+                GatedCore().apply {
+                    unsyncedFolders = """[{"account_id":"b","folder_id":"Sent Items"}]"""
+                    cachedThreads = """[{"id":"a#Sent#root","account_id":"a","folder_id":"Sent","subject":"Cached message"}]"""
+                    gate.complete(Unit)
+                }
+            val state = state(core, this)
+            state.coreAccounts += state.coreAccounts.single().copy(id = "b", email = "b@example.com")
+
+            state.openCoreMailbox(UNIFIED_ACCOUNT_ID, "sent")
+            waitUntil { core.syncCalls.isNotEmpty() }
+            assertEquals("Cached message", state.coreThreads.single().subject)
+            val call = core.syncCalls.single()
+            assertEquals(true, call.contains("\"account_id\":\"b\""))
+            assertEquals(true, call.contains("\"folder_id\":\"Sent Items\""))
+            core.syncGate.complete(Unit)
+            waitUntil { !state.syncing }
+        }
+
+    @Test
     fun reloadThatSteppedAsideRunsOnceTheLoadInFlightSettles() =
         runBlocking {
             val core = GatedCore()
@@ -277,6 +379,12 @@ class MailboxReloadDeferralTest {
     /** Holds the first thread list read open until [gate] completes. */
     private class GatedCore : MeronCore {
         val gate = CompletableDeferred<Unit>()
+        val syncGate = CompletableDeferred<Unit>()
+        var syncCalls = emptyList<String>()
+        var folderSynced: Boolean? = null
+        var unsyncedFolders = "[]"
+        var cachedThreads = "[]"
+        var failSync = false
         var threadListCalls = 0
         var liveSearchCalls = 0
         var starredListCalls = 0
@@ -305,7 +413,16 @@ class MailboxReloadDeferralTest {
                     threadListCalls += 1
                     if (payloadJson.contains("\"refresh\":true")) liveSearchCalls += 1
                     gate.await()
-                    """{"threads":[]}"""
+                    """{"threads":$cachedThreads,"folder_synced":$folderSynced,"unsynced_folders":$unsyncedFolders}"""
+                }
+
+                MobileCommand.Sync -> {
+                    syncCalls = syncCalls + payloadJson
+                    syncGate.await()
+                    if (failSync) error("Server offline")
+                    folderSynced = true
+                    unsyncedFolders = "[]"
+                    """{"ok":true}"""
                 }
 
                 else -> {

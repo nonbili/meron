@@ -1289,8 +1289,7 @@ internal fun MeronMobileState.deleteMailFolder(
             mobileHost.syncLiveMailPush(liveMailPushEnabled)
             // The mailbox view may have been sitting in any folder that just went away.
             if (selectedCoreAccountId == accountId && selectedCoreFolder in removed) {
-                selectCoreMailbox(accountId, INBOX_FOLDER)
-                syncCoreThreads(accountOverride = accountId, folderOverride = INBOX_FOLDER, syncFirst = false)
+                openCoreMailbox(accountId, INBOX_FOLDER)
             }
             status = result.warning ?: trs("mobile.status.folderDeleted")
         }.onFailure {
@@ -1357,8 +1356,7 @@ internal fun MeronMobileState.createMailFolder(
 
                 is NewFolderPlacement.OpenMailbox -> {
                     if (selectedCoreAccountId == account.id && selectedCoreFolder == placement.folderId) {
-                        selectCoreMailbox(account.id, created)
-                        syncCoreThreads(accountOverride = account.id, folderOverride = created, syncFirst = false)
+                        openCoreMailbox(account.id, created)
                     }
                 }
             }

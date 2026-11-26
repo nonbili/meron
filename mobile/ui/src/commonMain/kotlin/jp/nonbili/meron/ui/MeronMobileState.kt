@@ -26,6 +26,7 @@ import jp.nonbili.meron.shared.coercePollIntervalMinutes
 import jp.nonbili.meron.shared.defaultOAuthRedirectUri
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
 import kotlin.uuid.ExperimentalUuidApi
@@ -150,6 +151,10 @@ internal class MeronMobileState(
     // still editing an unsubmitted query.
     var visibleMailboxKey by mutableStateOf<MailboxCacheKey?>(null)
     var activeMailboxLoadKey by mutableStateOf<MailboxCacheKey?>(null)
+    var activeInitialMailboxKey: MailboxCacheKey? = null
+    var syncingUnfetchedMailbox by mutableStateOf(false)
+    var initialMailboxSyncFailed by mutableStateOf<MailboxCacheKey?>(null)
+    val initialMailboxSyncs = mutableMapOf<MailboxCacheKey, Deferred<AccountSyncException?>>()
 
     /** A reload that stepped aside for the load already out for its mailbox,
      *  null when none. That load read the store before whatever prompted the

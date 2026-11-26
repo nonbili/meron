@@ -324,6 +324,7 @@ data class ThreadListPage(
     val folderSynced: Boolean? = null,
     // The live server search failed, so these are only locally cached matches.
     val searchIncomplete: Boolean = false,
+    val unsyncedFolders: Map<String, String> = emptyMap(),
 )
 
 fun parseThreadListPage(responseJson: String): ThreadListPage {
@@ -406,6 +407,16 @@ fun parseThreadListPage(responseJson: String): ThreadListPage {
         folderUnread = responseJson.findJsonLongProperty("folder_unread")?.toInt(),
         folderSynced = responseJson.findJsonBooleanProperty("folder_synced"),
         searchIncomplete = responseJson.findJsonBooleanProperty("search_incomplete") == true,
+        unsyncedFolders =
+            responseJson
+                .findJsonArrayProperty("unsynced_folders")
+                ?.jsonArrayElements()
+                ?.mapNotNull { item ->
+                    val account = item.findJsonStringProperty("account_id") ?: return@mapNotNull null
+                    val folder = item.findJsonStringProperty("folder_id") ?: return@mapNotNull null
+                    account to folder
+                }?.toMap()
+                .orEmpty(),
     )
 }
 

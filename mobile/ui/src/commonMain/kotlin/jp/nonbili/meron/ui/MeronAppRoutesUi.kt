@@ -227,19 +227,17 @@ internal fun KanbanRouteContent(
                     tasksEnabled = tasksEnabled,
                     calendarEnabled = calendarEnabled,
                     onSelectUnified = {
-                        screen = Screen.Mail
-                        if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
-                            selectCoreMailbox(UNIFIED_ACCOUNT_ID)
-                            syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = selectedCoreFolder, syncFirst = false)
+                        if (screen != Screen.Mail || selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
+                            openCoreMailbox(UNIFIED_ACCOUNT_ID)
                         }
+                        screen = Screen.Mail
                         scope.launch { drawerState.close() }
                     },
                     onSelectAccount = { account ->
-                        screen = Screen.Mail
-                        if (selectedCoreAccountId != account.id) {
-                            selectCoreMailbox(account.id)
-                            syncCoreThreads(accountOverride = account.id, folderOverride = selectedCoreFolder, syncFirst = false)
+                        if (screen != Screen.Mail || selectedCoreAccountId != account.id) {
+                            openCoreMailbox(account.id)
                         }
+                        screen = Screen.Mail
                         scope.launch { drawerState.close() }
                     },
                     onSelectKanbanBoard = { board ->
@@ -735,17 +733,15 @@ internal fun MailRouteContent(
                     tasksEnabled = tasksEnabled,
                     calendarEnabled = calendarEnabled,
                     onSelectUnified = {
-                        if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
-                            selectCoreMailbox(UNIFIED_ACCOUNT_ID)
-                            syncCoreThreads(accountOverride = UNIFIED_ACCOUNT_ID, folderOverride = selectedCoreFolder, syncFirst = false)
+                        if (screen != Screen.Mail || selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
+                            openCoreMailbox(UNIFIED_ACCOUNT_ID)
                         }
                         screen = Screen.Mail
                         scope.launch { drawerState.close() }
                     },
                     onSelectAccount = { account ->
-                        if (selectedCoreAccountId != account.id) {
-                            selectCoreMailbox(account.id)
-                            syncCoreThreads(accountOverride = account.id, folderOverride = selectedCoreFolder, syncFirst = false)
+                        if (screen != Screen.Mail || selectedCoreAccountId != account.id) {
+                            openCoreMailbox(account.id)
                         }
                         screen = Screen.Mail
                         scope.launch { drawerState.close() }
@@ -845,12 +841,7 @@ internal fun MailRouteContent(
                                                 if (!unifiedMailbox) ensureAccountFolders(selectedCoreAccountId)
                                             },
                                             onSelectFolder = { folder ->
-                                                selectCoreMailbox(selectedCoreAccountId, folder)
-                                                syncCoreThreads(
-                                                    accountOverride = selectedCoreAccountId,
-                                                    folderOverride = folder,
-                                                    syncFirst = false,
-                                                )
+                                                openCoreMailbox(selectedCoreAccountId, folder)
                                             },
                                             fontSize = 18.sp,
                                             // Names the account in a single-account view, where
@@ -1590,50 +1581,18 @@ internal fun MailRouteContent(
                                         } else {
                                             tr("mobile.status.loadingFeeds")
                                         }
+                                    } else if (syncingUnfetchedMailbox) {
+                                        tr("threads.actions.syncing")
+                                    } else if (blockingMailboxLoadSlow) {
+                                        tr("mobile.status.stillSyncingInbox")
                                     } else {
-                                        if (blockingMailboxLoadSlow) {
-                                            tr("mobile.status.stillSyncingInbox")
-                                        } else {
-                                            tr("mobile.status.loadingInbox")
-                                        }
+                                        tr("mobile.status.loadingInbox")
                                     },
                                 )
                             }
 
                             coreThreads.isEmpty() -> {
-                                val narrowed = mailSearch.isNotBlank() || mailFilter != FilterMode.All || mailAttachmentsOnly
-                                // A narrowed page can come back empty with older
-                                // mail still to read (the core stops reading on
-                                // after a few emptied pages): offer the next page
-                                // rather than a dead end.
-                                val canPageOn = narrowed && pageableCoreAccounts().isNotEmpty()
-                                EmptyState(
-                                    icon = Icons.Outlined.Drafts,
-                                    title =
-                                        if (!narrowed) {
-                                            if (selectedAccountIsRss) tr("empty.noFeeds") else tr("empty.nothingHereYet")
-                                        } else {
-                                            tr("empty.noMatchingMail")
-                                        },
-                                    text =
-                                        if (!narrowed) {
-                                            if (selectedAccountIsRss) tr("empty.addFeedToStart") else tr("empty.pullLatestMessages")
-                                        } else {
-                                            tr("empty.adjustSearchFilter")
-                                        },
-                                    actionLabel =
-                                        when {
-                                            canPageOn -> tr("threads.actions.loadMore")
-                                            selectedAccountIsRss -> null
-                                            else -> tr("mobile.mail.syncMailbox")
-                                        },
-                                    onAction =
-                                        when {
-                                            canPageOn -> ({ loadMoreCoreThreads(quiet = false) })
-                                            selectedAccountIsRss -> null
-                                            else -> ({ syncCoreThreads() })
-                                        },
-                                )
+                                EmptyMailbox(selectedAccountIsRss)
                             }
 
                             else -> {
@@ -1682,4 +1641,49 @@ internal fun MailRouteContent(
             }
         }
     }
+}
+
+@Composable
+private fun MeronMobileState.EmptyMailbox(isRss: Boolean) {
+    if (initialMailboxSyncFailed == mailboxSyncKey(selectedCoreAccountId, selectedCoreFolder)) {
+        EmptyState(
+            icon = Icons.Outlined.Drafts,
+            title = tr("mail.toast.syncFailed"),
+            text = "",
+            actionLabel = tr("connectivity.retry"),
+            onAction = { syncCoreThreads(syncFirst = false, syncUnfetched = true) },
+        )
+        return
+    }
+
+    val narrowed = mailSearch.isNotBlank() || mailFilter != FilterMode.All || mailAttachmentsOnly
+    // A narrowed page can be empty with older mail still to read.
+    val canPageOn = narrowed && pageableCoreAccounts().isNotEmpty()
+    EmptyState(
+        icon = Icons.Outlined.Drafts,
+        title =
+            when {
+                narrowed -> tr("empty.noMatchingMail")
+                isRss -> tr("empty.noFeeds")
+                else -> tr("empty.nothingHereYet")
+            },
+        text =
+            when {
+                narrowed -> tr("empty.adjustSearchFilter")
+                isRss -> tr("empty.addFeedToStart")
+                else -> ""
+            },
+        actionLabel =
+            when {
+                canPageOn -> tr("threads.actions.loadMore")
+                isRss -> null
+                else -> tr("mobile.mail.syncMailbox")
+            },
+        onAction =
+            when {
+                canPageOn -> ({ loadMoreCoreThreads(quiet = false) })
+                isRss -> null
+                else -> ({ syncCoreThreads() })
+            },
+    )
 }

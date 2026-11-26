@@ -210,6 +210,7 @@ fn mobile_protocol_lists_unified_threads_and_excludes_opted_out_accounts() {
         )
         .unwrap();
     }
+    store::set_folder_state(&conn, "first@example.com", "INBOX", 1, 8).unwrap();
     drop(conn);
 
     let value = invoke_mobile_protocol_json(
@@ -224,6 +225,10 @@ fn mobile_protocol_lists_unified_threads_and_excludes_opted_out_accounts() {
     assert_eq!(value["result"]["folder_unreads"]["first@example.com"], 1);
     assert_eq!(value["result"]["folder_unreads"]["second@example.com"], 1);
     assert_eq!(value["result"]["failures"], json!([]));
+    assert_eq!(
+        value["result"]["unsynced_folders"],
+        json!([{ "account_id": "second@example.com", "folder_id": "INBOX" }])
+    );
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

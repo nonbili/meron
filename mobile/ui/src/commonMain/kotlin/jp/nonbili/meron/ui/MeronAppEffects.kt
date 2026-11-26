@@ -316,12 +316,14 @@ internal fun AppStartupEffects(
             loadDetectOneTimeCodes()
         }
 
-        // Once accounts are known, surface whatever the local store already holds so
-        // a cold start shows the cached inbox instead of an empty "Nothing here yet".
-        // A server sync still happens on pull-to-refresh / "Sync now".
+        // Restore the persisted mailbox from the local store. If it was never
+        // synced and is on screen, fetch it as on any other folder open.
         LaunchedEffect(coreAccounts) {
-            if (coreAccounts.isNotEmpty() && coreThreads.isEmpty() && activeMailboxLoadKey == null) {
-                syncCoreThreads(syncFirst = false)
+            if (coreAccounts.isNotEmpty() && coreThreads.isEmpty()) {
+                val openingMailbox = screen == Screen.Mail && visibleMailboxKey == null
+                if (openingMailbox || activeMailboxLoadKey == null) {
+                    syncCoreThreads(syncFirst = false, syncUnfetched = openingMailbox)
+                }
             }
         }
 

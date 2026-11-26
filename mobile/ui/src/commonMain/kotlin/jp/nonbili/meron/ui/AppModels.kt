@@ -251,6 +251,7 @@ internal data class MailboxLoadResult(
     // mailbox so switching away and back keeps the pages the user paged in.
     // Loaders leave it at the default; the mailbox sets it when caching.
     val pageDepth: Int = MAILBOX_PAGE_SIZE,
+    val unsyncedFolders: Map<String, String> = emptyMap(),
 )
 
 internal data class MailboxCacheKey(
@@ -267,6 +268,7 @@ internal data class MailboxCacheKey(
 internal data class DeferredMailboxReload(
     val key: MailboxCacheKey,
     val refreshSearch: Boolean,
+    val syncUnfetched: Boolean = false,
 )
 
 internal data class KanbanColumnSpec(

@@ -13,10 +13,13 @@ import jp.nonbili.meron.shared.StarredItemsParams
 import jp.nonbili.meron.shared.SyncMailParams
 import jp.nonbili.meron.shared.SyncRssParams
 import jp.nonbili.meron.shared.ThreadListParams
+import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.parseFolderListResponse
 import jp.nonbili.meron.shared.parseStarredItemsPage
 import jp.nonbili.meron.shared.parseThreadListPage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,11 +55,21 @@ internal fun mailboxCacheKey(
 ): MailboxCacheKey =
     MailboxCacheKey(
         accountId = accountId.ifBlank { UNIFIED_ACCOUNT_ID },
-        folderId = folderId.ifBlank { INBOX_FOLDER }.lowercase(),
+        folderId =
+            when {
+                folderId.isBlank() || folderId.equals(INBOX_FOLDER, ignoreCase = true) -> INBOX_FOLDER
+                accountId.isBlank() || accountId == UNIFIED_ACCOUNT_ID -> folderId.lowercase()
+                else -> folderId
+            },
         query = query.trim(),
         filter = filter,
         attachmentsOnly = attachmentsOnly,
     )
+
+internal fun mailboxSyncKey(
+    accountId: String,
+    folderId: String,
+): MailboxCacheKey = mailboxCacheKey(accountId, folderId, "", FilterMode.All)
 
 private fun MeronMobileState.cacheVisibleMailbox() {
     if (!initialThreadsLoaded) return
@@ -122,6 +135,14 @@ internal fun MeronMobileState.selectCoreMailbox(
         mailboxPageDepth = MAILBOX_PAGE_SIZE
         initialThreadsLoaded = false
     }
+}
+
+internal fun MeronMobileState.openCoreMailbox(
+    accountId: String,
+    folderId: String = loadMailFolderForAccount(prefs, accountId),
+) {
+    selectCoreMailbox(accountId, folderId)
+    syncCoreThreads(syncFirst = false, syncUnfetched = true)
 }
 
 // Whether a core sync event changes what the visible thread list shows. Events
@@ -251,6 +272,7 @@ internal fun MeronMobileState.syncCoreThreads(
     successStatus: String? = null,
     scrollToTopOnSuccess: Boolean = false,
     refreshSearch: Boolean = false,
+    syncUnfetched: Boolean = false,
 ) {
     if (!coreLoaded) {
         status = coreUnavailableMessage
@@ -275,18 +297,24 @@ internal fun MeronMobileState.syncCoreThreads(
         return
     }
     val requestKey = mailboxCacheKey(accountId, requestedFolder, query, filter, attachmentsOnly)
+    val mailbox = mailboxSyncKey(accountId, requestedFolder)
+    // Changing the search or filters replaces the list read. Its first server
+    // sync still belongs to the same folder, and the replacement can join it.
+    val openingMailbox = !syncFirst && !unifiedStarred && (syncUnfetched || activeInitialMailboxKey == mailbox)
     if (syncing && activeMailboxLoadKey == requestKey) {
         Log.i("MailLoad", "sync skipped duplicate account=$accountId folder=$requestedFolder")
         deferredMailboxReload =
             DeferredMailboxReload(
                 key = requestKey,
                 refreshSearch = refreshSearch || deferredMailboxReload?.takeIf { it.key == requestKey }?.refreshSearch == true,
+                syncUnfetched = openingMailbox || deferredMailboxReload?.takeIf { it.key == requestKey }?.syncUnfetched == true,
             )
         return
     }
     val requestToken = activeMailboxLoadToken + 1
     activeMailboxLoadToken = requestToken
     activeMailboxLoadKey = requestKey
+    activeInitialMailboxKey = mailbox.takeIf { openingMailbox }
     val folderGeneration = mailboxFolderGeneration
     // This load reads the store after anything a skipped reload was reacting to.
     deferredMailboxReload = null
@@ -294,6 +322,7 @@ internal fun MeronMobileState.syncCoreThreads(
     blockingMailboxLoadWarned = false
     blockingMailboxLoadSlow = false
     syncing = true
+    syncingUnfetchedMailbox = false
     // A mailbox with no local threads yet blocks first paint on the server
     // fetch: sync a small first page now and deepen in the background below.
     val firstLoad = !initialThreadsLoaded
@@ -318,15 +347,29 @@ internal fun MeronMobileState.syncCoreThreads(
     )
     scope.launchThreadListRead(threadRemovalGuard) { read ->
         val folderReadVersion = folderReadGuard.version
+
+        fun listedThreads(result: MailboxLoadResult) = withLocalDraftFlags(withoutLocallyDiscardedThreads(read.filter(result.threads)))
+
         runCatching {
-            withContext(ioDispatcher) {
-                val client = MobileMailCommandClient(core)
-                val first =
+            val client = MobileMailCommandClient(core)
+
+            suspend fun readPage(
+                syncFirst: Boolean = false,
+                beforeCursor: String? = null,
+            ): MailboxLoadResult =
+                withContext(ioDispatcher) {
                     if (unifiedStarred) {
                         // The starred listing spans folders, so there is no mailbox
                         // to sync first: the core reads whatever the accounts'
                         // own syncs have already starred.
-                        loadUnifiedStarred(client = client, query = query, filter = filter, attachmentsOnly = attachmentsOnly, limit = listLimit)
+                        loadUnifiedStarred(
+                            client = client,
+                            query = query,
+                            filter = filter,
+                            attachmentsOnly = attachmentsOnly,
+                            beforeCursor = beforeCursor,
+                            limit = if (beforeCursor == null) listLimit else MAILBOX_PAGE_SIZE,
+                        )
                     } else if (accountId == UNIFIED_ACCOUNT_ID) {
                         loadUnifiedInbox(
                             client = client,
@@ -335,6 +378,7 @@ internal fun MeronMobileState.syncCoreThreads(
                             filter = filter,
                             attachmentsOnly = attachmentsOnly,
                             syncFirst = syncFirst,
+                            beforeCursor = beforeCursor,
                             syncLimit = syncLimit,
                             listLimit = listLimit,
                             refreshSearch = refreshSearch,
@@ -349,46 +393,43 @@ internal fun MeronMobileState.syncCoreThreads(
                             filter = filter,
                             attachmentsOnly = attachmentsOnly,
                             syncFirst = syncFirst,
+                            beforeCursor = beforeCursor,
                             syncLimit = syncLimit,
                             listLimit = listLimit,
-                            refreshSearch = refreshSearch,
-                        )
-                    }
-                readMailboxToOldestShown(
-                    first = first,
-                    listLimit = listLimit,
-                    oldestShown = oldestShown,
-                ) { beforeCursor, accountCursors ->
-                    if (unifiedStarred) {
-                        loadUnifiedStarred(client = client, query = query, filter = filter, attachmentsOnly = attachmentsOnly, beforeCursor = beforeCursor)
-                    } else if (accountId == UNIFIED_ACCOUNT_ID) {
-                        loadUnifiedInbox(
-                            client = client,
-                            accounts = selectedAccounts,
-                            query = query,
-                            filter = filter,
-                            attachmentsOnly = attachmentsOnly,
-                            syncFirst = false,
-                            beforeCursor = beforeCursor,
-                            refreshSearch = refreshSearch,
-                            folderRole = requestedFolder,
-                        )
-                    } else {
-                        loadAccountInbox(
-                            client,
-                            selectedAccounts.first(),
-                            requestedFolder,
-                            query = query,
-                            filter = filter,
-                            attachmentsOnly = attachmentsOnly,
-                            syncFirst = false,
-                            beforeCursor = beforeCursor,
                             refreshSearch = refreshSearch,
                         )
                     }
                 }
-            }
-        }.onSuccess { (result, readDepth) ->
+            var first = readPage(syncFirst)
+            val targets = if (openingMailbox) first.unfetchedMailboxes(selectedAccounts, accountId) else emptyMap()
+            val initialSyncFailure =
+                if (targets.isNotEmpty() &&
+                    activeMailboxLoadToken == requestToken &&
+                    accountId == selectedCoreAccountId &&
+                    folderGeneration == mailboxFolderGeneration
+                ) {
+                    if (coreThreads.isEmpty() && first.threads.isNotEmpty()) {
+                        showMailboxPage(accountId, requestKey, first, listedThreads(first), listLimit, folderReadVersion)
+                    }
+                    syncingUnfetchedMailbox = true
+                    val failure = syncUnfetchedMailboxes(client, targets)
+                    first = readPage()
+                    failure
+                } else {
+                    null
+                }
+            val (result, readDepth) =
+                withContext(ioDispatcher) {
+                    readMailboxToOldestShown(
+                        first = first,
+                        listLimit = listLimit,
+                        oldestShown = oldestShown,
+                    ) { beforeCursor, _ ->
+                        readPage(beforeCursor = beforeCursor)
+                    }
+                }
+            Triple(result, readDepth, initialSyncFailure)
+        }.onSuccess { (result, readDepth, initialSyncFailure) ->
             val resultKey = mailboxCacheKey(accountId, result.folder, query, filter, attachmentsOnly)
             // A read begun before a folder rename holds the old names.
             if (folderGeneration == mailboxFolderGeneration) {
@@ -396,14 +437,7 @@ internal fun MeronMobileState.syncCoreThreads(
                     mailboxCache +
                     (
                         resultKey to
-                            result.copy(
-                                folders = result.folders,
-                                folder = result.folder,
-                                threads = withLocalDraftFlags(withoutLocallyDiscardedThreads(read.filter(result.threads))),
-                                nextCursor = result.nextCursor,
-                                accountCursors = result.accountCursors,
-                                pageDepth = readDepth,
-                            )
+                            result.copy(threads = listedThreads(result), pageDepth = readDepth)
                     )
             }
             if (folderGeneration != mailboxFolderGeneration &&
@@ -414,7 +448,7 @@ internal fun MeronMobileState.syncCoreThreads(
                 // again rather than show the old names.
                 finishMailboxLoad()
                 deferredMailboxReload = null
-                syncCoreThreads(syncFirst = false)
+                syncCoreThreads(syncFirst = false, syncUnfetched = openingMailbox)
                 return@onSuccess
             }
             if (activeMailboxLoadToken != requestToken || accountId != selectedCoreAccountId) {
@@ -429,19 +463,9 @@ internal fun MeronMobileState.syncCoreThreads(
             }
             val wasInitialLoad = !initialThreadsLoaded
             val existingIds = coreThreads.map { it.id }.toSet()
-            coreFolders = reconcileFolderUnread(result.folders, folderReadVersion)
-            if (result.folders.isNotEmpty()) {
-                foldersByAccount = foldersByAccount + reconcileFolderUnread(result.folders, folderReadVersion).groupBy { it.accountId }
-            }
             val folder = result.folder
-            selectedCoreFolder = folder
-            saveLastMailLocation(prefs, accountId, folder)
-            val parsedThreads = withLocalDraftFlags(withoutLocallyDiscardedThreads(read.filter(result.threads)))
-            coreThreads = parsedThreads
-            visibleMailboxKey = resultKey
-            mailboxCursor = result.nextCursor
-            mailboxAccountCursors = result.accountCursors
-            mailboxPageDepth = readDepth
+            val parsedThreads = listedThreads(result)
+            showMailboxPage(accountId, resultKey, result, parsedThreads, readDepth, folderReadVersion)
             // The open conversation is deliberately left alone here. A refresh
             // returns one page of one mailbox, so the open thread being absent
             // means nothing (it may sit past the page limit, or belong to
@@ -452,13 +476,20 @@ internal fun MeronMobileState.syncCoreThreads(
             // that really go away are cleared by the move/archive paths.
             finishMailboxLoad()
             errorBanner = null
-            syncError = null
+            val syncKey = mailboxSyncKey(accountId, folder)
+            if (initialSyncFailure != null) {
+                initialMailboxSyncFailed = syncKey
+                reportMailboxSyncFailure(accountId, folder, initialSyncFailure)
+            } else if (initialMailboxSyncFailed != syncKey || result.unfetchedMailboxes(selectedAccounts, accountId).isEmpty()) {
+                if (initialMailboxSyncFailed == syncKey) initialMailboxSyncFailed = null
+                syncError = null
+            }
             if (scrollToTopOnSuccess) {
                 mailListScrollToTopRequest += 1
             }
             val newCount = if (!wasInitialLoad && syncFirst) parsedThreads.count { it.id !in existingIds } else 0
             // Recovery and background reads must leave a transfer failure visible.
-            if (!statusIsError) {
+            if (!statusIsError && initialSyncFailure == null) {
                 status = successStatus
                     ?: if (result.searchIncomplete) {
                         // The server half of the search failed; the list is only what
@@ -483,17 +514,19 @@ internal fun MeronMobileState.syncCoreThreads(
                     folderOverride = folder,
                     syncFirst = false,
                     refreshSearch = true,
+                    syncUnfetched = !openingMailbox && !syncFirst && deferredMailboxReload?.syncUnfetched == true,
                 )
             }
             // After the live search above: it reads the store afresh and so
             // stands in for a reload that stepped aside. Re-running that reload
             // first would start a cache read the live search then steps aside
             // for, and the two would take turns for good.
-            runDeferredMailboxReload(requestKey, accountId, requestedFolder)
+            runDeferredMailboxReload(requestKey, accountId, requestedFolder, allowUnfetchedSync = !openingMailbox && !syncFirst)
             if (firstLoad && syncFirst && !unifiedStarred) {
                 deepenMailboxSync(accountId, folder, selectedAccounts)
             }
         }.onFailure {
+            if (it is CancellationException) throw it
             if (activeMailboxLoadToken != requestToken || accountId != selectedCoreAccountId) {
                 if (activeMailboxLoadToken == requestToken) {
                     finishMailboxLoad()
@@ -502,23 +535,103 @@ internal fun MeronMobileState.syncCoreThreads(
                 Log.w("MailLoad", "sync ignored stale failure account=$accountId", it)
                 return@onFailure
             }
+            if (openingMailbox) initialMailboxSyncFailed = mailbox
             finishMailboxLoad()
-            runDeferredMailboxReload(requestKey, accountId, requestedFolder)
-            val contextual = it as? AccountSyncException
-            val failedAccountId =
-                contextual?.accountId
-                    ?: accountId.takeUnless { candidate -> candidate == UNIFIED_ACCOUNT_ID }
-            val message = contextual?.cause?.message ?: it.message ?: trs("mail.toast.syncFailed")
-            syncError = MobileSyncError(failedAccountId, message)
-            // The failing account is named by the request, not read out of the text.
-            if (failedAccountId != null && message.contains("account needs reconnect")) {
-                refreshAccountReconnectState(failedAccountId)
-            }
+            runDeferredMailboxReload(requestKey, accountId, requestedFolder, allowUnfetchedSync = !openingMailbox && !syncFirst)
             errorBanner = null
-            status = trsError("mail.toast.syncFailed", it)
-            Log.w("MailLoad", "sync failed account=$accountId folder=$requestedFolder initialThreadsLoaded=$initialThreadsLoaded syncing=$syncing", it)
+            reportMailboxSyncFailure(accountId, requestedFolder, it)
         }
     }
+}
+
+private fun MeronMobileState.showMailboxPage(
+    accountId: String,
+    key: MailboxCacheKey,
+    result: MailboxLoadResult,
+    threads: List<ThreadSummary>,
+    readDepth: Int,
+    folderReadVersion: Long,
+) {
+    coreFolders = reconcileFolderUnread(result.folders, folderReadVersion)
+    if (result.folders.isNotEmpty()) {
+        foldersByAccount = foldersByAccount + coreFolders.groupBy { it.accountId }
+    }
+    selectedCoreFolder = result.folder
+    saveLastMailLocation(prefs, accountId, result.folder)
+    coreThreads = threads
+    visibleMailboxKey = key
+    mailboxCursor = result.nextCursor
+    mailboxAccountCursors = result.accountCursors
+    mailboxPageDepth = readDepth
+    initialThreadsLoaded = true
+}
+
+private fun MailboxLoadResult.unfetchedMailboxes(
+    accounts: List<AccountSummary>,
+    accountId: String,
+): Map<String, String> {
+    val folders = if (folderSynced == false && accountId != UNIFIED_ACCOUNT_ID) mapOf(accountId to folder) else unsyncedFolders
+    return accounts
+        .filter { !it.paused && !it.needsReconnect && !accountSummaryIsRss(it) }
+        .mapNotNull { account -> folders[account.id]?.let { account.id to it } }
+        .toMap()
+}
+
+private suspend fun MeronMobileState.syncUnfetchedMailboxes(
+    client: MobileMailCommandClient,
+    folders: Map<String, String>,
+): AccountSyncException? {
+    var failure: AccountSyncException? = null
+    for ((account, folder) in folders) {
+        val key = mailboxSyncKey(account, folder)
+        // Reopening a folder while its first fetch runs can use the same result.
+        val sync =
+            initialMailboxSyncs.getOrPut(key) {
+                scope.async(ioDispatcher) {
+                    try {
+                        withSyncAccountContext(account) {
+                            withManagedGoogleAuth(client, account) {
+                                client.sync(
+                                    SyncMailParams(
+                                        accountId = account,
+                                        folderId = folder,
+                                        limit = MAILBOX_SYNC_LIMIT,
+                                        folders = false,
+                                        deferTail = true,
+                                    ),
+                                )
+                            }
+                        }
+                        null
+                    } catch (error: AccountSyncException) {
+                        error
+                    }
+                }
+            }
+        try {
+            val error = sync.await()
+            if (failure == null) failure = error
+        } finally {
+            if (sync.isCompleted && initialMailboxSyncs[key] == sync) initialMailboxSyncs.remove(key)
+        }
+    }
+    return failure
+}
+
+private fun MeronMobileState.reportMailboxSyncFailure(
+    accountId: String,
+    folder: String,
+    error: Throwable,
+) {
+    val contextual = error as? AccountSyncException
+    val failedAccountId = contextual?.accountId ?: accountId.takeUnless { it == UNIFIED_ACCOUNT_ID }
+    val message = contextual?.cause?.message ?: error.message ?: trs("mail.toast.syncFailed")
+    syncError = MobileSyncError(failedAccountId, message)
+    if (failedAccountId != null && message.contains("account needs reconnect")) {
+        refreshAccountReconnectState(failedAccountId)
+    }
+    status = trsError("mail.toast.syncFailed", error)
+    Log.w("MailLoad", "sync failed account=$accountId folder=$folder initialThreadsLoaded=$initialThreadsLoaded syncing=$syncing", error)
 }
 
 /** The blocking loader's watchdog fallback. A request still out owns the
@@ -546,10 +659,12 @@ internal fun MeronMobileState.expireBlockingMailboxLoad() {
 
 private fun MeronMobileState.finishMailboxLoad() {
     activeMailboxLoadKey = null
+    activeInitialMailboxKey = null
     activeMailboxLoadStartedAtMillis = 0L
     blockingMailboxLoadWarned = false
     blockingMailboxLoadSlow = false
     syncing = false
+    syncingUnfetchedMailbox = false
     initialThreadsLoaded = true
 }
 
@@ -561,6 +676,7 @@ private fun MeronMobileState.runDeferredMailboxReload(
     settledKey: MailboxCacheKey,
     accountId: String,
     folder: String,
+    allowUnfetchedSync: Boolean,
 ) {
     val deferred = deferredMailboxReload?.takeIf { it.key == settledKey } ?: return
     deferredMailboxReload = null
@@ -569,6 +685,7 @@ private fun MeronMobileState.runDeferredMailboxReload(
         folderOverride = folder,
         syncFirst = false,
         refreshSearch = deferred.refreshSearch,
+        syncUnfetched = allowUnfetchedSync && deferred.syncUnfetched,
     )
 }
 
@@ -607,7 +724,9 @@ private fun MeronMobileState.deepenMailboxSync(
             }
         }.onSuccess {
             Log.i("MailLoad", "deep sync done account=$accountId folder=$folder accounts=${mailAccounts.size}")
-            syncCoreThreads(accountOverride = accountId, folderOverride = folder, syncFirst = false)
+            if (mailboxSyncKey(accountId, folder) == mailboxSyncKey(selectedCoreAccountId, selectedCoreFolder)) {
+                syncCoreThreads(accountOverride = accountId, folderOverride = folder, syncFirst = false)
+            }
         }.onFailure {
             Log.w("MailLoad", "deep sync failed account=$accountId folder=$folder", it)
         }
@@ -803,11 +922,11 @@ internal suspend fun MeronMobileState.loadAccountInbox(
     }
     val foldersJson = client.listFolders(FolderListParams(accountId = account.id))
     val folders = parseFolderListResponse(foldersJson)
-    // Server folder names are case-sensitive ("INBOX"), but the default
-    // request uses "inbox"; match case-insensitively and fall back to a real
-    // inbox before the first folder.
+    // Prefer an exact match for case-sensitive names. Older selections may
+    // have different casing, including the default "inbox".
     val folder =
-        folders.firstOrNull { it.name.equals(requestedFolder, ignoreCase = true) }?.name
+        folders.firstOrNull { it.name == requestedFolder }?.name
+            ?: folders.firstOrNull { it.name.equals(requestedFolder, ignoreCase = true) }?.name
             ?: folders.firstOrNull { it.name.equals(INBOX_FOLDER, ignoreCase = true) }?.name
             ?: folders.firstOrNull()?.name
             ?: requestedFolder
@@ -967,6 +1086,7 @@ internal suspend fun MeronMobileState.loadUnifiedInbox(
         nextCursor = page.nextCursor,
         folderSynced = page.folderSynced,
         searchIncomplete = page.searchIncomplete,
+        unsyncedFolders = page.unsyncedFolders,
     )
 }
 
