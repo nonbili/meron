@@ -438,6 +438,7 @@ internal fun MessageBubble(
             }
             MessageBodyContent(
                 message = message,
+                isRss = isRss,
                 textColor = textColor,
                 preferHtml = preferHtml,
                 searchQuery = searchQuery,
@@ -533,6 +534,7 @@ internal fun MessageActionsButton(
 @Composable
 internal fun ColumnScope.MessageBodyContent(
     message: MessageBody,
+    isRss: Boolean,
     textColor: Color,
     preferHtml: Boolean,
     searchQuery: String,
@@ -611,6 +613,7 @@ internal fun ColumnScope.MessageBodyContent(
                 mediaMissing = message.mediaMissing,
                 quoteKey = message.id,
                 allowRemote = remoteContent.allowRemote,
+                isRss = isRss,
                 maxHeight = bodyMaxHeight,
                 onOpenUrl = onOpenUrl,
                 onOpenImage = onOpenHtmlImage,

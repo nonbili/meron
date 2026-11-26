@@ -67,6 +67,7 @@ internal fun HtmlMessageBody(
     // document's head, where a meta policy is ignored: the head built here is
     // what actually enforces the decision on both platforms.
     allowRemote: Boolean,
+    isRss: Boolean,
     maxHeight: Dp = Dp.Unspecified,
     onOpenUrl: (String) -> Unit,
     onOpenImage: (String) -> Unit = {},
@@ -124,6 +125,7 @@ internal fun HtmlMessageBody(
             html,
             quoteKey,
             allowRemote,
+            isRss,
             scriptNonce,
             fitWideContent,
             darkBody,
@@ -316,6 +318,34 @@ internal fun HtmlMessageBody(
             <body style="height: auto !important; min-height: 0 !important;">$body
               <script nonce="$scriptNonce">
                 (function () {
+                  function onlyMessageElement(container) {
+                    var content = null;
+                    for (var i = 0; i < container.childNodes.length; i++) {
+                      var node = container.childNodes[i];
+                      if (node.nodeType === 3 && node.textContent.trim()) return null;
+                      if (node.nodeType !== 1 || node === document.currentScript) continue;
+                      if (node.matches('meta, style, img[width="1"][height="1"], img[src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"]')) continue;
+                      if (content) return null;
+                      content = node;
+                    }
+                    return content;
+                  }
+                  // Match desktop's bare Japanese prose heuristic. Code, logs
+                  // and diagrams depend on preserving their original line lengths.
+                  function wrapPreformattedMessage() {
+                    var content = onlyMessageElement(document.body);
+                    while (content && content.tagName === 'DIV') content = onlyMessageElement(content);
+                    if (!content || !content.matches('pre:not([class]):not([style])') ||
+                        content.querySelector('code, samp, kbd')) return;
+                    var sentence;
+                    try {
+                      sentence = new RegExp('^[\\t \\u3000]*[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}][^\\r\\n]*[。！？][\\t \\u3000]*$', 'mu');
+                    } catch (error) {
+                      // Older Android WebViews lack Unicode script properties.
+                      return;
+                    }
+                    if (sentence.test(content.textContent)) content.style.whiteSpace = 'pre-wrap';
+                  }
                   // Feed/newsletter HTML often lists photos as a bare run of
                   // sibling `<img>` (or single-image `<p>`/`<div>`) elements,
                   // which would otherwise stack one per row at full width.
@@ -813,6 +843,7 @@ internal fun HtmlMessageBody(
                     capBackgrounds();
                   }
                   dropForeignViewports();
+                  if (!$isRss) wrapPreformattedMessage();
                   groupConsecutiveImages();
                   restoreDeclaredCanvas();
                   applyDarkBody();

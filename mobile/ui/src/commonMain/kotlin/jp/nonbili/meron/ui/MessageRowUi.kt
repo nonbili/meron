@@ -150,6 +150,7 @@ internal fun MessageRow(
                 )
                 MessageBodyContent(
                     message = message,
+                    isRss = isRss,
                     textColor = textColor,
                     preferHtml = preferHtml,
                     searchQuery = searchQuery,

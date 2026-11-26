@@ -268,6 +268,7 @@ internal fun MessageReaderScreen(
                                 mediaMissing = message.mediaMissing,
                                 quoteKey = message.id,
                                 allowRemote = remoteContent.allowRemote,
+                                isRss = isRss,
                                 onOpenUrl = onOpenUrl,
                                 onOpenImage = onOpenHtmlImage,
                                 fitWideContent = true,
