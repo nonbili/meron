@@ -52,6 +52,7 @@ type mcpClient struct {
 	Drafts                    bool     `json:"drafts"`
 	ManageAccounts            bool     `json:"manage_accounts"`
 	ManageSettings            bool     `json:"manage_settings"`
+	ManageRules               bool     `json:"manage_rules"`
 	Organize                  bool     `json:"organize"`
 	Send                      bool     `json:"send"`
 	Delete                    bool     `json:"delete"`
@@ -286,7 +287,7 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 			}
 			selected[id] = true
 		}
-		if len(selected) == 0 && !c.AllAccounts && !c.ManageAccounts && !c.ManageSettings {
+		if len(selected) == 0 && !c.AllAccounts && !c.ManageAccounts && !c.ManageSettings && !c.ManageRules {
 			return nil, errors.New("Select at least one account or a configuration permission")
 		}
 		token := ""

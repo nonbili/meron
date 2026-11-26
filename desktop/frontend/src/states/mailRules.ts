@@ -83,14 +83,17 @@ export type RuleStatus = {
 }
 
 /** How many messages already in the Inbox, or in Sent for a rule for sent mail, a saved rule would run on. */
-export async function ruleMatches(id: string): Promise<{ count: number; withoutBody: number }> {
-  const { count, without_body } = await invoke<{ count: number; without_body?: number }>('mail.ruleMatches', { id })
+export async function ruleMatches(rule: Rule): Promise<{ count: number; withoutBody: number }> {
+  const { count, without_body } = await invoke<{ count: number; without_body?: number }>('mail.ruleMatches', {
+    id: rule.id,
+    expected_rule: rule,
+  })
   return { count, withoutBody: without_body ?? 0 }
 }
 
 /** Runs a saved rule on the mail already in the Inbox; the work goes on in the background. */
-export async function runRule(id: string): Promise<number> {
-  const { count } = await invoke<{ count: number }>('mail.runRule', { id })
+export async function runRule(rule: Rule): Promise<number> {
+  const { count } = await invoke<{ count: number }>('mail.runRule', { id: rule.id, expected_rule: rule })
   return count
 }
 
@@ -110,7 +113,6 @@ export async function loadRules(): Promise<Rule[]> {
 }
 
 // The core normalizes what it keeps and refuses a rule that could never apply.
-export async function saveRules(rules: Rule[]): Promise<Rule[]> {
-  const saved = await invoke<{ rules: Rule[] }>('mail.setRules', { rules })
-  return saved.rules ?? []
+export function saveRules(rules: Rule[], expected_rules: Rule[]): Promise<{ rules: Rule[]; conflict?: boolean }> {
+  return invoke('mail.setRules', { rules, expected_rules })
 }

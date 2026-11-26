@@ -133,11 +133,33 @@ pub(crate) async fn dispatch(
             Ok(store::tag_counts_json(counts))
         }
 
-        "rules.list" => Ok(json!({ "rules": store::rules(&engine.db.lock().unwrap())? })),
+        "rules.list" => {
+            Ok(json!({ "rules": store::rules_for_editing(&engine.db.lock().unwrap())? }))
+        }
+        "rules.targets" => store::rule_targets(&engine.db.lock().unwrap()),
         "rules.set" => {
             let rules = serde_json::from_value(p.get("rules").cloned().unwrap_or_default())?;
-            let rules = store::set_rules(&engine.db.lock().unwrap(), rules)?;
+            let db = engine.db.lock().unwrap();
+            if let Some(expected) = p.get("expected_rules").filter(|value| !value.is_null()) {
+                let expected: Vec<store::Rule> = serde_json::from_value(expected.clone())?;
+                let (rules, saved) = store::set_rules_if_current(&db, &expected, rules)?;
+                return Ok(json!({ "rules": rules, "conflict": !saved }));
+            }
+            let rules = store::set_rules(&db, rules)?;
             Ok(json!({ "rules": rules }))
+        }
+        "rules.create" | "rules.update" | "rules.delete" => {
+            let read_rule = || serde_json::from_value::<store::Rule>(p["rule"].clone());
+            let edit = match req.method.as_str() {
+                "rules.create" => store::RuleEdit::Create(read_rule()?),
+                "rules.update" => store::RuleEdit::Update(
+                    req_str(p, "rule_id")?,
+                    serde_json::from_value(p["rule"].clone())?,
+                ),
+                _ => store::RuleEdit::Delete(req_str(p, "rule_id")?),
+            };
+            let rule = store::edit_rule(&engine.db.lock().unwrap(), edit)?;
+            Ok(json!({ "rule": rule }))
         }
         "rules.status" => {
             let db = engine.db.lock().unwrap();
@@ -150,13 +172,18 @@ pub(crate) async fn dispatch(
         "rules.matches" => {
             let id = req_str(p, "id")?;
             let db = engine.db.lock().unwrap();
+            let expected: Option<store::Rule> = serde_json::from_value(p["expected_rule"].clone())?;
+            if let Some(rule) = expected.as_ref() {
+                store::require_current_rule(&db, &id, rule)?;
+            }
             let count = store::count_existing_rule_matches(&db, &id)?;
             let without_body = store::count_existing_rule_without_body(&db, &id)?;
             Ok(json!({ "count": count, "without_body": without_body }))
         }
         "rules.run" => {
             let id = req_str(p, "id")?;
-            let count = run_rule_on_existing(engine, &id).await?;
+            let expected: Option<store::Rule> = serde_json::from_value(p["expected_rule"].clone())?;
+            let count = run_rule_on_existing_if_current(engine, &id, expected.as_ref()).await?;
             Ok(json!({ "count": count }))
         }
 

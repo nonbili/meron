@@ -333,10 +333,26 @@ impl Rule {
 }
 
 pub fn rules(conn: &Connection) -> Result<Vec<Rule>> {
-    let stored = super::settings_get(conn, &[RULES_KEY.to_string()])?;
-    let rules: Vec<Rule> = stored
-        .get(RULES_KEY)
-        .and_then(|rules| serde_json::from_value(rules.clone()).ok())
+    Ok(decode_rules(rule_data(conn)?).unwrap_or_default())
+}
+
+/// An editor must report unreadable rules so a subsequent save preserves them.
+pub fn rules_for_editing(conn: &Connection) -> Result<Vec<Rule>> {
+    decode_rules(rule_data(conn)?)
+        .map_err(|err| anyhow::anyhow!("could not read saved mail rules: {err}"))
+}
+
+fn rule_data(conn: &Connection) -> Result<Option<serde_json::Value>> {
+    let mut stored = super::settings_get(conn, &[RULES_KEY.to_string()])?;
+    Ok(stored
+        .as_object_mut()
+        .and_then(|settings| settings.remove(RULES_KEY)))
+}
+
+fn decode_rules(value: Option<serde_json::Value>) -> serde_json::Result<Vec<Rule>> {
+    let rules: Vec<Rule> = value
+        .map(serde_json::from_value)
+        .transpose()?
         .unwrap_or_default();
     Ok(rules.into_iter().map(Rule::upgrade).collect())
 }
@@ -434,83 +450,243 @@ fn rule_matching_uids(
         .collect())
 }
 
+fn clean_rule(rule: Rule) -> Result<Rule> {
+    let query = rule.query.trim().to_string();
+    let mut rule = rule.upgrade();
+    anyhow::ensure!(
+        query.is_empty() || !SearchQuery::parse(&query).is_empty(),
+        "a rule's search means nothing"
+    );
+    rule.conditions = rule
+        .conditions
+        .into_iter()
+        .map(RuleCondition::clean)
+        .collect::<Result<_>>()?;
+    if rule.conditions.len() < 2 {
+        rule.match_any = false;
+    }
+    anyhow::ensure!(
+        (0..=315_360_000).contains(&rule.delay_seconds),
+        "a rule's delay must be between zero and ten years"
+    );
+    let tags = serde_json::json!(rule.tags);
+    rule.tags = crate::tags::parse_tag_list(Some(&tags)).map_err(anyhow::Error::msg)?;
+    rule.folder = rule.folder.trim().to_string();
+    match rule.move_to.as_str() {
+        "" | "archive" | "trash" => {
+            rule.folder.clear();
+            rule.folder_account.clear();
+        }
+        "folder" => anyhow::ensure!(!rule.folder.is_empty(), "a rule needs a folder"),
+        other => anyhow::bail!("unknown rule move: {other}"),
+    }
+    rule.accounts.sort();
+    rule.accounts.dedup();
+    rule.copy_folder = rule.copy_folder.trim().to_string();
+    anyhow::ensure!(
+        rule.copy_folder.is_empty() == rule.copy_account.is_empty(),
+        "a rule's copy needs an account and a folder"
+    );
+    anyhow::ensure!(
+        !rule.sent || (rule.trigger == RuleTrigger::Arrival && rule.delay_seconds == 0),
+        "a rule for sent mail runs right away"
+    );
+    rule.forward_to = crate::smtp::normalize_recipients(&rule.forward_to)
+        .map_err(|err| anyhow::anyhow!("a rule's forward: {err}"))?;
+    anyhow::ensure!(
+        !rule.sent || (!rule.mark_read && rule.move_to.is_empty() && rule.forward_to.is_empty()),
+        "a rule for sent mail can't move it, mark it read or forward it"
+    );
+    anyhow::ensure!(
+        !rule.sent || !rule.reads_body(),
+        "a rule for sent mail can't check the body"
+    );
+    anyhow::ensure!(rule.has_action(), "a rule needs an action");
+    if rule.id.is_empty() {
+        rule.id = uuid::Uuid::new_v4().to_string();
+    }
+    Ok(rule)
+}
+
 /// Replace the rules, refusing any that could never apply.
 pub fn set_rules(conn: &Connection, incoming: Vec<Rule>) -> Result<Vec<Rule>> {
-    // Also used inside tag-renaming transactions. Keep rules and their event
-    // cutoffs atomic without nesting a transaction in that case.
-    let tx = if conn.is_autocommit() {
-        Some(Transaction::new_unchecked(
-            conn,
-            TransactionBehavior::Immediate,
-        )?)
-    } else {
-        None
-    };
-    let previous = rules(conn)?;
-    let mut clean = Vec::with_capacity(incoming.len());
-    for rule in incoming {
-        let query = rule.query.trim().to_string();
-        let mut rule = rule.upgrade();
-        anyhow::ensure!(
-            query.is_empty() || !SearchQuery::parse(&query).is_empty(),
-            "a rule's search means nothing"
-        );
-        rule.conditions = rule
-            .conditions
-            .into_iter()
-            .map(RuleCondition::clean)
-            .collect::<Result<_>>()?;
-        if rule.conditions.len() < 2 {
-            rule.match_any = false;
-        }
-        anyhow::ensure!(
-            (0..=315_360_000).contains(&rule.delay_seconds),
-            "a rule's delay must be between zero and ten years"
-        );
-        let tags = serde_json::json!(rule.tags);
-        rule.tags = crate::tags::parse_tag_list(Some(&tags)).map_err(anyhow::Error::msg)?;
-        rule.folder = rule.folder.trim().to_string();
-        match rule.move_to.as_str() {
-            "" | "archive" | "trash" => {
-                rule.folder.clear();
-                rule.folder_account.clear();
-            }
-            "folder" => anyhow::ensure!(!rule.folder.is_empty(), "a rule needs a folder"),
-            other => anyhow::bail!("unknown rule move: {other}"),
-        }
-        rule.accounts.sort();
-        rule.accounts.dedup();
-        rule.copy_folder = rule.copy_folder.trim().to_string();
-        anyhow::ensure!(
-            rule.copy_folder.is_empty() == rule.copy_account.is_empty(),
-            "a rule's copy needs an account and a folder"
-        );
-        anyhow::ensure!(
-            !rule.sent || (rule.trigger == RuleTrigger::Arrival && rule.delay_seconds == 0),
-            "a rule for sent mail runs right away"
-        );
-        rule.forward_to = crate::smtp::normalize_recipients(&rule.forward_to)
-            .map_err(|err| anyhow::anyhow!("a rule's forward: {err}"))?;
-        anyhow::ensure!(
-            !rule.sent
-                || (!rule.mark_read && rule.move_to.is_empty() && rule.forward_to.is_empty()),
-            "a rule for sent mail can't move it, mark it read or forward it"
-        );
-        anyhow::ensure!(
-            !rule.sent || !rule.reads_body(),
-            "a rule for sent mail can't check the body"
-        );
-        anyhow::ensure!(rule.has_action(), "a rule needs an action");
-        if rule.id.is_empty() {
-            rule.id = uuid::Uuid::new_v4().to_string();
-        }
-        clean.push(rule);
+    // Also used inside tag-renaming transactions.
+    if !conn.is_autocommit() {
+        return replace_rules(conn, &rules(conn)?, incoming);
     }
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let saved = replace_rules(&tx, &rules(&tx)?, incoming)?;
+    tx.commit()?;
+    Ok(saved)
+}
+
+fn replace_rules(conn: &Connection, previous: &[Rule], incoming: Vec<Rule>) -> Result<Vec<Rule>> {
+    let clean = incoming
+        .into_iter()
+        .map(clean_rule)
+        .collect::<Result<Vec<_>>>()?;
+    save_rules(conn, previous, &clean, None)?;
+    Ok(clean)
+}
+
+/// Replace the list only if it still matches the editor's snapshot.
+pub fn set_rules_if_current(
+    conn: &Connection,
+    expected: &[Rule],
+    incoming: Vec<Rule>,
+) -> Result<(Vec<Rule>, bool)> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let current = rules_for_editing(&tx)?;
+    if current != expected {
+        return Ok((current, false));
+    }
+    let saved = replace_rules(&tx, &current, incoming)?;
+    tx.commit()?;
+    Ok((saved, true))
+}
+
+pub enum RuleEdit {
+    Create(Rule),
+    Update(String, serde_json::Map<String, serde_json::Value>),
+    Delete(String),
+}
+
+/// Change a single rule without overwriting concurrent edits to the list.
+pub fn edit_rule(conn: &Connection, edit: RuleEdit) -> Result<Rule> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let previous = rules_for_editing(&tx)?;
+    let mut next = previous.clone();
+    let mut restart_events = false;
+    let changed = match edit {
+        RuleEdit::Create(mut rule) => {
+            rule.id.clear();
+            let rule = clean_rule(rule)?;
+            validate_rule_edit(&tx, None, &rule)?;
+            next.push(rule.clone());
+            rule
+        }
+        RuleEdit::Update(id, changes) => {
+            let index = rule_index(&next, &id)?;
+            let mut values = serde_json::to_value(&next[index])?;
+            values.as_object_mut().unwrap().extend(changes);
+            let mut rule: Rule = serde_json::from_value(values)?;
+            rule.id = id;
+            let rule = clean_rule(rule)?;
+            validate_rule_edit(&tx, Some(&next[index]), &rule)?;
+            restart_events = rule != next[index];
+            next[index] = rule.clone();
+            rule
+        }
+        RuleEdit::Delete(id) => {
+            let index = rule_index(&next, &id)?;
+            next.remove(index)
+        }
+    };
+    save_rules(
+        &tx,
+        &previous,
+        &next,
+        restart_events.then_some(changed.id.as_str()),
+    )?;
+    tx.commit()?;
+    Ok(changed)
+}
+
+fn rule_index(rules: &[Rule], id: &str) -> Result<usize> {
+    anyhow::ensure!(!id.trim().is_empty(), "rule_id is required");
+    let mut matches = rules.iter().enumerate().filter(|(_, rule)| rule.id == id);
+    let (index, _) = matches
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("no such rule: {id}"))?;
+    anyhow::ensure!(matches.next().is_none(), "more than one rule has ID {id}");
+    Ok(index)
+}
+
+fn validate_rule_edit(conn: &Connection, previous: Option<&Rule>, rule: &Rule) -> Result<()> {
+    anyhow::ensure!(
+        rule.trigger != RuleTrigger::Age || rule.disabled || previous == Some(rule),
+        "age rules can act on existing Inbox mail. Save the rule disabled and enable it in Meron."
+    );
+
+    // Recheck all targets when turning a rule back on. Otherwise validate the
+    // changed targets so a missing account or folder can't prevent turning it off.
+    let previous = previous.filter(|old| !old.disabled || rule.disabled);
+    let scope_changed = previous.is_none_or(|old| old.accounts != rule.accounts);
+    let move_changed = previous
+        .is_none_or(|old| old.folder != rule.folder || old.folder_account != rule.folder_account)
+        || (scope_changed && rule.folder_account.is_empty());
+    let copy_changed = previous.is_none_or(|old| {
+        old.copy_folder != rule.copy_folder || old.copy_account != rule.copy_account
+    });
+    if !scope_changed && !move_changed && !copy_changed {
+        return Ok(());
+    }
+    let accounts = mail_rule_account_ids(conn)?;
+    if scope_changed {
+        for id in &rule.accounts {
+            anyhow::ensure!(accounts.contains(id), "unknown mail account: {id}");
+        }
+    }
+    if move_changed && !rule.folder.is_empty() {
+        if rule.folder_account.is_empty() {
+            validate_relative_move(conn, &accounts, rule)?;
+        } else {
+            validate_rule_folder(conn, &accounts, &rule.folder_account, &rule.folder)?;
+        }
+    }
+    if copy_changed && !rule.copy_folder.is_empty() {
+        validate_rule_folder(conn, &accounts, &rule.copy_account, &rule.copy_folder)?;
+    }
+    Ok(())
+}
+
+fn validate_rule_folder(
+    conn: &Connection,
+    accounts: &[String],
+    id: &str,
+    folder: &str,
+) -> Result<()> {
+    anyhow::ensure!(
+        accounts.iter().any(|account| account == id),
+        "unknown mail account: {id}"
+    );
+    let wanted = crate::mail_model::canon_folder(folder);
+    anyhow::ensure!(
+        super::folder_exists(conn, id, &wanted)?,
+        "unknown folder {folder} in account {id}. Refresh its folder list first."
+    );
+    Ok(())
+}
+
+fn validate_relative_move(conn: &Connection, accounts: &[String], rule: &Rule) -> Result<()> {
+    // The engine skips source accounts where the folder is absent.
+    for account in accounts
+        .iter()
+        .filter(|id| rule.accounts.is_empty() || rule.accounts.contains(id))
+    {
+        if matching_rule_folder(conn, account, &rule.folder)?.is_some() {
+            return Ok(());
+        }
+    }
+    anyhow::bail!(
+        "unknown folder {} in the rule's mail accounts. Refresh their folder lists first.",
+        rule.folder
+    )
+}
+
+/// Persist the rules together with their event cutoffs.
+fn save_rules(
+    conn: &Connection,
+    previous: &[Rule],
+    clean: &[Rule],
+    restart_events_for: Option<&str>,
+) -> Result<()> {
     // Rules acting right away that start or stop waiting for the body start
     // afresh, as a delayed rule does, rather than take up events from before.
-    let holds_changed = arrival_holds(&previous) != arrival_holds(&clean);
-    for rule in &clean {
-        let timing_unchanged = !(holds_changed && rule.on_arrival())
+    let holds_changed = arrival_holds(previous) != arrival_holds(clean);
+    for rule in clean {
+        let timing_unchanged = restart_events_for != Some(rule.id.as_str())
+            && !(holds_changed && rule.on_arrival())
             && previous.iter().any(|old| {
                 old.id == rule.id
                 && old.trigger == rule.trigger
@@ -536,17 +712,14 @@ pub fn set_rules(conn: &Connection, incoming: Vec<Rule>) -> Result<Vec<Rule>> {
             )?;
         }
     }
-    let stored = stored_rules(&clean);
+    let stored = stored_rules(clean);
     for table in ["rule_activation", "rule_evaluations", "rule_firings"] {
         conn.execute(&format!(
             "DELETE FROM {table} WHERE rule_id NOT IN (SELECT json_extract(value, '$.id') FROM json_each(?1))"
         ), [stored.to_string()])?;
     }
     super::setting_set(conn, RULES_KEY, &stored)?;
-    if let Some(tx) = tx {
-        tx.commit()?;
-    }
-    Ok(clean)
+    Ok(())
 }
 
 /// A rule's server work on one message, waiting for the sync that matched it to
@@ -642,13 +815,7 @@ fn rule_move(
             super::get_folders(conn, account)?,
             folder,
         ),
-        "folder" => {
-            let wanted = crate::mail_model::canon_folder(&rule.folder);
-            super::get_folders(conn, account)?
-                .into_iter()
-                .find(|item| item.name == wanted || item.display_name == rule.folder)
-                .map(|item| item.name)
-        }
+        "folder" => matching_rule_folder(conn, account, &rule.folder)?,
         _ => return Ok(None),
     };
     let Some(target) = target else {
@@ -665,6 +832,14 @@ fn rule_move(
         target,
         copy: None,
     }))
+}
+
+fn matching_rule_folder(conn: &Connection, account: &str, folder: &str) -> Result<Option<String>> {
+    let wanted = crate::mail_model::canon_folder(folder);
+    Ok(super::get_folders(conn, account)?
+        .into_iter()
+        .find(|item| item.name == wanted || item.display_name == folder)
+        .map(|item| item.name))
 }
 
 /// Where `rule` copies mail in `folder`, unless that is where it already is.
@@ -1274,24 +1449,67 @@ pub fn saved_rule_folder(conn: &Connection, id: &str, account: &str) -> Result<O
 }
 
 /// The accounts `rule` can run on: its own, or every account with a server.
-fn rule_accounts(conn: &Connection, rule: &Rule) -> Result<Vec<String>> {
-    let field = |account: &serde_json::Value, name: &str| {
-        account[name].as_str().unwrap_or_default().to_string()
-    };
-    Ok(super::list_accounts(conn)?
-        .iter()
-        .filter(|account| field(account, "engine") != "rss" && field(account, "provider") != "rss")
-        .map(|account| field(account, "id"))
-        .filter(|id| !super::is_local_account(id))
+pub(crate) fn rule_accounts(conn: &Connection, rule: &Rule) -> Result<Vec<String>> {
+    Ok(mail_rule_account_ids(conn)?
+        .into_iter()
         .filter(|id| rule.accounts.is_empty() || rule.accounts.contains(id))
         .collect())
 }
 
-fn saved_rule(conn: &Connection, id: &str) -> Result<Rule> {
+fn mail_rule_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
+    Ok(super::list_accounts(conn)?
+        .into_iter()
+        .filter(|account| {
+            account["engine"].as_str() != Some("rss")
+                && account["provider"].as_str() != Some("rss")
+                && account["id"]
+                    .as_str()
+                    .is_some_and(|id| !super::is_local_account(id))
+        })
+        .collect())
+}
+
+fn mail_rule_account_ids(conn: &Connection) -> Result<Vec<String>> {
+    Ok(mail_rule_accounts(conn)?
+        .iter()
+        .filter_map(|account| account["id"].as_str().map(str::to_owned))
+        .collect())
+}
+
+/// The cached account and folder identifiers used by saved mail rules.
+pub fn rule_targets(conn: &Connection) -> Result<serde_json::Value> {
+    let mut targets = Vec::new();
+    for account in mail_rule_accounts(conn)? {
+        let id = account["id"].as_str().unwrap_or_default();
+        let name = account["display_name"]
+            .as_str()
+            .filter(|name| !name.is_empty())
+            .or_else(|| account["email"].as_str().filter(|email| !email.is_empty()))
+            .unwrap_or(id);
+        let folders: Vec<_> = super::get_folders(conn, id)?
+            .into_iter()
+            .map(|folder| serde_json::json!({ "id": folder.name, "name": folder.display_name }))
+            .collect();
+        targets.push(serde_json::json!({ "id": id, "name": name, "folders": folders }));
+    }
+    Ok(serde_json::json!({ "accounts": targets }))
+}
+
+pub(crate) fn saved_rule(conn: &Connection, id: &str) -> Result<Rule> {
     rules(conn)?
         .into_iter()
         .find(|rule| rule.id == id)
         .ok_or_else(|| anyhow::anyhow!("no such rule: {id}"))
+}
+
+/// Check the rule that the editor displayed before applying it to existing mail.
+pub fn require_current_rule(conn: &Connection, id: &str, expected: &Rule) -> Result<Rule> {
+    let rule = saved_rule(conn, id)?;
+    anyhow::ensure!(
+        rule == *expected,
+        "review the changed rule before running it"
+    );
+    Ok(rule)
 }
 
 /// The accounts a saved rule can run on.
@@ -1360,8 +1578,19 @@ pub fn count_existing_rule_without_body(conn: &Connection, id: &str) -> Result<u
 /// run. And [`crate::engine`] asks the target before each copy, so
 /// running a rule twice doesn't double what it did.
 pub fn queue_existing_rule(conn: &Connection, id: &str) -> Result<Vec<(String, usize)>> {
+    let rule = saved_rule(conn, id)?;
+    Ok(queue_existing_rule_checked(conn, &rule)?
+        .into_iter()
+        .map(|(account, _, count)| (account, count))
+        .collect())
+}
+
+pub(crate) fn queue_existing_rule_checked(
+    conn: &Connection,
+    expected: &Rule,
+) -> Result<Vec<(String, String, usize)>> {
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
-    let rule = saved_rule(&tx, id)?;
+    let rule = require_current_rule(&tx, &expected.id, expected)?;
     anyhow::ensure!(!rule.disabled, "the rule is turned off");
     let run = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
@@ -1398,7 +1627,7 @@ pub fn queue_existing_rule(conn: &Connection, id: &str) -> Result<Vec<(String, u
         queue_rule_actions(&tx, &account, &actions, run)?;
         if count > 0 {
             log_rule(&tx, &rule.id, &account, "", count, None)?;
-            queued.push((account, count));
+            queued.push((account, folder.to_string(), count));
         }
     }
     trim_rule_log(&tx)?;
@@ -1572,3 +1801,6 @@ mod timing_tests;
 
 #[cfg(test)]
 mod sent_tests;
+
+#[cfg(test)]
+mod edit_tests;

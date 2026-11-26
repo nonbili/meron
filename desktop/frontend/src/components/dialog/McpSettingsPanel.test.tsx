@@ -113,6 +113,7 @@ test('approval starts with no accounts and read only, and shows a credential onc
     drafts: false,
     manage_accounts: false,
     manage_settings: false,
+    manage_rules: false,
     organize: false,
     send: false,
     delete: false,
@@ -141,6 +142,25 @@ test('a setup-only client can be approved without mail accounts', async () => {
     accounts: [],
     manage_accounts: true,
     manage_settings: false,
+  })
+})
+
+test('a rule-management client can be approved without mail accounts', async () => {
+  accounts$.set([])
+  const view = render(<McpSettingsPanel />)
+  const name = await openEditor(view)
+  fireEvent.change(name, { target: { value: 'Rule manager' } })
+  const grant = view.getByRole('switch', { name: 'Manage mail rules' })
+  expect(grant.getAttribute('aria-checked')).toBe('false')
+  fireEvent.click(grant)
+  expect(view.getByText(/Moving mail to another account, copying it, or forwarding it can expose mail/)).toBeTruthy()
+  fireEvent.click(view.getByText('Create credential'))
+  expect(await view.findByText('Manage mail rules · Allow without asking')).toBeTruthy()
+  expect(calls.find((call) => call.command === 'mcp.clientSave')?.payload).toMatchObject({
+    accounts: [],
+    manage_accounts: false,
+    manage_settings: false,
+    manage_rules: true,
   })
 })
 

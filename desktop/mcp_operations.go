@@ -21,6 +21,8 @@ const (
 	mcpDelete            mcpPermission = "delete"
 	mcpManageAccounts    mcpPermission = "manage_accounts"
 	mcpManageSettings    mcpPermission = "manage_settings"
+	mcpManageRules       mcpPermission = "manage_rules"
+	mcpReadRules         mcpPermission = "read_rules"
 	mcpReadAccounts      mcpPermission = "read_accounts"
 	mcpReadSettings      mcpPermission = "read_settings"
 	mcpReadConfiguration mcpPermission = "read_configuration"
@@ -45,6 +47,8 @@ func mcpPermitted(c mcpClient, p mcpPermission) bool {
 		return c.ManageAccounts || c.ManageSettings
 	case mcpManageSettings, mcpReadSettings:
 		return c.ManageSettings
+	case mcpManageRules, mcpReadRules:
+		return c.ManageRules
 	}
 	return false
 }

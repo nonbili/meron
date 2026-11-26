@@ -28,10 +28,26 @@ const RULE_COPY_BUDGET: Duration = Duration::from_secs(600);
 /// messages it took on once they are queued; the server work goes on in the
 /// background, and whatever an interruption leaves is done by the next sync.
 pub async fn run_rule_on_existing(engine: &Arc<Engine>, id: &str) -> anyhow::Result<usize> {
+    run_rule_on_existing_if_current(engine, id, None).await
+}
+
+pub async fn run_rule_on_existing_if_current(
+    engine: &Arc<Engine>,
+    id: &str,
+    expected: Option<&store::Rule>,
+) -> anyhow::Result<usize> {
     // With every turn on these accounts out of the way: one mid-move would take a
     // message away from under what is queued here. In a set order, so that two
     // runs can't each hold what the other is waiting for.
-    let mut accounts = store::saved_rule_accounts(&engine.db.lock().unwrap(), id)?;
+    let (rule, mut accounts) = {
+        let db = engine.db.lock().unwrap();
+        let rule = match expected {
+            Some(rule) => store::require_current_rule(&db, id, rule)?,
+            None => store::saved_rule(&db, id)?,
+        };
+        let accounts = store::rule_accounts(&db, &rule)?;
+        (rule, accounts)
+    };
     accounts.sort();
     let mut turns = Vec::with_capacity(accounts.len());
     for account in &accounts {
@@ -50,12 +66,10 @@ pub async fn run_rule_on_existing(engine: &Arc<Engine>, id: &str) -> anyhow::Res
                 .map_err(|_| anyhow::anyhow!("the account is busy with rules"))?,
         );
     }
-    let queued = store::queue_existing_rule(&engine.db.lock().unwrap(), id)?;
+    let queued = store::queue_existing_rule_checked(&engine.db.lock().unwrap(), &rule)?;
     drop(turns);
-    let total = queued.iter().map(|(_, count)| count).sum();
-    for (account, _) in queued {
-        let folder = store::saved_rule_folder(&engine.db.lock().unwrap(), id, &account)?
-            .unwrap_or_else(|| store::EXISTING_RULE_FOLDER.to_string());
+    let total = queued.iter().map(|(_, _, count)| count).sum();
+    for (account, folder, _) in queued {
         // Tags are already saved, and a run of nothing else queues no turns.
         report_rule_progress(engine, &account, &folder);
         spawn_tag_push(engine, &account);

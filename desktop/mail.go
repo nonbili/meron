@@ -668,7 +668,7 @@ func (a *App) setRules(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, fmt.Errorf("mail core is not running")
 	}
-	return a.sidecar.Call("rules.set", map[string]any{"rules": payload["rules"]})
+	return a.sidecar.Call("rules.set", map[string]any{"rules": payload["rules"], "expected_rules": payload["expected_rules"]})
 }
 
 // ruleMatches counts the mail already in the Inbox that a saved rule would run on.
@@ -676,7 +676,7 @@ func (a *App) ruleMatches(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, fmt.Errorf("mail core is not running")
 	}
-	return a.sidecar.Call("rules.matches", map[string]any{"id": payload["id"]})
+	return a.sidecar.Call("rules.matches", map[string]any{"id": payload["id"], "expected_rule": payload["expected_rule"]})
 }
 
 // runRule runs a saved rule over the mail already in the Inbox.
@@ -684,7 +684,7 @@ func (a *App) runRule(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, fmt.Errorf("mail core is not running")
 	}
-	return a.sidecar.Call("rules.run", map[string]any{"id": payload["id"]})
+	return a.sidecar.Call("rules.run", map[string]any{"id": payload["id"], "expected_rule": payload["expected_rule"]})
 }
 
 // ruleStatus answers with what rules did lately and what runs by hand have left.

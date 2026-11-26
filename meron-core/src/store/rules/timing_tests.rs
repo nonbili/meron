@@ -587,6 +587,41 @@ fn unchanged_rules_keep_their_pending_event_clocks() {
 }
 
 #[test]
+fn mcp_edits_only_process_arrival_and_read_events_from_after_the_edit() {
+    for trigger in [RuleTrigger::Arrival, RuleTrigger::Read] {
+        let conn = db();
+        let initial = Rule {
+            query: "subject:missing".into(),
+            ..rule(trigger, 300)
+        };
+        set_rules(&conn, vec![initial.clone()]).unwrap();
+        let observe = |uid| {
+            mail(&conn, uid, false, 100);
+            apply_rules(&conn, "a", "INBOX", 7, &[uid]).unwrap();
+            crate::store::update_message_seen(&conn, "a", "INBOX", uid, true).unwrap();
+            conn.execute(
+                "UPDATE rule_events SET arrived_at = 1000, read_at = 1000",
+                [],
+            )
+            .unwrap();
+        };
+        observe(1);
+        assert!(due(&conn, 2000).is_empty());
+        let changes = serde_json::json!({ "conditions": [], "move_to": "trash" });
+        edit_rule(
+            &conn,
+            RuleEdit::Update(initial.id, changes.as_object().unwrap().clone()),
+        )
+        .unwrap();
+        observe(2);
+        let queued = due(&conn, 2000);
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].uid, 2);
+        assert!(queued[0].trash);
+    }
+}
+
+#[test]
 fn age_checks_are_chunked_and_nonmatching_events_are_not_researched() {
     let conn = db();
     let timed = Rule {

@@ -3,13 +3,125 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func TestIntegrationMCPRules(t *testing.T) {
+	sidecar, _ := startSidecar(t)
+	app := &App{sidecar: sidecar}
+	s := testMCPService(t, app, false)
+	s.config.Clients[0].Organize = true
+	session := connectTestMCP(t, s)
+	list, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range list.Tools {
+		if strings.HasSuffix(tool.Name, "_rule") || tool.Name == "list_rules" || tool.Name == "list_rule_targets" {
+			t.Fatalf("rule tool without Manage mail rules: %s", tool.Name)
+		}
+	}
+
+	s.mu.Lock()
+	s.config.Clients[0].Accounts = nil
+	s.config.Clients[0].Organize = false
+	s.config.Clients[0].ManageRules = true
+	s.mu.Unlock()
+
+	call := func(name string, args map[string]any) map[string]any {
+		t.Helper()
+		return operationResult(t, callMCP(t, session, name, args))
+	}
+	listRules := func() []any {
+		t.Helper()
+		return call("list_rules", map[string]any{})["rules"].([]any)
+	}
+	create := func(rule map[string]any) map[string]any {
+		t.Helper()
+		return call("create_rule", map[string]any{"rule": rule})["rule"].(map[string]any)
+	}
+	first := create(map[string]any{
+		"conditions": []map[string]any{{"field": "subject", "value": "Invoice"}, {"field": "attachment"}},
+		"trigger":    "read", "delay_seconds": 300, "tags": []string{" Receipts "}, "disabled": true,
+	})
+	id := str(first, "id")
+	if id == "" || !reflect.DeepEqual(first["tags"], []any{"receipts"}) || first["disabled"] != true {
+		t.Fatalf("created rule = %v", first)
+	}
+	snapshot := []any{first}
+	second := create(map[string]any{"star": true})
+	if second["disabled"] != true {
+		t.Fatalf("new rule was enabled by default: %v", second)
+	}
+	if targets := call("list_rule_targets", map[string]any{}); len(targets["accounts"].([]any)) != 0 {
+		t.Fatalf("targets of an empty profile = %v", targets)
+	}
+	age := create(map[string]any{"trigger": "age", "star": true})
+	if !callMCP(t, session, "update_rule", map[string]any{
+		"rule_id": age["id"], "rule": map[string]any{"disabled": false},
+	}).IsError {
+		t.Fatal("activated an age rule over MCP")
+	}
+	call("delete_rule", map[string]any{"rule_id": age["id"]})
+	updated := call("update_rule", map[string]any{
+		"rule_id": id, "rule": map[string]any{"move_to": "archive"},
+	})["rule"].(map[string]any)
+	if updated["id"] != id || updated["move_to"] != "archive" || updated["disabled"] != true ||
+		!reflect.DeepEqual(updated["tags"], first["tags"]) || !reflect.DeepEqual(updated["conditions"], first["conditions"]) {
+		t.Fatalf("updated rule = %v", updated)
+	}
+
+	failed := callMCP(t, session, "update_rule", map[string]any{
+		"rule_id": id, "rule": map[string]any{"move_to": "", "tags": []string{}},
+	})
+	if !failed.IsError || !reflect.DeepEqual(listRules(), []any{updated, second}) {
+		t.Fatal("invalid edit changed the list or a valid edit changed rule order")
+	}
+	updated = call("update_rule", map[string]any{
+		"rule_id": id, "rule": map[string]any{"disabled": false, "tags": []string{}, "delay_seconds": 0},
+	})["rule"].(map[string]any)
+	if updated["disabled"] != false || len(updated["tags"].([]any)) != 0 || updated["delay_seconds"] != float64(0) {
+		t.Fatalf("explicitly cleared fields = %v", updated)
+	}
+	if !callMCP(t, session, "create_rule", map[string]any{
+		"rule": map[string]any{"star": true, "accounts": []string{"unknown"}},
+	}).IsError {
+		t.Fatal("created a rule for an unknown account")
+	}
+	if !callMCP(t, session, "delete_rule", map[string]any{"rule_id": "missing"}).IsError {
+		t.Fatal("deleted a missing rule")
+	}
+	stale := callMap(t, sidecar, "rules.set", map[string]any{"rules": snapshot, "expected_rules": snapshot})
+	if stale["conflict"] != true || !reflect.DeepEqual(stale["rules"], listRules()) {
+		t.Fatalf("stale desktop save = %v", stale)
+	}
+	if _, err := app.runRule(map[string]any{"id": id, "expected_rule": first}); err == nil {
+		t.Fatal("ran a changed rule using its old definition")
+	}
+	if _, err := app.ruleMatches(map[string]any{"id": id, "expected_rule": first}); err == nil {
+		t.Fatal("counted matches for a changed rule using its old definition")
+	}
+	call("delete_rule", map[string]any{"rule_id": id})
+	visible, err := app.rules()
+	if err != nil || !reflect.DeepEqual(visible.(map[string]any)["rules"], []any{second}) {
+		t.Fatalf("desktop rules after deletion = %v (%v)", visible, err)
+	}
+
+	s.mu.Lock()
+	s.config.Clients[0].ManageRules = false
+	s.mu.Unlock()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_rules", Arguments: map[string]any{}})
+	if err == nil && !result.IsError {
+		t.Fatal("existing session can still list rules after permission was removed")
+	}
+}
 
 // Exercise the public MCP transport against the real core and mail server.
 // Mutations are checked over independent IMAP connections, not the core cache.

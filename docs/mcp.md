@@ -84,8 +84,9 @@ Every approved client can read its selected accounts, or every current and futur
 account when **All accounts, including future accounts** is enabled. This scope
 does not enable any action or configuration permission. It can be approved before
 any accounts exist. Disable it to return to the client's individual selections.
-Organizing, draft creation, sending and permanent deletion are separate, optional
-permissions.
+Direct organizing, draft creation, sending and permanent deletion each have
+their own optional permission. **Manage mail rules** is a device-wide grant
+with its own effects on mail across accounts. See [Managing mail rules](#managing-mail-rules).
 Edit access or revoke a client in the same panel. Disabling MCP stops the
 listener and keeps grants for later use. Revoking deletes the grant and
 invalidates its credential. Any change to MCP settings or grants also cancels
@@ -135,6 +136,11 @@ results are kept for one hour while Meron runs.
 | `list_folders` | Folders for one approved account. |
 | `search_messages` | Up to 50 conversations, from one account or from every approved account at once when `account_id` is omitted; defaults to INBOX and cached results. `filter: "unread"` or `"starred"` narrows the page before it is returned. Text search includes the selected folder and Sent; `tag:name` finds tagged mail anywhere in the account outside Trash and Junk, and is answered from the local cache. Use `server_search: true` with a query to search the mail server. RSS searches use the local cache. |
 | `list_tags` | The tags in use in one approved account, with how many messages carry each. |
+| `list_rules` | Lists saved mail rules in evaluation order, including their IDs and full definitions. Requires **Manage mail rules**. |
+| `list_rule_targets` | Lists mail account and cached folder IDs and names for rules. Requires **Manage mail rules**. |
+| `create_rule` | Appends a rule and returns the saved definition with its new ID. Requires **Manage mail rules**. |
+| `update_rule` | Edits the supplied fields of a rule by `rule_id`, keeping its ID and position. Requires **Manage mail rules**. |
+| `delete_rule` | Removes one rule by `rule_id`. Requires **Manage mail rules**. |
 | `read_thread` | Up to 50 messages using an exact thread ID from search; accepts a pagination cursor. Each message carries a `reply` object with the recipients a reply to it should use. Missing bodies may be filled in the background, so a subsequent read may be needed. |
 | `read_attachment` | Returns one cached attachment from an approved account as base64, up to 5 MiB. The key comes from `read_thread`; bytes exist only after that call cached the message. |
 | `create_draft` | Optional: creates a new plain text draft with recipients, subject and body, plus `in_reply_to` and `references` to keep a reply in its thread. Review and send it in Meron. |
@@ -145,6 +151,55 @@ results are kept for one hour while Meron runs.
 | `delete_permanently` | Optional: permanently deletes the exact selected UIDs, skipping Trash. Requires IMAP UIDPLUS. Usually returns `pending_approval`. |
 | `empty_trash` | Optional: snapshots the Trash folder (at most 1000 messages) and permanently deletes that snapshot; later arrivals are excluded. Usually returns `pending_approval`. |
 | `operation_status` | Reports the outcome of an operation from the three tools above. Remains available after a permission is removed so a client can learn its own result. |
+
+### Managing mail rules
+
+Enable **Manage mail rules** on the MCP client in Meron Settings. This is an
+off-by-default, device-wide permission. It covers rules for any mail account
+and works without selecting accounts. Grant it only to clients you trust with
+mail across all accounts. The rule list includes account IDs and forwarding
+addresses. The target list includes account IDs, display names or email
+addresses, and cached folder names. Enabled rules can add tags, mark mail
+read, star, archive, move to Trash, or move or copy mail between accounts
+during sync without per-action approval. Moving or copying mail into an
+account the client can read can expose mail from other accounts. Rules can
+forward mail outside Meron without the Send permission or its approval prompt.
+Direct message tools retain their own grants.
+
+New MCP rules are disabled by default for review in Settings → Rules. Set
+`disabled: false` to activate an arrival or read rule. Age rules can apply to
+existing Inbox mail on the next sync, so save them disabled and enable them in
+Meron. To change an enabled age rule over MCP, include `disabled: true` in the
+update and review it in Meron before enabling it again.
+
+Pass a `rule` object to `create_rule`. This example stages a rule that tags
+mail from the given domain.
+
+```json
+{
+  "rule": {
+    "conditions": [{"field": "from", "value": "billing.example"}],
+    "tags": ["receipts"]
+  }
+}
+```
+
+To edit a rule, pass its `id` from `list_rules` as `rule_id` and send only the
+fields you want to change in `rule`. Omitted fields keep their saved values,
+including `disabled` and `accounts`. Pass `accounts: []` explicitly to apply
+the rule to all mail accounts, or `conditions: []` to match all mail in scope.
+An MCP edit starts a fresh event window for the changed rule. It evaluates
+arrival and read events recorded after the edit. Work already queued can
+finish after an edit or deletion.
+Each rule needs at least one action. Use `list_rule_targets` for mail account
+IDs and cached folder IDs, even when the client has no direct mail grants.
+Open the corresponding account in Meron to refresh folders that are missing
+from the cache. See the
+[mail rules guide](rules.md) for condition, timing, and action behavior.
+Each create call appends a rule, so check the list before retrying after a
+lost response.
+
+### Searching and acting on mail
 
 Omitting `account_id` searches the inboxes of every approved account and merges
 them newest first. The fan-out happens in the MCP layer rather than through the
@@ -159,7 +214,7 @@ and query. Search responses identify their source; later search pages may use a
 server search or its cached snapshot. Cached results are not a complete
 inventory of a mailbox.
 
-Mutating tools act on one account at a time and take 1–1000 exact UIDs; the UID
+Tools that act on selected messages take one account and 1–1000 exact UIDs. The UID
 is the final numeric component of a message ID from `read_thread`. Draft
 creation always generates a new message ID and never touches an existing draft.
 `update_draft` replaces a draft wholesale, so every field must be sent again;

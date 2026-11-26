@@ -29,15 +29,23 @@ const stopped: string[] = []
 let statusReply: RuleStatus = { log: [], running: {} }
 let matches = 0
 let withoutBody = 0
+let storedRules: Rule[] = []
 
 function stubCore(initial: Rule[], refuse = false) {
   const saved: Rule[][] = []
+  storedRules = initial
   ;(window as any).go = {
     main: {
       App: {
         Invoke: async (command: string, payload: any) => {
-          if (command === 'mail.rules') return { rules: initial }
+          if (command === 'mail.rules') return { rules: storedRules }
           if (command === 'mail.tagList') return { tags: [{ tag: 'receipts', count: 2 }] }
+          if (command === 'mail.ruleMatches' || command === 'mail.runRule') {
+            const current = storedRules.find((rule) => rule.id === payload.id)
+            if (JSON.stringify(payload.expected_rule) !== JSON.stringify(current)) {
+              throw new Error('review the changed rule before running it')
+            }
+          }
           if (command === 'mail.ruleMatches') return { count: matches, without_body: withoutBody }
           if (command === 'mail.ruleStatus') return statusReply
           if (command === 'mail.stopRule') {
@@ -51,8 +59,12 @@ function stubCore(initial: Rule[], refuse = false) {
           }
           if (command !== 'mail.setRules') return { tags: [] }
           if (refuse) throw new Error('a rule needs an action')
+          if (JSON.stringify(payload.expected_rules) !== JSON.stringify(storedRules)) {
+            return { rules: storedRules, conflict: true }
+          }
           saved.push(payload.rules)
-          return { rules: payload.rules.map((rule: Rule, at: number) => ({ ...rule, id: rule.id || `new${at}` })) }
+          storedRules = payload.rules.map((rule: Rule, at: number) => ({ ...rule, id: rule.id || `new${at}` }))
+          return { rules: storedRules }
         },
       },
     },
@@ -69,6 +81,7 @@ afterEach(() => {
   statusReply = { log: [], running: {} }
   matches = 0
   withoutBody = 0
+  storedRules = []
   settleConfirm(false)
 })
 
@@ -78,6 +91,47 @@ it('sums up what each rule does', async () => {
   await waitFor(() => expect(view.getByText('From: billing')).toBeTruthy())
   expect(view.getByText('Tag finance · Mark as read · Move to Archive')).toBeTruthy()
   expect(view.queryByText('from:billing')).toBeNull()
+})
+
+it('keeps an unsaved edit when another client changes the rule list', async () => {
+  const saved = stubCore([bills])
+  const view = render(<RulesPanel />)
+  fireEvent.click(await view.findByLabelText('Edit rule'))
+  fireEvent.change(view.getByLabelText('From'), { target: { value: 'invoice' } })
+  const remote = { ...bills, id: 'remote', conditions: from('mcp') }
+  storedRules = [bills, remote]
+  fireEvent.click(view.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect((view.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false))
+  expect((view.getByLabelText('From') as HTMLInputElement).value).toBe('invoice')
+  expect(saved).toHaveLength(0)
+  fireEvent.click(view.getByRole('button', { name: 'Save' }))
+  expect(await view.findByText('From: mcp')).toBeTruthy()
+  expect(view.getByText('From: invoice')).toBeTruthy()
+})
+
+it('shows when saving the draft again would replace a newer version of the same rule', async () => {
+  const saved = stubCore([bills])
+  const view = render(<RulesPanel />)
+  fireEvent.click(await view.findByLabelText('Edit rule'))
+  fireEvent.change(view.getByLabelText('From'), { target: { value: 'invoice' } })
+  storedRules = [{ ...bills, accounts: ['work'] }]
+  fireEvent.click(view.getByRole('button', { name: 'Save' }))
+  expect((await view.findByRole('alert')).textContent).toContain(
+    'Saving again replaces the newer version with your draft.',
+  )
+  expect((view.getByLabelText('From') as HTMLInputElement).value).toBe('invoice')
+  expect(saved).toHaveLength(0)
+})
+
+it('refreshes the list before offering to run an externally edited rule', async () => {
+  stubCore([bills])
+  const view = render(<RulesPanel />)
+  await view.findByText('From: billing')
+  storedRules = [{ ...bills, conditions: from('mcp') }]
+  fireEvent.click(view.getByLabelText('Run on existing mail'))
+  expect(await view.findByText('From: mcp')).toBeTruthy()
+  expect(ui$.confirm.get()).toBeNull()
+  expect(ran).toHaveLength(0)
 })
 
 it('keeps the form closed until asked for, and closes it on cancel', async () => {

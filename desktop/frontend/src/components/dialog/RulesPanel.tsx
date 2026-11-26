@@ -186,6 +186,7 @@ export function RulesPanel() {
   // which as a list would mean all of them.
   const [scoped, setScoped] = useState(false)
   const [invalid, setInvalid] = useState(false)
+  const [editConflict, setEditConflict] = useState(false)
   const [starting, setStarting] = useState<string | null>(null)
   const [status, setStatus] = useState<RuleStatus>({ log: [], running: {} })
   const conditionSummary = useConditionSummary()
@@ -218,7 +219,7 @@ export function RulesPanel() {
   const run = async (rule: Rule) => {
     setStarting(rule.id)
     try {
-      const { count, withoutBody } = await ruleMatches(rule.id)
+      const { count, withoutBody } = await ruleMatches(rule)
       // A rule reading the body can't tell about mail whose body isn't here.
       const skipped = withoutBody > 0 ? t('rules.runWithoutBody', { count: withoutBody }) : ''
       if (count === 0) {
@@ -241,9 +242,12 @@ export function RulesPanel() {
         tone: removes || forwards ? 'danger' : 'default',
       })
       if (!confirmed) return
-      showToast(t('rules.runStarted', { count: await runRule(rule.id) }))
+      showToast(t('rules.runStarted', { count: await runRule(rule) }))
     } catch {
-      showToast(t('rules.runFailed'), 'error')
+      const latest = await loadRules().catch(() => null)
+      const changed = latest && JSON.stringify(latest.find((item) => item.id === rule.id)) !== JSON.stringify(rule)
+      if (latest && changed) setRules((current) => (current === rules ? latest : current))
+      showToast(t(changed ? 'rules.changedElsewhere' : 'rules.runFailed'), 'error')
     } finally {
       setStarting(null)
       refreshStatus()
@@ -276,7 +280,7 @@ export function RulesPanel() {
     if (!rules || saving || to < 0 || to >= rules.length || from === to) return
     const next = arrayMove(rules, from, to)
     setRules(next)
-    if (!(await save(() => next))) setRules(rules)
+    await save(() => next)
   }
 
   const chosenAccounts = draft.accounts.filter(known)
@@ -308,15 +312,34 @@ export function RulesPanel() {
     setAdding(false)
     setScoped(false)
     setInvalid(false)
+    setEditConflict(false)
   }
 
   const save = async (next: () => Rule[] | Promise<Rule[]>) => {
-    if (saving) return false
+    if (!rules || saving) return false
     setSaving(true)
     try {
-      setRules(await saveRules(await next()))
+      const saved = await saveRules(await next(), rules)
+      setRules(saved.rules)
+      if (saved.conflict) {
+        if (editing) {
+          const latest = saved.rules.find((rule) => rule.id === editing)
+          if (!latest) {
+            setDraft((current) => ({ ...current, disabled: true }))
+            setEditing(null)
+            setAdding(true)
+            setEditConflict(false)
+          } else if (JSON.stringify(latest) !== JSON.stringify(rules.find((rule) => rule.id === editing))) {
+            setEditConflict(true)
+          }
+        }
+        setInvalid(false)
+        showToast(t('rules.changedElsewhere'), 'error')
+        return false
+      }
       return true
     } catch {
+      setRules(rules)
       setInvalid(true)
       return false
     } finally {
@@ -341,7 +364,7 @@ export function RulesPanel() {
         tags,
         accounts: chosenAccounts,
         // Editing doesn't turn a rule on or off.
-        disabled: rules.find((item) => item.id === editing)?.disabled ?? false,
+        disabled: rules.find((item) => item.id === editing)?.disabled ?? draft.disabled,
       }
       return editing ? rules.map((item) => (item.id === editing ? rule : item)) : [...rules, rule]
     })
@@ -635,6 +658,11 @@ export function RulesPanel() {
           )}
         </SettingsGroup>
 
+        {editConflict && (
+          <p role="alert" className="text-[0.6875rem] font-medium text-rose-500">
+            {t('rules.editConflict')}
+          </p>
+        )}
         {invalid && <p className="text-[0.6875rem] font-medium text-rose-500">{t('rules.invalid')}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={reset}>

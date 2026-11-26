@@ -18,6 +18,7 @@ type Client = {
   drafts: boolean
   manage_accounts: boolean
   manage_settings: boolean
+  manage_rules: boolean
   organize: boolean
   send: boolean
   delete: boolean
@@ -41,6 +42,7 @@ const emptyClient = (): Client => ({
   drafts: false,
   manage_accounts: false,
   manage_settings: false,
+  manage_rules: false,
   organize: false,
   send: false,
   delete: false,
@@ -285,6 +287,17 @@ export function McpSettingsPanel() {
             onChange={() => setEditor({ ...editor, manage_settings: !editor.manage_settings })}
           />
         </SettingsGroup>
+        <SettingsGroup title={t('rules.title')}>
+          <ToggleRow
+            title={t('mcp.manageRules')}
+            hint={editor.manage_rules ? undefined : t('mcp.manageRulesPermission')}
+            checked={editor.manage_rules}
+            onChange={() => setEditor({ ...editor, manage_rules: !editor.manage_rules })}
+          />
+          {editor.manage_rules && (
+            <p className="px-3.5 py-2 text-xs text-secondary">{t('mcp.manageRulesPermission')}</p>
+          )}
+        </SettingsGroup>
         <SettingsGroup title={t('mcp.permissions')}>
           <fieldset
             disabled={!editor.all_accounts && !editor.accounts.length}
@@ -355,7 +368,11 @@ export function McpSettingsPanel() {
             disabled={
               busy ||
               !editor.name.trim() ||
-              (!editor.all_accounts && !editor.accounts.length && !editor.manage_accounts && !editor.manage_settings)
+              (!editor.all_accounts &&
+                !editor.accounts.length &&
+                !editor.manage_accounts &&
+                !editor.manage_settings &&
+                !editor.manage_rules)
             }
           >
             {editor.id ? t('mcp.save') : t('mcp.approve')}
@@ -448,6 +465,9 @@ export function McpSettingsPanel() {
                 )}
                 {client.manage_settings && (
                   <Chip label={t('mcp.manageSettings')} unconfirmedLabel={t('mcp.withoutAsking')} />
+                )}
+                {client.manage_rules && (
+                  <Chip label={t('mcp.manageRules')} unconfirmed unconfirmedLabel={t('mcp.withoutAsking')} danger />
                 )}
                 {(client.all_accounts || client.accounts.length > 0) && client.organize && (
                   <Chip label={t('mcp.organize')} unconfirmedLabel={t('mcp.withoutAsking')} />

@@ -187,7 +187,7 @@ func TestMCPAllAccountScopeDoesNotWidenPermissions(t *testing.T) {
 			t.Fatalf("allowed synthetic account %q", id)
 		}
 	}
-	for _, permission := range []mcpPermission{mcpDraft, mcpOrganize, mcpSend, mcpDelete, mcpManageAccounts, mcpManageSettings} {
+	for _, permission := range []mcpPermission{mcpDraft, mcpOrganize, mcpSend, mcpDelete, mcpManageAccounts, mcpManageSettings, mcpReadRules, mcpManageRules} {
 		if mcpPermitted(c, permission) {
 			t.Fatalf("enabled %s", permission)
 		}
@@ -196,7 +196,7 @@ func TestMCPAllAccountScopeDoesNotWidenPermissions(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"accounts":["selected"]}`), &old); err != nil {
 		t.Fatal(err)
 	}
-	if old.AllAccounts || mcpAllows(old, "future-mail") {
+	if old.AllAccounts || old.ManageRules || mcpAllows(old, "future-mail") {
 		t.Fatal("legacy grant widened")
 	}
 }
