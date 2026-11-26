@@ -24,6 +24,7 @@ import { HTML_QUOTE_SELECTOR, installFrameQuoteFold, isInFoldedQuote } from './q
 import { markOwnSignature } from './ownSignatureFold'
 import { useBubbleTheme } from './useFrameTheme'
 import { fitMediaBox } from './mediaSize'
+import { wrapPreformattedMessage } from './preformattedMessage'
 import type { FrameSurface } from './frameTheme'
 import { settings$ } from '../../states/settings'
 
@@ -48,6 +49,7 @@ export function BubbleHtmlFrame({
   outgoing = false,
   surface = 'bubble',
   allowRemote = false,
+  article = false,
   mediaMissing = 0,
   searchQuery = '',
   activeSearchOffset = -1,
@@ -64,6 +66,7 @@ export function BubbleHtmlFrame({
   surface?: FrameSurface
   /** Loosen the baked CSP so this message's remote content loads. */
   allowRemote?: boolean
+  article?: boolean
   /** How many attachment files this message refers to are not on disk yet. */
   mediaMissing?: number
   /** In-thread search query; matches are marked inside the frame document. */
@@ -95,8 +98,8 @@ export function BubbleHtmlFrame({
   // here reloads the frame.
   const documentKey = useMemo(
     () =>
-      `${messageFont.family ?? ''}:${messageFont.zoom}:${allowRemote}:${autoFit}:${bodyContentKey(ownSignature)}:${bodyContentKey(html)}`,
-    [html, messageFont, allowRemote, autoFit, ownSignature],
+      `${messageFont.family ?? ''}:${messageFont.zoom}:${allowRemote}:${article}:${autoFit}:${bodyContentKey(ownSignature)}:${bodyContentKey(html)}`,
+    [html, messageFont, allowRemote, article, autoFit, ownSignature],
   )
   // What this document is called while it is the current one. The frame is wired
   // as soon as its srcDoc changes — while the document it replaces is still
@@ -429,6 +432,7 @@ export function BubbleHtmlFrame({
         }
       }
 
+      if (!article) wrapPreformattedMessage(doc)
       for (const pre of doc.querySelectorAll<HTMLPreElement>('pre')) {
         if (pre.closest('.meron-code-block')) continue
         // GitLab diff rows use one <pre> per line-content cell; wrapping each
@@ -553,7 +557,7 @@ export function BubbleHtmlFrame({
         cleanupFns.forEach((cleanup) => cleanup())
       }
     },
-    [documentKey, generation, quoteKey, ownSignature],
+    [documentKey, generation, quoteKey, ownSignature, article],
   )
 
   // Repaint a live frame when the theme changes under it: the document isn't

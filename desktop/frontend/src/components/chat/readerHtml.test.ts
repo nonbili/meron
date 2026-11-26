@@ -5,6 +5,7 @@ import {
   applyReaderTheme,
   DEFAULT_READER_FONT,
   pinViewportHeights,
+  stripTrackingPixels,
 } from './readerHtml'
 import {
   DARKENED_ATTR,
@@ -535,6 +536,49 @@ describe('reader column', () => {
     // The body's zoom scales these back up to 760px and 20px.
     expect(doc.body.style.getPropertyValue('max-width')).toBe('608px')
     expect(doc.body.style.getPropertyValue('padding-left')).toBe('16px')
+  })
+})
+
+describe('preformatted mail', () => {
+  const text = 'ご注文ありがとうございます。\n　　ご注文内容をご確認ください。'
+
+  it.each([
+    `<pre>${text}</pre>`,
+    `<body><style>body { font-family: monospace; }</style><div><pre>${text}</pre></div></body>`,
+    `<pre>${text}</pre><img width="1" height="1" src="https://example.com/pixel.gif">`,
+  ])('wraps a whole-message pre while preserving its text in %s', (html) => {
+    const doc = parse(stripTrackingPixels(html))
+    applyReaderLayout(doc)
+
+    const pre = doc.querySelector('pre')!
+    expect(pre.style.whiteSpace).toBe('pre-wrap')
+    expect(pre.textContent).toBe(text)
+  })
+
+  it.each([
+    '<pre>--- a/file.ts\n+++ b/file.ts\n+const answer = 42</pre>',
+    `<pre><code>${text}</code></pre>`,
+    `<pre><samp>${text}</samp></pre>`,
+    `<pre><kbd>${text}</kbd></pre>`,
+    `<pre class="language-js">${text}</pre>`,
+    `<pre style="white-space: pre">${text}</pre>`,
+    `<p>Example</p><pre>${text}</pre>`,
+    `Example<pre>${text}</pre>`,
+    `<pre>${text}</pre>Example`,
+  ])('keeps the existing layout for %s', (html) => {
+    const doc = parse(html)
+    const pre = doc.querySelector('pre')!
+    const original = pre.style.whiteSpace
+    applyReaderLayout(doc)
+
+    expect(pre.style.whiteSpace).toBe(original)
+  })
+
+  it('keeps a feed article preformatted', () => {
+    const doc = parse(`<pre>${text}</pre>`)
+    applyReaderLayout(doc, DEFAULT_READER_FONT, DEFAULT_READER_THEME, true)
+
+    expect(doc.querySelector('pre')!.style.whiteSpace).toBe('')
   })
 })
 

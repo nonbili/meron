@@ -36,6 +36,7 @@ export function MessageBubbleBody({
   outgoing = false,
   surface = 'bubble',
   allowRemote = false,
+  article = false,
   normalizedSearchQuery,
   activeSearchOffset,
   fullHeight = false,
@@ -51,6 +52,7 @@ export function MessageBubbleBody({
   /** Whether this message's remote content may load (account setting, allowed
    *  sender, or a reveal the user just made). */
   allowRemote?: boolean
+  article?: boolean
   normalizedSearchQuery: string
   /** Which of this message's matches the search is parked on, -1 for none:
    *  that one gets the stronger highlight and is what the pane scrolls to. */
@@ -95,6 +97,7 @@ export function MessageBubbleBody({
           outgoing={outgoing}
           surface={surface}
           allowRemote={allowRemote}
+          article={article}
           mediaMissing={message.media_missing ?? 0}
           searchQuery={normalizedSearchQuery}
           activeSearchOffset={activeSearchOffset}

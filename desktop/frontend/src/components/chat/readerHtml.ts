@@ -2,6 +2,7 @@ import { BUBBLE_HTML_BASE_PX, type MessageFrameFont } from '../../lib/fonts'
 import { copyText } from '../../lib/native'
 import { usesNativeScrollbars } from '../../lib/nativeScrollbars'
 import { fitMediaBox } from './mediaSize'
+import { TRANSPARENT_TRACKING_PIXEL, wrapPreformattedMessage } from './preformattedMessage'
 import {
   DEFAULT_READER_THEME,
   LIGHT_ON_DARK_TEXT,
@@ -293,7 +294,7 @@ export function stripTrackingPixels(html: string): string {
 
       if (isTinyAttr || isHiddenStyle || isTinyStyle || isTrackingUrl) {
         // Replace tracker src with safe transparent 1x1 base64 GIF
-        img.setAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7')
+        img.setAttribute('src', TRANSPARENT_TRACKING_PIXEL)
         img.removeAttribute('srcset')
         img.removeAttribute('width')
         img.removeAttribute('height')
@@ -376,6 +377,7 @@ export function applyReaderLayout(
     ;(doc.head ?? doc.documentElement).appendChild(style)
   }
 
+  if (!article) wrapPreformattedMessage(doc)
   for (const pre of doc.querySelectorAll<HTMLPreElement>('pre')) {
     if (pre.closest('.meron-code-block')) continue
     if (pre.closest('td.line_content, th.line_content')) continue

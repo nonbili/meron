@@ -12,6 +12,22 @@ afterEach(() => {
   globalThis.IntersectionObserver = originalObserver
 })
 
+it.each([false, true])('wraps a preformatted email and preserves a feed pre (article=%s)', async (article) => {
+  globalThis.IntersectionObserver = undefined as unknown as typeof IntersectionObserver
+  const html =
+    '<body><style>body { font-family: monospace; }</style><div><pre>ご注文ありがとうございます。</pre></div></body>'
+  const { container } = render(<BubbleHtmlFrame html={html} article={article} />)
+  const frame = container.querySelector('iframe')!
+  const doc = new DOMParser().parseFromString(frame.getAttribute('srcdoc')!, 'text/html')
+  Object.defineProperty(doc, 'readyState', { value: 'interactive' })
+  Object.defineProperty(doc.documentElement, 'clientWidth', { value: 300 })
+  Object.defineProperty(frame, 'contentDocument', { get: () => doc })
+  fireEvent.load(frame)
+
+  await waitFor(() => expect(frame.style.visibility).toBe('visible'))
+  expect(doc.querySelector('pre')!.style.whiteSpace).toBe(article ? '' : 'pre-wrap')
+})
+
 it('shows a cached remount as soon as its document is themed', async () => {
   let visibility: (near: boolean) => void = () => {}
   globalThis.IntersectionObserver = class {

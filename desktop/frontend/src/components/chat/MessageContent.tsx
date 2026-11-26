@@ -144,6 +144,7 @@ export function MessageContent({
         outgoing={view.outgoing}
         surface={surface}
         allowRemote={view.remoteVisible}
+        article={view.isRSS}
         normalizedSearchQuery={view.normalizedSearchQuery}
         activeSearchOffset={view.activeSearchOffset}
         fullHeight={fullHeight}
