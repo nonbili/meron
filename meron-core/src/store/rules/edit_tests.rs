@@ -8,6 +8,50 @@ fn db() -> Connection {
 }
 
 #[test]
+fn shared_rule_keeps_its_settings_and_appends_disabled_with_a_new_id() {
+    let conn = db();
+    let original = Rule {
+        conditions: vec![RuleCondition::new("subject_or_body", "Monthly report")],
+        accounts: vec!["work".into()],
+        trigger: RuleTrigger::Read,
+        delay_seconds: 300,
+        forward_to: "reports@example.com".into(),
+        ..Rule::default()
+    };
+    let rules = set_rules(&conn, vec![original]).unwrap();
+    let source = json!({ "meron_rule": 1, "rule": rules[0] }).to_string();
+    let draft = parse_rule_source(&source).unwrap();
+    assert_eq!(
+        draft,
+        Rule {
+            id: String::new(),
+            disabled: true,
+            ..rules[0].clone()
+        }
+    );
+    assert_eq!(rules_for_editing(&conn).unwrap(), rules);
+    let (saved, applied) =
+        set_rules_if_current(&conn, &rules, vec![rules[0].clone(), draft]).unwrap();
+    assert!(applied);
+    assert_eq!(saved[0], rules[0]);
+    assert!(saved[1].disabled);
+    assert!(!saved[1].id.is_empty());
+    assert_ne!(saved[1].id, rules[0].id);
+}
+
+#[test]
+fn shared_rule_rejects_other_formats_rule_lists_and_invalid_rules() {
+    for source in [
+        "light,#f0f2f1,#ffffff,#121a16,#0e7a58,#1b211e",
+        r#"{"meron_rule":2,"rule":{"star":true}}"#,
+        r#"{"meron_rule":1,"rule":[{"star":true}]}"#,
+        r#"{"meron_rule":1,"rule":{"copy_folder":"Archive"}}"#,
+    ] {
+        assert!(parse_rule_source(source).is_err(), "{source}");
+    }
+}
+
+#[test]
 fn partial_rule_edits_keep_scope_and_disabled_until_explicitly_changed() {
     let conn = db();
     conn.execute(

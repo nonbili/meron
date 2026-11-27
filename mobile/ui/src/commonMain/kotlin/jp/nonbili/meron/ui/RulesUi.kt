@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -60,6 +62,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -547,6 +550,88 @@ private fun MeronMobileState.RuleConditionsEditor(
     }
 }
 
+@Composable
+private fun MeronMobileState.RuleImportDialog(
+    onRulesChanged: (List<Rule>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var source by remember { mutableStateOf("") }
+    var preview by remember { mutableStateOf<Rule?>(null) }
+    var working by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val coroutines = rememberCoroutineScope()
+    val rule = preview
+    val conflict = tr("rules.changedElsewhere")
+    val invalid = tr("rules.importInvalid")
+    val saveFailed = tr("rules.importSaveFailed")
+    AlertDialog(
+        onDismissRequest = { if (!working) onDismiss() },
+        title = { Text(tr("rules.import")) },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (rule == null) {
+                    OutlinedTextField(
+                        value = source,
+                        onValueChange = {
+                            source = it
+                            error = null
+                        },
+                        placeholder = { Text(tr("rules.importPlaceholder")) },
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        isError = error != null,
+                        enabled = !working,
+                        maxLines = 5,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Text(ruleConditionSummary(rule), style = MaterialTheme.typography.titleSmall)
+                    Text(ruleSummary(coreAccounts, rule))
+                    val scope =
+                        if (rule.accounts.isEmpty()) {
+                            tr("kanban.allAccounts")
+                        } else {
+                            rule.accounts.joinToString(", ") { id -> coreAccounts.firstOrNull { it.id == id }?.let(::accountLabel) ?: id }
+                        }
+                    Text(scope)
+                    Text(tr("rules.importReview"), style = MaterialTheme.typography.bodySmall)
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = source.isNotBlank() && !working,
+                onClick = {
+                    working = true
+                    error = null
+                    coroutines.launch {
+                        if (rule == null) {
+                            preview = parseRuleSource(source)
+                            if (preview == null) error = invalid
+                        } else {
+                            val current = loadRules()
+                            val saved = current?.let { saveRules(it + rule, it) }
+                            if (saved == null) {
+                                error = saveFailed
+                            } else {
+                                onRulesChanged(saved.rules)
+                                if (saved.conflict) error = conflict else onDismiss()
+                            }
+                        }
+                        working = false
+                    }
+                },
+            ) { Text(tr(if (rule == null) "common.import" else "buttons.save")) }
+        },
+        dismissButton = {
+            TextButton(enabled = !working, onClick = onDismiss) { Text(tr("buttons.cancel")) }
+        },
+    )
+}
+
 /** What to do with new mail that matches some conditions, each a card of its own. */
 @Composable
 internal fun MeronMobileState.RulesPage(
@@ -564,6 +649,7 @@ internal fun MeronMobileState.RulesPage(
     var amount by remember { mutableStateOf("") }
     var unit by remember { mutableStateOf("minutes") }
     var adding by remember { mutableStateOf(false) }
+    var importOpen by remember { mutableStateOf(false) }
     // Apart from `draft.accounts`: turning "all" off starts with none picked,
     // which as a list would mean all of them.
     var scoped by remember { mutableStateOf(false) }
@@ -746,6 +832,13 @@ internal fun MeronMobileState.RulesPage(
         scoped = rule.accounts.isNotEmpty()
         adding = false
         invalid = false
+    }
+
+    if (importOpen) {
+        RuleImportDialog(
+            onRulesChanged = { rules = it },
+            onDismiss = { importOpen = false },
+        )
     }
 
     Column(
@@ -981,6 +1074,9 @@ internal fun MeronMobileState.RulesPage(
                                             Text(tr("rules.runAction"))
                                         }
                                     }
+                                    IconButton(onClick = { mobileHost.shareText(rule.shareSource()) }) {
+                                        Icon(Icons.Filled.Share, contentDescription = tr("rules.share"), modifier = Modifier.size(16.dp))
+                                    }
                                     TextButton(
                                         enabled = !saving,
                                         onClick = { openEdit(rule) },
@@ -1011,7 +1107,7 @@ internal fun MeronMobileState.RulesPage(
 
             Surface(
                 onClick = { adding = true },
-                enabled = rules != null,
+                enabled = rules != null && !saving,
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 1.dp,
@@ -1035,6 +1131,11 @@ internal fun MeronMobileState.RulesPage(
                     )
                 }
             }
+            OutlinedButton(
+                enabled = rules != null && !saving,
+                onClick = { importOpen = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(tr("rules.import")) }
         } else {
             SettingsSectionLabel(tr("rules.when"), hint = tr("rules.queryHint"), first = true)
             if (mailAccounts.size > 1 || scoped) {

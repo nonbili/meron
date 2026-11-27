@@ -39,6 +39,11 @@ function stubCore(initial: Rule[], refuse = false) {
       App: {
         Invoke: async (command: string, payload: any) => {
           if (command === 'mail.rules') return { rules: storedRules }
+          if (command === 'mail.parseRule') {
+            const source = JSON.parse(payload.source)
+            if (source.meron_rule !== 1) throw new Error('unknown rule format')
+            return { rules: [{ ...source.rule, id: '', disabled: true }] }
+          }
           if (command === 'mail.tagList') return { tags: [{ tag: 'receipts', count: 2 }] }
           if (command === 'mail.ruleMatches' || command === 'mail.runRule') {
             const current = storedRules.find((rule) => rule.id === payload.id)
@@ -91,6 +96,64 @@ it('sums up what each rule does', async () => {
   await waitFor(() => expect(view.getByText('From: billing')).toBeTruthy())
   expect(view.getByText('Tag finance · Mark as read · Move to Archive')).toBeTruthy()
   expect(view.queryByText('from:billing')).toBeNull()
+})
+
+it('shares one rule and appends a disabled copy after review', async () => {
+  const saved = stubCore([bills])
+  const writeText = spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined)
+  try {
+    const view = render(<RulesPanel />)
+    fireEvent.click(await view.findByLabelText('Share rule'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const [[source]] = writeText.mock.calls
+    expect(JSON.parse(source)).toEqual({ meron_rule: 1, rule: { ...bills, id: '' } })
+
+    fireEvent.click(view.getByRole('button', { name: 'Import rule' }))
+    const field = view.getByRole('textbox', { name: 'Paste a shared rule' })
+    fireEvent.change(field, { target: { value: 'invalid' } })
+    fireEvent.click(view.getByRole('button', { name: /^Import$/ }))
+    expect((await view.findByRole('alert')).textContent).toContain('Enter a valid Meron rule')
+    fireEvent.change(field, { target: { value: source } })
+    fireEvent.click(view.getByRole('button', { name: /^Import$/ }))
+    expect(
+      await view.findByText('Review the accounts, conditions, and actions. The rule will be saved disabled.'),
+    ).toBeTruthy()
+    expect(saved).toHaveLength(0)
+    fireEvent.click(view.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(storedRules).toHaveLength(2))
+    expect(storedRules[0]).toEqual(bills)
+    expect(storedRules[1]).toEqual({
+      ...bills,
+      id: 'new1',
+      disabled: true,
+      trigger: 'arrival',
+      delay_seconds: 0,
+      sent: false,
+      forward_to: '',
+    })
+  } finally {
+    writeText.mockRestore()
+  }
+})
+
+it('requires a local scope when importing a rule scoped to an unavailable account', async () => {
+  accounts$.set([{ id: 'local-mail', email: 'local@example.com', provider: 'imap' }] as Account[])
+  const saved = stubCore([])
+  const view = render(<RulesPanel />)
+  await view.findByText('No rules yet.')
+  fireEvent.click(view.getByRole('button', { name: 'Import rule' }))
+  fireEvent.change(view.getByRole('textbox', { name: 'Paste a shared rule' }), {
+    target: { value: JSON.stringify({ meron_rule: 1, rule: { ...bills, accounts: ['foreign'] } }) },
+  })
+  fireEvent.click(view.getByRole('button', { name: /^Import$/ }))
+  const save = (await view.findByRole('button', { name: 'Save' })) as HTMLButtonElement
+  expect(save.disabled).toBe(true)
+  fireEvent.click(view.getByRole('checkbox', { name: /local@example\.com/ }))
+  expect(save.disabled).toBe(false)
+  fireEvent.click(save)
+  await waitFor(() => expect(saved).toHaveLength(1))
+  expect(saved[0][0].accounts).toEqual(['local-mail'])
+  expect(saved[0][0].disabled).toBe(true)
 })
 
 it('keeps an unsaved edit when another client changes the rule list', async () => {

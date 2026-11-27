@@ -227,10 +227,18 @@ class MobileMailCommandClient(
 
     suspend fun rules(): String = core.invoke(MobileCommand.Rules, "{}")
 
-    suspend fun setRules(rules: List<Rule>): String =
+    suspend fun parseRule(source: String): String = core.invoke(MobileCommand.ParseRule, jsonObject("source" to source.jsonString()))
+
+    suspend fun setRules(
+        rules: List<Rule>,
+        expectedRules: List<Rule>? = null,
+    ): String =
         core.invoke(
             MobileCommand.SetRules,
-            rules.joinToString(separator = ",", prefix = "{\"rules\":[", postfix = "]}") { it.toJson() },
+            jsonObject(
+                "rules" to rules.joinToString(",", "[", "]") { it.toJson() },
+                "expected_rules" to expectedRules?.joinToString(",", "[", "]") { it.toJson() },
+            ),
         )
 
     suspend fun ruleMatches(id: String): String = core.invoke(MobileCommand.RuleMatches, jsonObject("id" to id.jsonString()))

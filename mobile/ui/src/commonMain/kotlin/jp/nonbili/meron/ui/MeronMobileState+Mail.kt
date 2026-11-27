@@ -53,6 +53,7 @@ import jp.nonbili.meron.shared.parseTagListResponse
 import jp.nonbili.meron.shared.parseThreadActionLocationResponse
 import jp.nonbili.meron.shared.requireCoreAllOk
 import jp.nonbili.meron.shared.requireCoreOk
+import jp.nonbili.meron.shared.rulesSaveConflicted
 import jp.nonbili.meron.shared.threadIdIsRss
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
@@ -424,10 +425,27 @@ internal suspend fun MeronMobileState.loadRules(): List<Rule>? =
         parseRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).rules() }))
     }.getOrNull()
 
-/** The rules as the core kept them, or null if it refused one. */
-internal suspend fun MeronMobileState.saveRules(rules: List<Rule>): List<Rule>? =
+internal suspend fun MeronMobileState.parseRuleSource(source: String): Rule? =
     runCatching {
-        parseRulesResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).setRules(rules) }))
+        val response = requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).parseRule(source) })
+        parseRulesResponse(response).singleOrNull()
+    }.getOrNull()
+
+internal data class RulesSaveResult(
+    val rules: List<Rule>,
+    val conflict: Boolean,
+)
+
+internal suspend fun MeronMobileState.saveRules(rules: List<Rule>): List<Rule>? = saveRules(rules, null)?.rules
+
+/** The current rules, or null if the core refused the save. */
+internal suspend fun MeronMobileState.saveRules(
+    rules: List<Rule>,
+    expectedRules: List<Rule>?,
+): RulesSaveResult? =
+    runCatching {
+        val response = requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).setRules(rules, expectedRules) })
+        RulesSaveResult(parseRulesResponse(response), rulesSaveConflicted(response))
     }.getOrNull()
 
 internal suspend fun MeronMobileState.ruleMatches(id: String): RuleMatches? =

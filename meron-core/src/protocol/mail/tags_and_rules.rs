@@ -60,7 +60,7 @@ pub(crate) fn replace_mobile_tag(data_dir: &str, params: &Value) -> Result<Value
 
 pub(crate) fn mobile_rules(data_dir: &str) -> Result<Value, String> {
     with_mobile_db(data_dir, |conn| {
-        let rules = store::rules(&conn).map_err(|err| err.to_string())?;
+        let rules = store::rules_for_editing(&conn).map_err(|err| err.to_string())?;
         Ok(json!({ "rules": rules }))
     })
 }
@@ -69,6 +69,16 @@ pub(crate) fn set_mobile_rules(data_dir: &str, params: &Value) -> Result<Value, 
     let rules = serde_json::from_value(params.get("rules").cloned().unwrap_or_default())
         .map_err(|err| err.to_string())?;
     with_mobile_db(data_dir, |conn| {
+        if let Some(expected) = params
+            .get("expected_rules")
+            .filter(|value| !value.is_null())
+        {
+            let expected = serde_json::from_value::<Vec<store::Rule>>(expected.clone())
+                .map_err(|err| err.to_string())?;
+            let (rules, saved) = store::set_rules_if_current(&conn, &expected, rules)
+                .map_err(|err| err.to_string())?;
+            return Ok(json!({ "rules": rules, "conflict": !saved }));
+        }
         let rules = store::set_rules(&conn, rules).map_err(|err| err.to_string())?;
         Ok(json!({ "rules": rules }))
     })

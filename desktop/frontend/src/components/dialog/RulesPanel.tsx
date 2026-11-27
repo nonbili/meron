@@ -4,16 +4,19 @@ import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useValue } from '@legendapp/state/react'
-import { ArrowLeft, GripVertical, Pencil, Play, Plus, Square, Trash2 } from 'lucide-react'
+import { ArrowLeft, Forward, GripVertical, Pencil, Play, Plus, Square, Trash2, Upload } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
+import { copyText } from '../../lib/native'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import {
   loadRules,
   loadRuleStatus,
+  parseRuleSource,
   readsBody,
   ruleMatches,
   runRule,
   saveRules,
+  serializeRuleSource,
   stopRule,
   type Rule,
   type RuleMove,
@@ -182,6 +185,10 @@ export function RulesPanel() {
   const [draft, setDraft] = useState<Draft>(emptyDraft)
   const [editing, setEditing] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [imported, setImported] = useState(false)
+  const [importText, setImportText] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importInvalid, setImportInvalid] = useState(false)
   // Apart from `draft.accounts`: picking "selected" starts with none ticked,
   // which as a list would mean all of them.
   const [scoped, setScoped] = useState(false)
@@ -283,7 +290,9 @@ export function RulesPanel() {
     await save(() => next)
   }
 
-  const chosenAccounts = draft.accounts.filter(known)
+  const chosenAccounts = draft.accounts.filter((id) =>
+    imported ? mailAccounts.some((account) => account.id === id) : known(id),
+  )
 
   const pickMove = (move_to: RuleMove, folder = '', folder_account = '') => change({ move_to, folder, folder_account })
 
@@ -310,6 +319,7 @@ export function RulesPanel() {
     setDraft(emptyDraft())
     setEditing(null)
     setAdding(false)
+    setImported(false)
     setScoped(false)
     setInvalid(false)
     setEditConflict(false)
@@ -393,10 +403,24 @@ export function RulesPanel() {
       conditions: conditions.map(draftCondition),
       tags: rule.tags.join(' '),
     })
-    setEditing(rule.id)
-    setAdding(false)
+    setEditing(rule.id || null)
+    setAdding(!rule.id)
+    setImported(!rule.id)
+    setImportText(null)
     setScoped(rule.accounts.length > 0)
     setInvalid(false)
+  }
+
+  const importRule = async () => {
+    if (!importText?.trim() || importing) return
+    setImporting(true)
+    try {
+      edit(await parseRuleSource(importText))
+    } catch {
+      setImportInvalid(true)
+    } finally {
+      setImporting(false)
+    }
   }
 
   const remove = async (rule: Rule) => {
@@ -469,9 +493,10 @@ export function RulesPanel() {
             <ArrowLeft size={16} />
           </button>
           <h2 className="truncate text-base font-bold leading-tight tracking-tight">
-            {editing ? t('rules.edit') : t('rules.add')}
+            {t(editing ? 'rules.edit' : imported ? 'rules.import' : 'rules.add')}
           </h2>
         </div>
+        {imported && <p className="text-xs text-secondary">{t('rules.importReview')}</p>}
         {/* The address suggestions open below their field, past the card when it is the last. */}
         <SettingsGroup title={t('rules.when')} overflowVisible>
           <SegmentedRow
@@ -669,11 +694,11 @@ export function RulesPanel() {
             {t('buttons.cancel')}
           </Button>
           <Button
-            leftIcon={editing ? undefined : Plus}
+            leftIcon={editing || imported ? undefined : Plus}
             disabled={saving || !rules || (scoped && chosenAccounts.length === 0) || delay === null}
             onClick={() => void submit()}
           >
-            {editing ? t('buttons.save') : t('rules.add')}
+            {editing || imported ? t('buttons.save') : t('rules.add')}
           </Button>
         </div>
       </div>
@@ -752,11 +777,22 @@ export function RulesPanel() {
                       />
                     )}
                     <IconButton
+                      icon={Forward}
+                      iconSize={13}
+                      label={t('rules.share')}
+                      size="sm"
+                      onClick={() => {
+                        void copyText(serializeRuleSource(rule))
+                          .then(() => showToast(t('rules.shareCopied')))
+                          .catch(() => showToast(t('rules.shareFailed'), 'error'))
+                      }}
+                    />
+                    <IconButton
                       icon={Pencil}
                       iconSize={13}
                       label={t('rules.edit')}
                       size="sm"
-                      disabled={saving}
+                      disabled={saving || importing}
                       onClick={() => void edit(rule)}
                     />
                     <IconButton
@@ -775,11 +811,63 @@ export function RulesPanel() {
         </DndContext>
       )}
 
-      <div>
-        <Button leftIcon={Plus} disabled={!rules} onClick={() => setAdding(true)}>
+      <div className="flex items-center gap-2">
+        <Button
+          leftIcon={Plus}
+          disabled={!rules || saving || importing}
+          onClick={() => {
+            setImportText(null)
+            setAdding(true)
+          }}
+        >
           {t('rules.add')}
         </Button>
+        <Button
+          variant="secondary"
+          leftIcon={Upload}
+          disabled={!rules || saving || importing}
+          onClick={() => {
+            setImportInvalid(false)
+            setImportText(importText === null ? '' : null)
+          }}
+        >
+          {t('rules.import')}
+        </Button>
       </div>
+      {importText !== null && (
+        <form
+          className="flex flex-col gap-1"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void importRule()
+          }}
+        >
+          <div className="flex gap-2">
+            <TextInput
+              autoFocus
+              aria-label={t('rules.importPlaceholder')}
+              placeholder={t('rules.importPlaceholder')}
+              className="min-w-0 flex-1 font-mono"
+              spellCheck={false}
+              value={importText}
+              invalid={importInvalid}
+              disabled={importing}
+              onChange={(event) => {
+                setImportText(event.target.value)
+                setImportInvalid(false)
+              }}
+            />
+            <Button type="submit" disabled={!importText.trim() || importing}>
+              {t('common.import')}
+            </Button>
+          </div>
+          {importInvalid && (
+            <p role="alert" className="text-xs text-rose-500">
+              {t('rules.importInvalid')}
+            </p>
+          )}
+        </form>
+      )}
 
       {status.log.length > 0 && (
         <SettingsGroup title={t('rules.activity')}>

@@ -94,6 +94,7 @@ object MobileCommand {
     const val ReplaceTag = "mail.replaceTag"
     const val Rules = "mail.rules"
     const val SetRules = "mail.setRules"
+    const val ParseRule = "mail.parseRule"
     const val RuleMatches = "mail.ruleMatches"
     const val RunRule = "mail.runRule"
     const val RuleStatus = "mail.ruleStatus"

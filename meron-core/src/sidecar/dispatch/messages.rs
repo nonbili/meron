@@ -136,6 +136,9 @@ pub(crate) async fn dispatch(
         "rules.list" => {
             Ok(json!({ "rules": store::rules_for_editing(&engine.db.lock().unwrap())? }))
         }
+        "rules.parse" => {
+            Ok(json!({ "rules": [store::parse_rule_source(&req_str(p, "source")?)?] }))
+        }
         "rules.targets" => store::rule_targets(&engine.db.lock().unwrap()),
         "rules.set" => {
             let rules = serde_json::from_value(p.get("rules").cloned().unwrap_or_default())?;

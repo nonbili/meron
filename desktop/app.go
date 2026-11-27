@@ -533,6 +533,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.replaceTag(payload)
 	case "mail.rules":
 		return a.rules()
+	case "mail.parseRule":
+		return a.parseRule(payload)
 	case "mail.setRules":
 		return a.setRules(payload)
 	case "mail.ruleMatches":

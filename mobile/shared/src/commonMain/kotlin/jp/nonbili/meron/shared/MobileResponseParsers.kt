@@ -842,7 +842,9 @@ fun parseReplaceTagResponse(responseJson: String): String? = responseJson.findJs
 /** The saved searches sent with a `mail.replaceTag`, in order, as they now read. */
 fun parseReplacedQueries(responseJson: String): List<String> = responseJson.topLevelStringArray("queries")
 
-/** The rules a `mail.rules` or `mail.setRules` answer lists. */
+fun rulesSaveConflicted(responseJson: String): Boolean = responseJson.ruleResponseBody().jsonObjectEntries().any { (key, value) -> key == "conflict" && value == "true" }
+
+/** The rules a `mail.rules`, `mail.setRules` or `mail.parseRule` answer lists. */
 fun parseRulesResponse(responseJson: String): List<Rule> =
     responseJson
         .ruleResponseBody()

@@ -138,6 +138,11 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "mail.tagList" => Ok(json!({ "tags": [] })),
         "mail.replaceTag" => Ok(json!({ "ok": true, "rules": [], "queries": [] })),
         "mail.rules" | "mail.setRules" => Ok(json!({ "rules": [] })),
+        "mail.parseRule" => {
+            let source = req_str(&req.params, "source")?;
+            let rule = store::parse_rule_source(&source).map_err(|err| err.to_string())?;
+            Ok(json!({ "rules": [rule] }))
+        }
         "mail.ruleMatches" | "mail.runRule" => Ok(json!({ "count": 0 })),
         "mail.ruleStatus" => Ok(json!({ "log": [], "running": {} })),
         "mail.stopRule" => Ok(json!({ "ok": true })),

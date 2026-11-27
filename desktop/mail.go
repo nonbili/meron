@@ -663,6 +663,13 @@ func (a *App) rules() (any, error) {
 	return a.sidecar.Call("rules.list", map[string]any{})
 }
 
+func (a *App) parseRule(payload map[string]any) (any, error) {
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, fmt.Errorf("mail core is not running")
+	}
+	return a.sidecar.Call("rules.parse", payload)
+}
+
 // setRules replaces those rules, answering with what the core kept.
 func (a *App) setRules(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {

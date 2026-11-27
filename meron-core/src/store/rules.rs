@@ -450,6 +450,23 @@ fn rule_matching_uids(
         .collect())
 }
 
+/// Read a single shared rule into a new, disabled draft.
+pub fn parse_rule_source(source: &str) -> Result<Rule> {
+    let value: serde_json::Value = serde_json::from_str(source)?;
+    anyhow::ensure!(
+        value["meron_rule"].as_u64() == Some(1),
+        "unknown rule format"
+    );
+    let rule = value
+        .get("rule")
+        .filter(|rule| rule.is_object())
+        .ok_or_else(|| anyhow::anyhow!("expected a single rule"))?;
+    let mut rule = clean_rule(serde_json::from_value(rule.clone())?)?;
+    rule.id.clear();
+    rule.disabled = true;
+    Ok(rule)
+}
+
 fn clean_rule(rule: Rule) -> Result<Rule> {
     let query = rule.query.trim().to_string();
     let mut rule = rule.upgrade();

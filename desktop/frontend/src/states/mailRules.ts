@@ -112,6 +112,15 @@ export async function loadRules(): Promise<Rule[]> {
   return (rules ?? []).map((rule) => ({ ...rule, conditions: rule.conditions ?? [], match_any: !!rule.match_any }))
 }
 
+export function serializeRuleSource(rule: Rule): string {
+  return JSON.stringify({ meron_rule: 1, rule: { ...rule, id: '' } })
+}
+
+export async function parseRuleSource(source: string): Promise<Rule> {
+  const { rules } = await invoke<{ rules: [Rule] }>('mail.parseRule', { source })
+  return rules[0]
+}
+
 // The core normalizes what it keeps and refuses a rule that could never apply.
 export function saveRules(rules: Rule[], expected_rules: Rule[]): Promise<{ rules: Rule[]; conflict?: boolean }> {
   return invoke('mail.setRules', { rules, expected_rules })

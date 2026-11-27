@@ -207,7 +207,7 @@ pub(crate) async fn dispatch(
 
         "tags.list" | "rules.list" | "rules.targets" | "rules.set" | "rules.create"
         | "rules.update" | "rules.delete" | "rules.matches" | "rules.run" | "rules.status"
-        | "rules.stop" => messages::dispatch(engine, req, out).await,
+        | "rules.stop" | "rules.parse" => messages::dispatch(engine, req, out).await,
 
         "watch.start" | "watch.stop" | "system.resumed" => watch::dispatch(engine, req, out).await,
 
