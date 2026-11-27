@@ -749,6 +749,7 @@ internal fun MeronMobileState.RulesPage(
     }
 
     val failed = tr("rules.runFailed")
+    val shareFailed = tr("rules.shareFailed")
     val nothing = tr("rules.runNothing")
     val nothingSent = tr("rules.runSentNothing")
 
@@ -1074,7 +1075,13 @@ internal fun MeronMobileState.RulesPage(
                                             Text(tr("rules.runAction"))
                                         }
                                     }
-                                    IconButton(onClick = { mobileHost.shareText(rule.shareSource()) }) {
+                                    IconButton(
+                                        onClick = {
+                                            coroutines.launch {
+                                                ruleSource(rule)?.let(mobileHost::shareText) ?: run { runNotice = shareFailed }
+                                            }
+                                        },
+                                    ) {
                                         Icon(Icons.Filled.Share, contentDescription = tr("rules.share"), modifier = Modifier.size(16.dp))
                                     }
                                     TextButton(

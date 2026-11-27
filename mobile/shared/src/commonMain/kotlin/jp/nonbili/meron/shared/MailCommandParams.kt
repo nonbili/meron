@@ -637,8 +637,6 @@ data class Rule(
     /** Runs on mail the user sent, as it shows up in Sent, instead of on mail that arrives. */
     val sent: Boolean = false,
 ) {
-    fun shareSource(): String = jsonObject("meron_rule" to "1", "rule" to copy(id = "").toJson())
-
     fun toJson(): String =
         jsonObject(
             "id" to id.jsonString(),

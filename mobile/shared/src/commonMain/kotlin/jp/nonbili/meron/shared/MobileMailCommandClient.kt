@@ -229,6 +229,8 @@ class MobileMailCommandClient(
 
     suspend fun parseRule(source: String): String = core.invoke(MobileCommand.ParseRule, jsonObject("source" to source.jsonString()))
 
+    suspend fun ruleSource(rule: Rule): String = core.invoke(MobileCommand.RuleSource, jsonObject("rule" to rule.toJson()))
+
     suspend fun setRules(
         rules: List<Rule>,
         expectedRules: List<Rule>? = null,

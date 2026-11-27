@@ -15,8 +15,8 @@ import {
   readsBody,
   ruleMatches,
   runRule,
+  ruleSource,
   saveRules,
-  serializeRuleSource,
   stopRule,
   type Rule,
   type RuleMove,
@@ -474,7 +474,15 @@ export function RulesPanel() {
       .filter(Boolean)
       .join(' · ')
 
+  const share = (rule: Rule) =>
+    ruleSource(rule)
+      .then(copyText)
+      .then(() => showToast(t('rules.shareCopied')))
+      .catch(() => showToast(t('rules.shareFailed'), 'error'))
+
   const formOpen = adding || editing !== null
+  // What Share copies is the rule as saved, not the draft being edited.
+  const shared = editing ? rules?.find((rule) => rule.id === editing) : undefined
   const delay = draftDelay(draft)
 
   // Adding or editing takes over the panel, as an MCP client does: the list
@@ -492,9 +500,18 @@ export function RulesPanel() {
           >
             <ArrowLeft size={16} />
           </button>
-          <h2 className="truncate text-base font-bold leading-tight tracking-tight">
+          <h2 className="min-w-0 flex-1 truncate text-base font-bold leading-tight tracking-tight">
             {t(editing ? 'rules.edit' : imported ? 'rules.import' : 'rules.add')}
           </h2>
+          {shared && (
+            <IconButton
+              icon={Forward}
+              iconSize={14}
+              label={t('rules.share')}
+              size="sm"
+              onClick={() => void share(shared)}
+            />
+          )}
         </div>
         {imported && <p className="text-xs text-secondary">{t('rules.importReview')}</p>}
         {/* The address suggestions open below their field, past the card when it is the last. */}
@@ -777,17 +794,6 @@ export function RulesPanel() {
                       />
                     )}
                     <IconButton
-                      icon={Forward}
-                      iconSize={13}
-                      label={t('rules.share')}
-                      size="sm"
-                      onClick={() => {
-                        void copyText(serializeRuleSource(rule))
-                          .then(() => showToast(t('rules.shareCopied')))
-                          .catch(() => showToast(t('rules.shareFailed'), 'error'))
-                      }}
-                    />
-                    <IconButton
                       icon={Pencil}
                       iconSize={13}
                       label={t('rules.edit')}
@@ -842,30 +848,39 @@ export function RulesPanel() {
             void importRule()
           }}
         >
-          <div className="flex gap-2">
-            <TextInput
-              autoFocus
-              aria-label={t('rules.importPlaceholder')}
-              placeholder={t('rules.importPlaceholder')}
-              className="min-w-0 flex-1 font-mono"
-              spellCheck={false}
-              value={importText}
-              invalid={importInvalid}
-              disabled={importing}
-              onChange={(event) => {
-                setImportText(event.target.value)
-                setImportInvalid(false)
-              }}
-            />
+          <textarea
+            autoFocus
+            aria-label={t('rules.importPlaceholder')}
+            placeholder={t('rules.importPlaceholder')}
+            rows={10}
+            spellCheck={false}
+            value={importText}
+            disabled={importing}
+            onChange={(event) => {
+              setImportText(event.target.value)
+              setImportInvalid(false)
+            }}
+            // Enter starts a new line in the rule; Ctrl or Cmd with it imports.
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault()
+                void importRule()
+              }
+            }}
+            className={`w-full resize-y rounded-lg border bg-chats px-2.5 py-2 font-mono text-[0.6875rem] leading-relaxed text-primary placeholder-secondary outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+              importInvalid ? 'border-rose-400 focus:border-rose-500' : 'border-border focus:border-accent'
+            }`}
+          />
+          <div className="flex items-center justify-end gap-2">
+            {importInvalid && (
+              <p role="alert" className="mr-auto text-xs text-rose-500">
+                {t('rules.importInvalid')}
+              </p>
+            )}
             <Button type="submit" disabled={!importText.trim() || importing}>
               {t('common.import')}
             </Button>
           </div>
-          {importInvalid && (
-            <p role="alert" className="text-xs text-rose-500">
-              {t('rules.importInvalid')}
-            </p>
-          )}
         </form>
       )}
 

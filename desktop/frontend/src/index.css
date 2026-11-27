@@ -252,12 +252,15 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-button,
-input,
-textarea {
-  font-family: inherit;
-  font-feature-settings: inherit;
-  outline: none;
+/* In the base layer, so a utility such as font-mono still applies to a field. */
+@layer base {
+  button,
+  input,
+  textarea {
+    font-family: inherit;
+    font-feature-settings: inherit;
+    outline: none;
+  }
 }
 
 /* dnd-kit makes every sortable item a <div role="button" tabindex="0">, so a

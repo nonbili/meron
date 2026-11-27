@@ -45,6 +45,7 @@ import jp.nonbili.meron.shared.parseReplaceTagResponse
 import jp.nonbili.meron.shared.parseReplacedQueries
 import jp.nonbili.meron.shared.parseRuleCountResponse
 import jp.nonbili.meron.shared.parseRuleMatchesResponse
+import jp.nonbili.meron.shared.parseRuleSourceResponse
 import jp.nonbili.meron.shared.parseRuleStatusResponse
 import jp.nonbili.meron.shared.parseRulesResponse
 import jp.nonbili.meron.shared.parseSetTagsResponse
@@ -429,6 +430,11 @@ internal suspend fun MeronMobileState.parseRuleSource(source: String): Rule? =
     runCatching {
         val response = requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).parseRule(source) })
         parseRulesResponse(response).singleOrNull()
+    }.getOrNull()
+
+internal suspend fun MeronMobileState.ruleSource(rule: Rule): String? =
+    runCatching {
+        parseRuleSourceResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).ruleSource(rule) }))
     }.getOrNull()
 
 internal data class RulesSaveResult(

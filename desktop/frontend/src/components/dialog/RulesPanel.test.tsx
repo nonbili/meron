@@ -39,6 +39,10 @@ function stubCore(initial: Rule[], refuse = false) {
       App: {
         Invoke: async (command: string, payload: any) => {
           if (command === 'mail.rules') return { rules: storedRules }
+          if (command === 'mail.ruleSource') {
+            const { id: _id, disabled: _disabled, ...rule } = payload.rule
+            return { source: JSON.stringify({ meron_rule: 1, rule }, null, 2) }
+          }
           if (command === 'mail.parseRule') {
             const source = JSON.parse(payload.source)
             if (source.meron_rule !== 1) throw new Error('unknown rule format')
@@ -98,15 +102,21 @@ it('sums up what each rule does', async () => {
   expect(view.queryByText('from:billing')).toBeNull()
 })
 
-it('shares one rule and appends a disabled copy after review', async () => {
+it('shares a saved rule from its editor and appends a disabled copy after review', async () => {
   const saved = stubCore([bills])
   const writeText = spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined)
   try {
     const view = render(<RulesPanel />)
+    await view.findByText('From: billing')
+    expect(view.queryByLabelText('Share rule')).toBeNull()
+    fireEvent.click(view.getByLabelText('Edit rule'))
     fireEvent.click(await view.findByLabelText('Share rule'))
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
     const [[source]] = writeText.mock.calls
-    expect(JSON.parse(source)).toEqual({ meron_rule: 1, rule: { ...bills, id: '' } })
+    const { id: _id, disabled: _disabled, ...shared } = bills
+    expect(JSON.parse(source)).toEqual({ meron_rule: 1, rule: shared })
+    expect(source).toContain('\n  "rule": {\n')
+    fireEvent.click(view.getByLabelText('Back'))
 
     fireEvent.click(view.getByRole('button', { name: 'Import rule' }))
     const field = view.getByRole('textbox', { name: 'Paste a shared rule' })
@@ -114,7 +124,7 @@ it('shares one rule and appends a disabled copy after review', async () => {
     fireEvent.click(view.getByRole('button', { name: /^Import$/ }))
     expect((await view.findByRole('alert')).textContent).toContain('Enter a valid Meron rule')
     fireEvent.change(field, { target: { value: source } })
-    fireEvent.click(view.getByRole('button', { name: /^Import$/ }))
+    fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true })
     expect(
       await view.findByText('Review the accounts, conditions, and actions. The rule will be saved disabled.'),
     ).toBeTruthy()

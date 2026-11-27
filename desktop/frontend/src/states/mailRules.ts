@@ -112,8 +112,10 @@ export async function loadRules(): Promise<Rule[]> {
   return (rules ?? []).map((rule) => ({ ...rule, conditions: rule.conditions ?? [], match_any: !!rule.match_any }))
 }
 
-export function serializeRuleSource(rule: Rule): string {
-  return JSON.stringify({ meron_rule: 1, rule: { ...rule, id: '' } })
+/** A saved rule as indented text to share, which `parseRuleSource` reads back. */
+export async function ruleSource(rule: Rule): Promise<string> {
+  const { source } = await invoke<{ source: string }>('mail.ruleSource', { rule })
+  return source
 }
 
 export async function parseRuleSource(source: string): Promise<Rule> {

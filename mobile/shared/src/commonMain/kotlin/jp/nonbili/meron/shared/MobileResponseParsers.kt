@@ -937,6 +937,9 @@ private fun String.ruleResponseBody(): String =
         ?.takeIf { it.startsWith("{") }
         ?: this
 
+/** The text a `mail.ruleSource` answer gives to share a rule. */
+fun parseRuleSourceResponse(responseJson: String): String? = responseJson.findJsonStringProperty("source")
+
 /** What a run of a saved rule on existing mail would take, and skip for want of a downloaded body. */
 data class RuleMatches(
     val count: Int = 0,

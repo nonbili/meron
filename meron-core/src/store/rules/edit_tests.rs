@@ -19,7 +19,20 @@ fn shared_rule_keeps_its_settings_and_appends_disabled_with_a_new_id() {
         ..Rule::default()
     };
     let rules = set_rules(&conn, vec![original]).unwrap();
-    let source = json!({ "meron_rule": 1, "rule": rules[0] }).to_string();
+    let source = rule_source(&rules[0]).unwrap();
+    assert!(source.contains("\n  \"rule\": {\n"), "{source}");
+    // Only what differs from a new rule is written.
+    let shared: serde_json::Value = serde_json::from_str(&source).unwrap();
+    assert_eq!(
+        shared["rule"],
+        json!({
+            "conditions": [{ "field": "subject_or_body", "value": "Monthly report" }],
+            "trigger": "read",
+            "delay_seconds": 300,
+            "accounts": ["work"],
+            "forward_to": "reports@example.com",
+        })
+    );
     let draft = parse_rule_source(&source).unwrap();
     assert_eq!(
         draft,

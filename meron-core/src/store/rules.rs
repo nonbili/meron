@@ -450,6 +450,41 @@ fn rule_matching_uids(
         .collect())
 }
 
+/// A rule as text to share, indented so a field can be edited by hand. Only
+/// what differs from a new rule is written, as an import fills in the rest.
+/// Its id and whether it is disabled stay behind: an import gets a new id and
+/// starts disabled anyway.
+pub fn rule_source(rule: &Rule) -> Result<String> {
+    fn without_defaults(value: &mut serde_json::Value, default: serde_json::Value) {
+        if let (Some(fields), serde_json::Value::Object(default)) = (value.as_object_mut(), default)
+        {
+            fields.retain(|name, value| default.get(name) != Some(value));
+        }
+    }
+    let mut rule = serde_json::to_value(rule)?;
+    without_defaults(&mut rule, serde_json::to_value(Rule::default())?);
+    if let Some(fields) = rule.as_object_mut() {
+        fields.remove("id");
+        fields.remove("disabled");
+    }
+    // A condition always names its field, even an empty one.
+    let mut default_condition = serde_json::to_value(RuleCondition::default())?;
+    if let Some(fields) = default_condition.as_object_mut() {
+        fields.remove("field");
+    }
+    for condition in rule
+        .get_mut("conditions")
+        .and_then(|conditions| conditions.as_array_mut())
+        .into_iter()
+        .flatten()
+    {
+        without_defaults(condition, default_condition.clone());
+    }
+    Ok(serde_json::to_string_pretty(
+        &serde_json::json!({ "meron_rule": 1, "rule": rule }),
+    )?)
+}
+
 /// Read a single shared rule into a new, disabled draft.
 pub fn parse_rule_source(source: &str) -> Result<Rule> {
     let value: serde_json::Value = serde_json::from_str(source)?;

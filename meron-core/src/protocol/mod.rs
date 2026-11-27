@@ -143,6 +143,12 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
             let rule = store::parse_rule_source(&source).map_err(|err| err.to_string())?;
             Ok(json!({ "rules": [rule] }))
         }
+        "mail.ruleSource" => {
+            let rule = serde_json::from_value(req.params.get("rule").cloned().unwrap_or_default())
+                .map_err(|err| err.to_string())?;
+            let source = store::rule_source(&rule).map_err(|err| err.to_string())?;
+            Ok(json!({ "source": source }))
+        }
         "mail.ruleMatches" | "mail.runRule" => Ok(json!({ "count": 0 })),
         "mail.ruleStatus" => Ok(json!({ "log": [], "running": {} })),
         "mail.stopRule" => Ok(json!({ "ok": true })),
