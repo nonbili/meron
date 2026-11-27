@@ -1,14 +1,12 @@
-import { invoke } from '../../lib/bridge'
-import { extractClipboardImages as extractImages } from '../composer/composerHelpers'
+import {
+  extractClipboardImages as extractImages,
+  readNativeClipboardImage as readNativeImage,
+  type NativeClipboardImage,
+} from '../composer/composerHelpers'
 
 const COMPOSER_PASTE_DEBUG = true
 
-export type NativeClipboardImage = {
-  filename: string
-  mime: string
-  size: number
-  data: string
-}
+export type { NativeClipboardImage } from '../composer/composerHelpers'
 
 export function logComposerPaste(message: string, data?: unknown) {
   if (!COMPOSER_PASTE_DEBUG) return
@@ -71,7 +69,7 @@ export async function readClipboardImages(): Promise<File[]> {
 
 // Last-resort native bridge read for clipboard images.
 export async function readNativeClipboardImage(): Promise<NativeClipboardImage | null> {
-  const image = await invoke<NativeClipboardImage | null>('composer.readClipboardImage', {})
+  const image = await readNativeImage()
   logComposerPaste(
     'native clipboard image',
     image

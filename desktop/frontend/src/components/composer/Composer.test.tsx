@@ -378,6 +378,39 @@ describe('Composer', () => {
     }
   })
 
+  it('leaves Linux plain-text paste to the textarea when the native image response has no filename', async () => {
+    const restorePlatform = mockPlatform('Linux x86_64')
+    const read = spyOn(navigator.clipboard, 'read').mockResolvedValue([])
+    const bridge = spyOn((window as any).go.main.App, 'Invoke')
+    const invoke = bridge.getMockImplementation()!
+    bridge.mockImplementation(async (command: string, payload: unknown) => {
+      if (command === 'composer.readClipboardImage') return { mime: 'image/png', size: 3, data: 'AAAA' }
+      return invoke(command, payload)
+    })
+    try {
+      const id = openComposeTab({ to: 'friend@example.com', rich: false })!
+      const view = render(<Composer tabId={id} />)
+      const body = view.container.querySelector('textarea')!
+      await act(async () => {
+        fireEvent.keyDown(body, { key: 'v', ctrlKey: true })
+        expect(
+          fireEvent.paste(body, {
+            clipboardData: { files: [], items: [], types: ['text/plain'], getData: () => 'Copied text' },
+          }),
+        ).toBe(true)
+        // The browser's default paste updates the textarea.
+        fireEvent.change(body, { target: { value: 'Copied text' } })
+      })
+      expect(bridge).toHaveBeenCalledWith('composer.readClipboardImage', {})
+      expect(draftOf(id)?.text).toBe('Copied text')
+      expect(draftOf(id)?.attachments).toEqual([])
+    } finally {
+      bridge.mockRestore()
+      read.mockRestore()
+      restorePlatform()
+    }
+  })
+
   it('rearms the pending autosave after a cancelled window move without requiring another edit', async () => {
     const originalTimeout = globalThis.setTimeout
     let autosave: (() => void) | undefined

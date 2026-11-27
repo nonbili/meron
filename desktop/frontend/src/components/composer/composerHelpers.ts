@@ -237,7 +237,21 @@ export type NativeClipboardImage = {
 }
 
 export async function readNativeClipboardImage(): Promise<NativeClipboardImage | null> {
-  return invoke<NativeClipboardImage | null>('composer.readClipboardImage', {})
+  const image = await invoke<NativeClipboardImage | null>('composer.readClipboardImage', {})
+  if (
+    !image ||
+    typeof image.filename !== 'string' ||
+    !image.filename ||
+    typeof image.mime !== 'string' ||
+    !image.mime.startsWith('image/') ||
+    !Number.isSafeInteger(image.size) ||
+    image.size <= 0 ||
+    typeof image.data !== 'string' ||
+    !image.data
+  ) {
+    return null
+  }
+  return image
 }
 
 /**

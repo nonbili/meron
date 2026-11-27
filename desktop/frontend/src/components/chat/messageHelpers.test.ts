@@ -448,6 +448,10 @@ describe('fileIconFor', () => {
     expect(fileIconFor('mystery.bin', 'application/octet-stream')).toBe(File)
     expect(fileIconFor('ics', 'application/octet-stream')).toBe(File)
   })
+
+  it('uses the MIME type when the filename is missing', () => {
+    expect(fileIconFor(undefined, 'image/png')).toBe(FileImage)
+  })
 })
 
 describe('imageSource', () => {

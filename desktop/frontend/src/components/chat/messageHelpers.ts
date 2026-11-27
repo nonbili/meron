@@ -75,8 +75,8 @@ const EXT_ICONS: Record<string, FileIconComponent> = Object.fromEntries(
 )
 
 /** Pick a file icon from extension first, then mime, falling back to a generic file. */
-export function fileIconFor(filename: string, mime: string): FileIconComponent {
-  const ext = filename.includes('.') ? (filename.split('.').pop()?.toLowerCase() ?? '') : ''
+export function fileIconFor(filename: string | null | undefined, mime: string): FileIconComponent {
+  const ext = filename?.includes('.') ? (filename.split('.').pop()?.toLowerCase() ?? '') : ''
   if (EXT_ICONS[ext]) return EXT_ICONS[ext]
 
   // Specific types before the `text/` catch-all: invites and contact cards are
