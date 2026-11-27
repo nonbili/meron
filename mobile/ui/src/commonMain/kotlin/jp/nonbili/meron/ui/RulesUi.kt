@@ -22,14 +22,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -132,14 +130,14 @@ internal class RuleEditorBar(
     val close: () -> Unit,
 )
 
-private enum class ConnectedPosition {
+internal enum class ConnectedPosition {
     Single,
     First,
     Middle,
     Last,
 }
 
-private fun connectedShape(
+internal fun connectedShape(
     position: ConnectedPosition,
     corner: Dp = 16.dp,
     innerCorner: Dp = 4.dp,
@@ -151,12 +149,12 @@ private fun connectedShape(
         ConnectedPosition.Last -> RoundedCornerShape(topStart = innerCorner, topEnd = innerCorner, bottomStart = corner, bottomEnd = corner)
     }
 
-private val CONNECTED_GAP = 2.dp
+internal val CONNECTED_GAP = 2.dp
 
 private fun accountLabel(account: AccountSummary): String = account.displayName.ifEmpty { account.email }
 
 /** How a rule's target reads: its account too when there is more than one. */
-private fun MeronMobileState.targetLabel(
+internal fun MeronMobileState.targetLabel(
     accounts: List<AccountSummary>,
     accountId: String,
     folder: String,
@@ -167,7 +165,7 @@ private fun MeronMobileState.targetLabel(
 }
 
 @Composable
-private fun MeronMobileState.moveLabel(
+internal fun MeronMobileState.moveLabel(
     accounts: List<AccountSummary>,
     rule: Rule,
 ): String =
@@ -175,7 +173,7 @@ private fun MeronMobileState.moveLabel(
         "archive" -> tr("folders.roles.archive")
         "trash" -> tr("folders.roles.trash")
         "folder" -> if (rule.folderAccount.isEmpty()) rule.folder else targetLabel(accounts, rule.folderAccount, rule.folder)
-        else -> tr("rules.moveNone")
+        else -> tr("rules.chooseFolder")
     }
 
 @Composable
@@ -202,14 +200,16 @@ private fun MeronMobileState.ruleSummary(
 
 /** A rule's target: `options` first, then every folder of every account. */
 @Composable
-private fun MeronMobileState.RuleTargetRow(
+internal fun MeronMobileState.RuleTargetRow(
     title: String,
     value: String,
     accounts: List<AccountSummary>,
     options: List<Pair<String, () -> Unit>>,
+    // Opens the list as soon as it shows, for a target just asked for.
+    autoOpen: Boolean = false,
     onPick: (accountId: String, folder: String) -> Unit,
 ) {
-    var open by remember { mutableStateOf(false) }
+    var open by remember { mutableStateOf(autoOpen) }
     // With several accounts, the one whose folders are showing.
     var opened by remember { mutableStateOf<AccountSummary?>(null) }
 
@@ -645,6 +645,8 @@ internal fun MeronMobileState.RulesPage(
     var draft by remember { mutableStateOf(NEW_RULE) }
     var conditionRows by remember { mutableStateOf(listOf(conditionRow())) }
     var tags by remember { mutableStateOf("") }
+    // The action rows showing, some perhaps without a value yet.
+    var shownActions by remember { mutableStateOf(emptyList<String>()) }
     var timing by remember { mutableStateOf("now") }
     var amount by remember { mutableStateOf("") }
     var unit by remember { mutableStateOf("minutes") }
@@ -681,6 +683,7 @@ internal fun MeronMobileState.RulesPage(
         draft = NEW_RULE
         conditionRows = listOf(conditionRow())
         tags = ""
+        shownActions = emptyList()
         timing = "now"
         amount = ""
         unit = "minutes"
@@ -830,6 +833,7 @@ internal fun MeronMobileState.RulesPage(
         amount = if (timing == "now") "" else ruleAmount
         unit = ruleUnit
         tags = rule.tags.joinToString(", ")
+        shownActions = ruleActions(rule, tags)
         scoped = rule.accounts.isNotEmpty()
         adding = false
         invalid = false
@@ -1214,6 +1218,7 @@ internal fun MeronMobileState.RulesPage(
                         } else {
                             pickTiming("now")
                             conditionRows = conditionRows.filterNot { it.condition.readsBody }
+                            shownActions = shownActions - NOT_FOR_SENT.toSet()
                             change(
                                 draft.copy(sent = true, markRead = false, moveTo = "", folder = "", folderAccount = "", forwardTo = ""),
                             )
@@ -1305,144 +1310,10 @@ internal fun MeronMobileState.RulesPage(
             }
 
             SettingsSectionLabel(tr("rules.then"))
-            Surface(
-                shape = connectedShape(ConnectedPosition.First),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Box(Modifier.fillMaxWidth().padding(16.dp)) {
-                    OutlinedTextField(
-                        value = tags,
-                        onValueChange = {
-                            tags = it
-                            invalid = false
-                        },
-                        singleLine = true,
-                        label = { Text(tr("tags.title")) },
-                        placeholder = { Text(tr("rules.tags")) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-            if (!draft.sent) {
-                Spacer(Modifier.height(CONNECTED_GAP))
-                Surface(
-                    onClick = { change(draft.copy(markRead = !draft.markRead)) },
-                    shape = connectedShape(ConnectedPosition.Middle),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Filled.DoneAll,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            tr("notification.actionMarkRead"),
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
-                            checked = draft.markRead,
-                            onCheckedChange = { change(draft.copy(markRead = it)) },
-                            colors = settingsSwitchColors(),
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(CONNECTED_GAP))
-            Surface(
-                onClick = { change(draft.copy(star = !draft.star)) },
-                shape = connectedShape(ConnectedPosition.Middle),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Icons.Filled.Star,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        tr("chat.star"),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(
-                        checked = draft.star,
-                        onCheckedChange = { change(draft.copy(star = it)) },
-                        colors = settingsSwitchColors(),
-                    )
-                }
-            }
-            Spacer(Modifier.height(CONNECTED_GAP))
-            Surface(
-                shape = connectedShape(if (draft.sent) ConnectedPosition.Last else ConnectedPosition.Middle),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-                    RuleTargetRow(
-                        title = tr("rules.copyTo"),
-                        value =
-                            if (draft.copyFolder.isEmpty()) {
-                                tr("rules.copyNone")
-                            } else {
-                                targetLabel(mailAccounts, draft.copyAccount, draft.copyFolder)
-                            },
-                        accounts = mailAccounts,
-                        options = listOf(tr("rules.copyNone") to { change(draft.copy(copyAccount = "", copyFolder = "")) }),
-                    ) { accountId, folder -> change(draft.copy(copyAccount = accountId, copyFolder = folder)) }
-                }
-            }
-            if (!draft.sent) {
-                Spacer(Modifier.height(CONNECTED_GAP))
-                Surface(
-                    shape = connectedShape(ConnectedPosition.Middle),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Box(Modifier.fillMaxWidth().padding(16.dp)) {
-                        SearchOptionsAddressField(this@RulesPage, "", tr("rules.forwardTo"), draft.forwardTo, {}) {
-                            change(draft.copy(forwardTo = it))
-                        }
-                    }
-                }
-                Spacer(Modifier.height(CONNECTED_GAP))
-                Surface(
-                    shape = connectedShape(ConnectedPosition.Last),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-                        RuleTargetRow(
-                            title = tr("rules.moveTo"),
-                            value = moveLabel(mailAccounts, draft),
-                            accounts = mailAccounts,
-                            options =
-                                listOf("", "archive", "trash").map { option ->
-                                    moveLabel(mailAccounts, Rule(moveTo = option)) to {
-                                        change(draft.copy(moveTo = option, folder = "", folderAccount = ""))
-                                    }
-                                },
-                        ) { accountId, folder -> change(draft.copy(moveTo = "folder", folder = folder, folderAccount = accountId)) }
-                    }
-                }
+            RuleActionsEditor(draft, tags, shownActions, mailAccounts) { next, nextTags, shown ->
+                change(next)
+                tags = nextTags
+                shownActions = shown
             }
 
             if (!draft.sent && draft.forwardTo.isNotBlank()) {

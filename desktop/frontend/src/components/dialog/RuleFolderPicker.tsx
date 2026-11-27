@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { ChevronDown } from 'lucide-react'
 import { accounts$, isSendableAccount } from '../../states/accounts'
@@ -34,12 +34,15 @@ export function RuleFolderPicker({
   value,
   options,
   onPick,
+  autoOpen = false,
 }: {
   label: string
   /** What the button shows. */
   value: string
   options: { label: string; onPick: () => void }[]
   onPick: (target: RuleFolderTarget) => void
+  /** Opens the list as soon as it shows, for a target just asked for. */
+  autoOpen?: boolean
 }) {
   const accounts = useValue(accounts$).filter(isSendableAccount)
   const foldersByAccount = useValue(mail$.foldersByAccount)
@@ -63,6 +66,11 @@ export function RuleFolderPicker({
       ),
     ).finally(() => setLoading(false))
   }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (autoOpen) open()
+  }, [])
 
   const pick = (accountId: string, folder: Folder) => {
     close()
@@ -90,7 +98,7 @@ export function RuleFolderPicker({
           }}
         />
       ))}
-      {accounts.length > 0 && <div className="my-1 border-t border-border" />}
+      {options.length > 0 && accounts.length > 0 && <div className="my-1 border-t border-border" />}
       {inlineAccount ? (
         <>
           {(foldersByAccount[inlineAccount.id] ?? []).length === 0 && <FolderListStatus loading={loading} />}

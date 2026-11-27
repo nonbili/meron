@@ -49,7 +49,15 @@ export function removeTag(value: string, index: number, tail = '') {
  * Enter searches unless the arrow keys picked a suggestion, as a tag typed in
  * full needs no completing.
  */
-export function TagInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function TagInput({
+  value,
+  onChange,
+  autoFocus,
+}: {
+  value: string
+  onChange: (value: string) => void
+  autoFocus?: boolean
+}) {
   const { t } = useTranslation()
   const [known, setKnown] = useState<TagCount[]>([])
   const [open, setOpen] = useState(false)
@@ -102,6 +110,7 @@ export function TagInput({ value, onChange }: { value: string; onChange: (value:
         <input
           ref={inputRef}
           aria-label={t('tags.title')}
+          autoFocus={autoFocus}
           value={tail}
           onChange={(event) => {
             onChange(`${value.slice(0, start)}${event.target.value}`)

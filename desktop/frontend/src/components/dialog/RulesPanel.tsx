@@ -27,15 +27,13 @@ import { confirmAction, showToast } from '../../states/ui'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 import { AccountAvatar } from '../avatar/AccountAvatar'
-import { RecipientInput } from '../composer/RecipientInput'
 import { Checkbox } from '../field/Checkbox'
 import { SelectInput, TextInput } from '../field/Field'
-import { inputClass } from '../search/SearchOptions'
-import { TagInput } from '../search/TagInput'
 import { useTaskDragSensors } from '../tasks/taskDrag'
 import { accountLabel } from '../threads/ThreadMoveCopyItems'
-import { SegmentedRow, SettingRow, SettingsGroup, Switch, ToggleRow } from './AccountSettingsRows'
-import { RuleFolderPicker, useRuleTargetLabel } from './RuleFolderPicker'
+import { SegmentedRow, SettingRow, SettingsGroup, Switch } from './AccountSettingsRows'
+import { RuleActions, ruleActions, sentActions, type RuleAction } from './RuleActions'
+import { useRuleTargetLabel } from './RuleFolderPicker'
 import {
   conditionSet,
   draftCondition,
@@ -79,6 +77,8 @@ type Draft = {
   forward_to: string
   disabled: boolean
   sent: boolean
+  /** The action rows showing, some perhaps without a value yet. */
+  actions: RuleAction[]
 }
 
 /** The draft's delay in seconds, or null while the amount isn't a usable one. */
@@ -111,6 +111,7 @@ const emptyDraft = (): Draft => ({
   forward_to: '',
   disabled: false,
   sent: false,
+  actions: [],
 })
 
 type RuleRowProps = {
@@ -294,8 +295,6 @@ export function RulesPanel() {
     imported ? mailAccounts.some((account) => account.id === id) : known(id),
   )
 
-  const pickMove = (move_to: RuleMove, folder = '', folder_account = '') => change({ move_to, folder, folder_account })
-
   // Sent mail stays in Sent and is acted on at once: what such a rule can't
   // do is dropped from the draft, not just hidden, or the core refuses the save.
   const pickSent = (sent: boolean) =>
@@ -310,6 +309,7 @@ export function RulesPanel() {
             folder: '',
             folder_account: '',
             forward_to: '',
+            actions: sentActions(draft.actions),
             conditions: draft.conditions.filter((condition) => !readsBody(condition.field)),
           }
         : { sent },
@@ -360,12 +360,12 @@ export function RulesPanel() {
   const submit = async () => {
     if (!rules) return
     const tags = draft.tags.split(/[\s,]+/).filter(Boolean)
-    const { conditions, timing, amount: _, unit: __, ...actions } = draft
+    const { conditions, timing, amount: _, unit: __, actions: ___, ...values } = draft
     const delay = draftDelay(draft)
     if (delay === null) return
     const saved = await save(() => {
       const rule: Rule = {
-        ...actions,
+        ...values,
         trigger: timing === 'now' ? 'arrival' : timing,
         delay_seconds: delay,
         id: editing ?? '',
@@ -393,15 +393,14 @@ export function RulesPanel() {
     } = rule
     const timing = trigger === 'arrival' && delay === 0 ? 'now' : trigger
     const { amount, unit } = splitDelay(delay)
+    const values = { ...actions, sent, forward_to, tags: rule.tags.join(' ') }
     setDraft({
-      ...actions,
-      sent,
-      forward_to,
+      ...values,
       timing,
       amount: timing === 'now' ? '' : String(amount),
       unit,
       conditions: conditions.map(draftCondition),
-      tags: rule.tags.join(' '),
+      actions: ruleActions(values),
     })
     setEditing(rule.id || null)
     setAdding(!rule.id)
@@ -438,13 +437,13 @@ export function RulesPanel() {
 
   const condition = (rule: Rule) => conditionSummary(rule.conditions, rule.match_any)
 
-  const moveLabel = ({ move_to, folder, folder_account }: Draft | Rule) => {
+  const moveLabel = ({ move_to, folder, folder_account }: Pick<Rule, 'move_to' | 'folder' | 'folder_account'>) => {
     if (move_to === 'archive') return t('folders.roles.archive')
     if (move_to === 'trash') return t('folders.roles.trash')
     return folder_account ? targetLabel({ accountId: folder_account, folderId: folder }) : folder
   }
 
-  const copyLabel = ({ copy_account, copy_folder }: Draft | Rule) =>
+  const copyLabel = ({ copy_account, copy_folder }: Pick<Rule, 'copy_account' | 'copy_folder'>) =>
     targetLabel({ accountId: copy_account, folderId: copy_folder })
 
   const timingSummary = ({ trigger = 'arrival', delay_seconds: delay = 0 }: Rule) => {
@@ -636,68 +635,15 @@ export function RulesPanel() {
 
         {/* The tag suggestions open below their row, past the card when it is the last. */}
         <SettingsGroup title={t('rules.then')} overflowVisible>
-          <div className="flex min-h-11 items-center gap-4 px-3.5 py-2">
-            <span className="shrink-0 text-xs font-normal text-primary">{t('rules.addTags')}</span>
-            <TagInput value={draft.tags} onChange={(tags) => change({ tags })} />
-          </div>
-          {!draft.sent && (
-            <ToggleRow
-              title={t('notification.actionMarkRead')}
-              checked={draft.mark_read}
-              onChange={() => change({ mark_read: !draft.mark_read })}
-            />
-          )}
-          <ToggleRow title={t('chat.star')} checked={draft.star} onChange={() => change({ star: !draft.star })} />
-          <SettingRow
-            title={t('rules.copyTo')}
-            control={
-              <RuleFolderPicker
-                label={t('rules.copyTo')}
-                value={draft.copy_folder ? copyLabel(draft) : t('rules.copyNone')}
-                options={[{ label: t('rules.copyNone'), onPick: () => change({ copy_account: '', copy_folder: '' }) }]}
-                onPick={({ accountId, folderId }) => change({ copy_account: accountId, copy_folder: folderId })}
-              />
-            }
+          <RuleActions
+            values={draft}
+            shown={draft.actions}
+            sent={draft.sent}
+            trashHint={t(draft.conditions.some(conditionSet) ? 'rules.trashHint' : 'rules.trashAllHint')}
+            copyLabel={copyLabel}
+            moveLabel={moveLabel}
+            onChange={(patch, actions) => change({ ...patch, actions })}
           />
-          {!draft.sent && (
-            <>
-              <div className="flex min-h-11 items-center gap-4 px-3.5 py-2">
-                <span className="shrink-0 text-xs font-normal text-primary">{t('rules.forwardTo')}</span>
-                <RecipientInput
-                  bare
-                  value={draft.forward_to}
-                  onChange={(forward_to) => change({ forward_to })}
-                  accountId=""
-                  className={`${inputClass} w-full`}
-                />
-              </div>
-              {draft.forward_to.trim() && (
-                <p className="px-3.5 py-2.5 text-[0.6875rem] text-secondary">{t('rules.forwardHint')}</p>
-              )}
-            </>
-          )}
-          {!draft.sent && (
-            <SettingRow
-              title={t('rules.moveTo')}
-              control={
-                <RuleFolderPicker
-                  label={t('rules.moveTo')}
-                  value={draft.move_to ? moveLabel(draft) : t('rules.moveNone')}
-                  options={[
-                    { label: t('rules.moveNone'), onPick: () => pickMove('') },
-                    { label: t('folders.roles.archive'), onPick: () => pickMove('archive') },
-                    { label: t('folders.roles.trash'), onPick: () => pickMove('trash') },
-                  ]}
-                  onPick={({ accountId, folderId }) => pickMove('folder', folderId, accountId)}
-                />
-              }
-            />
-          )}
-          {draft.move_to === 'trash' && (
-            <p className="px-3.5 py-2.5 text-[0.6875rem] font-medium text-rose-500">
-              {t(draft.conditions.some(conditionSet) ? 'rules.trashHint' : 'rules.trashAllHint')}
-            </p>
-          )}
         </SettingsGroup>
 
         {editConflict && (

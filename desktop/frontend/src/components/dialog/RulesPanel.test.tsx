@@ -31,6 +31,11 @@ let matches = 0
 let withoutBody = 0
 let storedRules: Rule[] = []
 
+function addAction(view: ReturnType<typeof render>, name: string) {
+  fireEvent.click(view.getByRole('button', { name: 'Add action' }))
+  fireEvent.click(view.getByRole('button', { name }))
+}
+
 function stubCore(initial: Rule[], refuse = false) {
   const saved: Rule[][] = []
   storedRules = initial
@@ -221,6 +226,28 @@ it('keeps the form closed until asked for, and closes it on cancel', async () =>
   expect(view.queryByLabelText('From')).toBeNull()
 })
 
+it('shows only the actions a rule takes, and removing one clears it', async () => {
+  const saved = stubCore([bills])
+  const view = render(<RulesPanel />)
+  await waitFor(() => expect(view.getByText('From: billing')).toBeTruthy())
+  fireEvent.click(view.getByRole('button', { name: 'Edit rule' }))
+  await waitFor(() => expect(view.getByRole('button', { name: 'Move to' })).toBeTruthy())
+  const rows = () => [...view.container.querySelectorAll('[data-action]')].map((row) => row.getAttribute('data-action'))
+  expect(rows()).toEqual(['tags', 'mark_read', 'move'])
+
+  fireEvent.click(view.getByRole('button', { name: 'Remove action: Mark as read' }))
+  fireEvent.click(view.getByRole('button', { name: 'Remove action: Move to' }))
+  expect(rows()).toEqual(['tags'])
+  addAction(view, 'Copy to')
+  // A row asked for but left without a folder is no action.
+  expect(rows()).toEqual(['tags', 'copy'])
+  expect(view.getByRole('button', { name: 'Copy to' }).textContent).toBe('Choose a folder')
+  fireEvent.click(view.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(saved.length).toBe(1))
+  expect(saved[0][0]).toMatchObject({ tags: ['finance'], mark_read: false, move_to: '', copy_folder: '' })
+})
+
 it('adds a rule that only moves mail, warning before Trash', async () => {
   const saved = stubCore([])
   const view = render(<RulesPanel />)
@@ -228,7 +255,7 @@ it('adds a rule that only moves mail, warning before Trash', async () => {
 
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
   fireEvent.change(view.getByLabelText('From'), { target: { value: 'spam' } })
-  fireEvent.click(view.getByRole('button', { name: 'Move to' }))
+  addAction(view, 'Move to')
   fireEvent.click(view.getByText('Trash'))
   expect(view.getByText(/goes to Trash without asking/)).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
@@ -263,7 +290,7 @@ it('takes all new mail when no condition is filled in, warning before Trash', as
   await waitFor(() => expect(view.getByText('No rules yet.')).toBeTruthy())
 
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
-  fireEvent.click(view.getByRole('button', { name: 'Move to' }))
+  addAction(view, 'Move to')
   fireEvent.click(view.getByText('Trash'))
   expect(view.getByText(/All matching mail goes to Trash/)).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
@@ -300,7 +327,7 @@ it('runs on selected accounts only once one is picked', async () => {
   expect(add.disabled).toBe(true)
 
   fireEvent.click(view.getByLabelText(/b@x\.test/))
-  fireEvent.click(view.getByRole('button', { name: 'Move to' }))
+  addAction(view, 'Move to')
   fireEvent.click(view.getByText('Archive'))
   fireEvent.click(add)
 
@@ -528,7 +555,11 @@ it('turns a rule into one for sent mail, dropping what sent mail cannot have don
   expect(view.queryByRole('button', { name: 'Move to' })).toBeNull()
   expect(view.queryByText('Mark as read')).toBeNull()
   expect(view.queryByText('Forward to')).toBeNull()
+  // Nor can it be asked for again.
+  fireEvent.click(view.getByRole('button', { name: 'Add action' }))
   expect(view.getByRole('button', { name: 'Copy to' })).toBeTruthy()
+  for (const name of ['Mark as read', 'Forward to', 'Move to']) expect(view.queryByRole('button', { name })).toBeNull()
+  fireEvent.click(view.getByRole('button', { name: 'Add action' }))
   fireEvent.click(view.getByRole('button', { name: 'Save' }))
 
   await waitFor(() => expect(saved.length).toBe(1))
@@ -561,6 +592,7 @@ it('adds a rule that forwards mail, saying how forwarding works', async () => {
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
   fireEvent.change(view.getByLabelText('From'), { target: { value: 'billing' } })
   expect(view.queryByText(/with the original attached/)).toBeNull()
+  addAction(view, 'Forward to')
   const forward = view.getByText('Forward to').parentElement!.querySelector('input')!
   fireEvent.change(forward, { target: { value: 'dan@example.org' } })
   expect(view.getByText(/with the original attached/)).toBeTruthy()
@@ -602,7 +634,7 @@ it('builds a rule from rows that may be negated, any of which is enough', async 
   fireEvent.change(view.getAllByLabelText('Condition')[2], { target: { value: 'starred' } })
   fireEvent.click(view.getByRole('button', { name: 'Add condition' }))
   fireEvent.click(view.getByText('Any condition'))
-  fireEvent.click(view.getByRole('switch', { name: 'Star' }))
+  addAction(view, 'Star')
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
 
   await waitFor(() => expect(saved.length).toBe(1))
@@ -632,7 +664,7 @@ it('picks a tag for a condition from the tags there are', async () => {
   fireEvent.change(view.getByLabelText('Comparison'), { target: { value: 'not' } })
   await waitFor(() => expect(view.getByRole('option', { name: 'receipts' })).toBeTruthy())
   fireEvent.change(view.getByLabelText('Tag'), { target: { value: 'receipts' } })
-  fireEvent.click(view.getByRole('switch', { name: 'Star' }))
+  addAction(view, 'Star')
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
 
   await waitFor(() => expect(saved.length).toBe(1))
@@ -660,7 +692,7 @@ it('checks the body, which a rule for sent mail cannot', async () => {
   fireEvent.click(view.getByText('Add condition'))
   fireEvent.change(view.getAllByLabelText('Condition')[1], { target: { value: 'subject_or_body' } })
   fireEvent.change(view.getByLabelText('Subject or body'), { target: { value: 'invoice' } })
-  fireEvent.click(view.getByRole('switch', { name: 'Star' }))
+  addAction(view, 'Star')
   fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
   await waitFor(() => expect(saved.length).toBe(1))
   expect(saved[0][0].conditions).toEqual([{ field: 'subject_or_body', value: 'invoice', negate: false }])
