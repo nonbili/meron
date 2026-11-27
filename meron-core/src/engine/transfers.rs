@@ -1,12 +1,156 @@
 //! Cross-account moves share the same safety rules on desktop and mobile.
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{Context, ensure};
 use serde_json::{Value, json};
 
 use super::{Engine, delete_to_trash, refresh_written_folder};
 use crate::{imap, mail_model, store};
+
+/// Reservations for archive moves and destructive edits. The mutex protects
+/// only the reservations, so network operations never block unrelated folders.
+#[derive(Default)]
+pub struct ArchiveTransfers(Mutex<Vec<ArchiveAccess>>);
+
+#[derive(Clone, PartialEq, Eq)]
+struct ArchiveAccess {
+    folder: String,
+    subtree: bool,
+    shared: bool,
+}
+
+impl ArchiveAccess {
+    fn covers(&self, folder: &str) -> bool {
+        self.folder == folder
+            || (self.subtree
+                && (self.folder.is_empty()
+                    || folder
+                        .strip_prefix(&self.folder)
+                        .is_some_and(|suffix| suffix.starts_with(store::LOCAL_DELIMITER))))
+    }
+}
+
+impl ArchiveTransfers {
+    pub fn move_into(&self, folder: &str) -> anyhow::Result<ArchiveTransfer<'_>> {
+        self.reserve(folder, false, true)
+    }
+
+    pub fn edit(&self, folder: &str, subtree: bool) -> anyhow::Result<ArchiveTransfer<'_>> {
+        self.reserve(folder, subtree, false)
+    }
+
+    pub fn remove_archive(&self) -> anyhow::Result<ArchiveTransfer<'_>> {
+        self.edit("", true)
+    }
+
+    fn reserve(
+        &self,
+        folder: &str,
+        subtree: bool,
+        shared: bool,
+    ) -> anyhow::Result<ArchiveTransfer<'_>> {
+        let access = ArchiveAccess {
+            folder: folder.to_owned(),
+            subtree,
+            shared,
+        };
+        let mut active = self.0.lock().unwrap();
+        ensure!(
+            !active.iter().any(|other| {
+                !(access.shared && other.shared)
+                    && (access.covers(&other.folder) || other.covers(&access.folder))
+            }),
+            "Local folder is busy. Try again after the current transfer finishes."
+        );
+        active.push(access.clone());
+        Ok(ArchiveTransfer {
+            transfers: self,
+            access,
+        })
+    }
+}
+
+pub struct ArchiveTransfer<'a> {
+    transfers: &'a ArchiveTransfers,
+    access: ArchiveAccess,
+}
+
+impl Drop for ArchiveTransfer<'_> {
+    fn drop(&mut self) {
+        let mut active = self.transfers.0.lock().unwrap();
+        if let Some(index) = active.iter().position(|access| *access == self.access) {
+            active.swap_remove(index);
+        }
+    }
+}
+
+/// Keep downloaded originals, flags and tags in the archive before their
+/// caller can move any source mail to Trash.
+pub async fn archive_server_messages(
+    main: &Engine,
+    archive: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    target: &str,
+    messages: Vec<imap::RawMessageCopy>,
+) -> anyhow::Result<Vec<u32>> {
+    let (source, inputs, source_keys, tags) = {
+        let db = main.db.lock().unwrap();
+        let source = store::archive_source_label(&db, account, folder);
+        let uids: Vec<_> = messages.iter().map(|message| message.uid).collect();
+        let source_keys = store::message_tag_keys_in_folder(&db, account, folder, &uids)?;
+        let keys: BTreeSet<_> = source_keys.iter().flatten().cloned().collect();
+        let tags = store::tags_by_key(&db, account, &keys.into_iter().collect::<Vec<_>>())?;
+        let inputs = messages
+            .into_iter()
+            .map(|message| {
+                let (thread_key, date) =
+                    store::cached_thread_key_and_date(&db, account, folder, message.uid)?;
+                Ok((message, thread_key, date))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        (source, inputs, source_keys, tags)
+    };
+    let archive = archive.clone();
+    let target = target.to_owned();
+    let media_root = main.host.media_root();
+    tokio::task::spawn_blocking(move || {
+        let inputs = inputs
+            .iter()
+            .map(|(message, thread_key, date)| store::ArchiveInput {
+                raw: &message.raw,
+                seen: message.seen,
+                starred: message.starred,
+                thread_key: thread_key.clone(),
+                date_fallback: *date,
+                source: source.clone(),
+            })
+            .collect::<Vec<_>>();
+        let db = archive.db.lock().unwrap();
+        let stored = store::archive_messages(&db, &target, &inputs, &media_root)?;
+        if !tags.is_empty() {
+            // The archive returns one UID per input, including deduplicated
+            // copies. Match by position so location tags follow mail that
+            // gains a synthetic Message-ID in the archive.
+            let targets =
+                store::message_tag_keys_in_folder(&db, store::LOCAL_ACCOUNT_ID, &target, &stored)?;
+            let mut carried = HashMap::<String, Vec<String>>::new();
+            for (source, target) in source_keys.iter().zip(targets) {
+                if let Some(tags) = source.as_ref().and_then(|key| tags.get(key)) {
+                    let key = target.context("Archived message is missing its tag key")?;
+                    carried.entry(key).or_default().extend(tags.iter().cloned());
+                }
+            }
+            store::apply_carried_tags(&db, store::LOCAL_ACCOUNT_ID, carried, false)?;
+        }
+        Ok(stored)
+    })
+    .await?
+}
 
 pub fn require_complete_fetch(
     uids: &[u32],
@@ -108,6 +252,30 @@ pub async fn move_between_accounts(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn archive_move_reserves_only_its_destination_and_overlapping_edits() {
+        let transfers = ArchiveTransfers::default();
+        let first = transfers.move_into("Receipts/2025").unwrap();
+        let second = transfers.move_into("Receipts/2025").unwrap();
+        assert!(transfers.edit("Receipts", false).is_ok());
+        assert!(transfers.edit("Receipts/2026", true).is_ok());
+        assert!(transfers.edit("Receipts-old", true).is_ok());
+        assert!(transfers.edit("Receipts", true).is_err());
+        assert!(transfers.remove_archive().is_err());
+        drop(first);
+        assert!(transfers.edit("Receipts/2025", false).is_err());
+        drop(second);
+
+        let edit = transfers.edit("Receipts", true).unwrap();
+        assert!(transfers.move_into("Receipts/2025").is_err());
+        assert!(transfers.move_into("Projects").is_ok());
+        drop(edit);
+        let removing = transfers.remove_archive().unwrap();
+        assert!(transfers.move_into("Receipts/2025").is_err());
+        drop(removing);
+        assert!(transfers.move_into("Receipts/2025").is_ok());
+    }
 
     fn message(uid: u32) -> imap::RawMessageCopy {
         imap::RawMessageCopy {

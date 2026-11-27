@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "다른 곳에서 규칙이 변경되어 목록을 새로 고쳤습니다.",
   "rules.editConflict": "편집하는 동안 이 규칙이 변경되었습니다. 다시 저장하면 작성한 내용이 최신 버전을 덮어씁니다.",
   "rules.lastFailed": "마지막 실행 실패",
+  "rules.localMoveHint": "Meron은 메일을 이 컴퓨터에 저장한 뒤 서버의 원본을 휴지통으로 이동합니다.",
   "rules.moveDown": "아래로 이동",
   "rules.moveTo": "이동 위치",
   "rules.moveUp": "위로 이동",

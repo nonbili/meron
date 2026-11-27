@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "Reegleid muudeti mujal. Loendit värskendati.",
   "rules.editConflict": "Reeglit muudeti redigeerimise ajal. Uuesti salvestamine asendab uuema versiooni sinu mustandiga.",
   "rules.lastFailed": "Viimane käivitus ebaõnnestus",
+  "rules.localMoveHint": "Meron salvestab kirja sellesse arvutisse ja teisaldab seejärel serveris oleva originaali prügikasti.",
   "rules.moveDown": "Liiguta alla",
   "rules.moveTo": "Teisalda",
   "rules.moveUp": "Liiguta üles",

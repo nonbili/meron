@@ -33,6 +33,10 @@ A rule for sent mail always runs right away, and can add tags, star, and copy. I
 
 Rules for received mail never run on Sent, and rules for sent mail never run anywhere else.
 
+## Local folders
+
+On desktop, choose a folder under **Local Folders** for **Copy to** or **Move to**. Copy keeps the server original and also works for sent mail. Move verifies the copy on this computer before moving the server original to Trash. Once server Trash is emptied, the archived message is available on this computer and in any local folders backups you make.
+
 ## Changing and running rules
 
 Editing or disabling a rule before it becomes due changes what will run. Once actions are queued, they use the existing retry mechanism. **Run on existing mail** applies the rule immediately to cached Inbox mail, independently of its trigger and delay.

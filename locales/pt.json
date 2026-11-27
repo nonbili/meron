@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "As regras foram alteradas noutro local. A lista foi atualizada.",
   "rules.editConflict": "Esta regra foi alterada enquanto a editava. Se guardar novamente, o seu rascunho vai substituir a versão mais recente.",
   "rules.lastFailed": "A última execução falhou",
+  "rules.localMoveHint": "O Meron guarda a mensagem neste computador e depois move o original no servidor para o lixo.",
   "rules.moveDown": "Mover para baixo",
   "rules.moveTo": "Mover para",
   "rules.moveUp": "Mover para cima",

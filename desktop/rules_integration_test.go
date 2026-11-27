@@ -213,6 +213,153 @@ func TestIntegrationDelayedRules(t *testing.T) {
 	})
 }
 
+func TestIntegrationLocalFolderRules(t *testing.T) {
+	server := startMailServer(t)
+	sidecar, events := startSidecar(t)
+	const account, user = "alice", "alice@mail.test"
+	const target = "Receipts"
+	connectAccount(t, sidecar, server, account, user)
+	callMap(t, sidecar, "account.addLocal", map[string]any{"folder": target})
+
+	subjectIs := func(subject string) func(map[string]any) bool {
+		return func(message map[string]any) bool { return str(message, "subject") == subject }
+	}
+	deliver := func(folder, subject string, hasMessageID bool) {
+		t.Helper()
+		headers := []string{
+			"From: sender@mail.test", "To: " + user, "Subject: " + subject,
+			"Date: " + time.Now().Format(time.RFC1123Z),
+		}
+		if hasMessageID {
+			headers = append(headers, "Message-ID: <"+subject+"@mail.test>")
+		}
+		imapAppend(t, server.imapPort, user, testPassword, folder, rawMessage(headers, "Local rule body\r\n"))
+	}
+	saveRule := func(subject string, actions map[string]any) string {
+		t.Helper()
+		actions["query"] = "subject:" + subject
+		saved := callMap(t, sidecar, "rules.set", map[string]any{"rules": []map[string]any{actions}})
+		return str(saved["rules"].([]any)[0].(map[string]any), "id")
+	}
+
+	t.Run("copy from Sent without a Message-ID and rerun without duplicates", func(t *testing.T) {
+		const subject = "local-sent"
+		targets := callMap(t, sidecar, "rules.targets", map[string]any{})
+		local, ok := targets["local"].(map[string]any)
+		if !ok || local["id"] != localAccountID || len(local["folders"].([]any)) != 1 {
+			t.Fatalf("missing local rule destination: %v", targets)
+		}
+		deliver("Sent", subject, false)
+		pollFolder(t, sidecar, account, "Sent", subjectIs(subject))
+		result := callMap(t, sidecar, "rules.create", map[string]any{"rule": map[string]any{
+			"query": "subject:" + subject, "sent": true,
+			"copy_account": localAccountID, "copy_folder": target,
+		}})
+		id := str(result["rule"].(map[string]any), "id")
+		for i := 1; i <= 2; i++ {
+			run := callMap(t, sidecar, "rules.run", map[string]any{"id": id})
+			if jsonNumber(run["count"]) != 1 {
+				t.Fatalf("expected one sent message to match: %v", run)
+			}
+			awaitRuleArchiveEvents(t, events, target, i)
+		}
+		localMail := callMap(t, sidecar, "messages.recent", map[string]any{
+			"account": localAccountID, "folder": target, "limit": 20,
+		})
+		if messages := localMail["messages"].([]any); len(messages) != 1 || !messagesContainSubject(localMail, subject) {
+			t.Fatalf("expected one local copy: %v", localMail)
+		}
+		mcpAssertServerCopies(t, server, user, "Sent", subject, 1)
+	})
+
+	t.Run("move new mail without a Message-ID and preserve its flags and tags", func(t *testing.T) {
+		const subject = "local-move"
+		deliver("INBOX", "local-rule-seed", true)
+		pollInbox(t, sidecar, account, subjectIs("local-rule-seed"))
+		saveRule(subject, map[string]any{
+			"move_to": "folder", "folder_account": localAccountID, "folder": target,
+			"star": true, "mark_read": true, "tags": []string{"receipts"},
+		})
+		deliver("INBOX", subject, false)
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			callMap(t, sidecar, "messages.recent", map[string]any{"account": account, "folder": "INBOX", "refresh": true})
+			if len(imapSearchSubject(t, server.imapPort, user, testPassword, "Trash", subject)) == 1 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("the rule never moved the server original to Trash")
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+		mcpAssertServerCopies(t, server, user, "INBOX", subject, 0)
+		archived := pollFolder(t, sidecar, localAccountID, target, subjectIs(subject))
+		if !boolValue(archived, "seen") || !boolValue(archived, "starred") {
+			t.Fatalf("archived flags were lost: %v", archived)
+		}
+		tagged := callMap(t, sidecar, "messages.recent", map[string]any{
+			"account": localAccountID, "folder": target, "query": "tag:receipts", "limit": 20,
+		})
+		if !messagesContainSubject(tagged, subject) {
+			t.Fatalf("archived tags were lost: %v", tagged)
+		}
+	})
+
+	t.Run("a missing destination leaves the server original in place", func(t *testing.T) {
+		const subject = "local-missing"
+		callMap(t, sidecar, "folders.create", map[string]any{"account": localAccountID, "name": "Missing"})
+		id := saveRule(subject, map[string]any{"move_to": "folder", "folder_account": localAccountID, "folder": "Missing"})
+		callMap(t, sidecar, "folders.delete", map[string]any{"account": localAccountID, "folder": "Missing"})
+		deliver("INBOX", subject, true)
+
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			callMap(t, sidecar, "messages.recent", map[string]any{"account": account, "folder": "INBOX", "refresh": true})
+			status := callMap(t, sidecar, "rules.status", map[string]any{})
+			log, _ := status["log"].([]any)
+			for _, item := range log {
+				entry := item.(map[string]any)
+				if str(entry, "rule_id") == id && boolValue(entry, "failed") && strings.Contains(str(entry, "detail"), "Folder not found") {
+					mcpAssertServerCopies(t, server, user, "INBOX", subject, 1)
+					mcpAssertServerCopies(t, server, user, "Trash", subject, 0)
+					return
+				}
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+		t.Fatal("the missing local destination never appeared as a failed rule")
+	})
+
+	t.Run("server rule targets remain available when the archive cannot open", func(t *testing.T) {
+		t.Setenv("MERON_ARCHIVE_DB", t.TempDir()) // A directory cannot be opened as SQLite.
+		cold, _ := startSidecar(t)
+		connectAccount(t, cold, server, account, user)
+		if _, err := cold.Call("account.addLocal", map[string]any{"folder": target}); err == nil {
+			t.Fatal("expected archive opening to fail")
+		}
+		targets := callMap(t, cold, "rules.targets", map[string]any{})
+		accounts, _ := targets["accounts"].([]any)
+		if len(accounts) != 1 || accounts[0].(map[string]any)["id"] != account || targets["local"] != nil {
+			t.Fatalf("expected server targets only: %v", targets)
+		}
+	})
+}
+
+func awaitRuleArchiveEvents(t *testing.T, events *eventLog, folder string, want int) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if events.count(func(event sidecarEvent) bool {
+			return event.name == "mail.synced" && str(event.detail, "account") == localAccountID &&
+				str(event.detail, "folder") == folder
+		}) >= want {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("local rule did not report %d updates to %s", want, folder)
+}
+
 // A rule's forward goes out through SMTP with the original attached, is filed
 // in Sent and happens before the rule's move. A forward never sets off another:
 // bob's rule forwards it straight back, which would otherwise never stop.

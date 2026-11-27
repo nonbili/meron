@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
+import { isLocalAccountId } from '../../states/accounts'
 import type { RuleMove } from '../../states/mailRules'
 import { RecipientInput } from '../composer/RecipientInput'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
@@ -185,6 +186,9 @@ export function RuleActions({
             )}
             {action === 'move' && values.move_to === 'trash' && (
               <p className="px-3.5 pb-2.5 text-[0.6875rem] font-medium text-rose-500">{trashHint}</p>
+            )}
+            {action === 'move' && values.move_to === 'folder' && isLocalAccountId(values.folder_account) && (
+              <p className="px-3.5 pb-2.5 text-[0.6875rem] text-secondary">{t('rules.localMoveHint')}</p>
             )}
           </div>
         )

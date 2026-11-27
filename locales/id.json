@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "Aturan diubah di tempat lain. Daftar telah diperbarui.",
   "rules.editConflict": "Aturan ini berubah saat Anda mengeditnya. Menyimpan lagi akan mengganti versi yang lebih baru dengan draf Anda.",
   "rules.lastFailed": "Proses terakhir gagal",
+  "rules.localMoveHint": "Meron menyimpan pesan di komputer ini, lalu memindahkan pesan asli di server ke Sampah.",
   "rules.moveDown": "Pindahkan ke bawah",
   "rules.moveTo": "Pindahkan ke",
   "rules.moveUp": "Pindahkan ke atas",

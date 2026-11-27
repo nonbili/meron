@@ -1,4 +1,4 @@
-//! The server half of rules: reading, starring and moving what a sync matched.
+//! Run the actions a sync or a manual rule run queued.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -480,6 +480,9 @@ async fn run_rule_turn(
     }
     let mut moving = Vec::new();
     let mut moved = BTreeSet::new();
+    // Keep each local move destination in place from the archive write until
+    // the server move later in this turn.
+    let mut archive_moves = Vec::new();
     for batch in marked {
         // A copy takes the flags the message has now, and can't be revisited.
         let mut batch: Vec<_> = batch
@@ -487,18 +490,19 @@ async fn run_rule_turn(
             .filter(|action| action.copies.is_empty() || !unfinished.contains(&action.uid))
             .collect();
         let run = batch.first().map_or(0, |action| action.run);
-        let copied = match copy_batch(engine, account, folder, &batch, run).await {
-            Ok(mut gone) => {
-                batch.retain(|action| !gone.contains(&action.uid));
-                forward_batch(engine, account, folder, &batch, run)
-                    .await
-                    .map(|missing| {
-                        gone.extend(missing);
-                        gone
-                    })
-            }
-            Err(err) => Err(err),
-        };
+        let copied =
+            match copy_batch(engine, account, folder, &batch, run, &mut archive_moves).await {
+                Ok(mut gone) => {
+                    batch.retain(|action| !gone.contains(&action.uid));
+                    forward_batch(engine, account, folder, &batch, run)
+                        .await
+                        .map(|missing| {
+                            gone.extend(missing);
+                            gone
+                        })
+                }
+                Err(err) => Err(err),
+            };
         match copied {
             Ok(gone) => {
                 batch.retain(|action| !gone.contains(&action.uid));
@@ -619,12 +623,13 @@ async fn mark_rule_mail(
 /// The copies of `actions`, all of `run`. Before any move: only here does the
 /// queue's UID still mean this message. Answers with the messages found gone from
 /// here, whose work is over, so none of it goes on to the move.
-async fn copy_batch(
-    engine: &Arc<Engine>,
+async fn copy_batch<'a>(
+    engine: &'a Arc<Engine>,
     account: &str,
     folder: &str,
     actions: &[RuleAction],
     run: i64,
+    archive_moves: &mut Vec<ArchiveTransfer<'a>>,
 ) -> anyhow::Result<BTreeSet<u32>> {
     let mut gone = BTreeSet::new();
     let mut failure = None;
@@ -634,7 +639,19 @@ async fn copy_batch(
             copies.entry(copy).or_default().push(action.uid);
         }
     }
+    let moving = actions.iter().any(RuleAction::moves);
     for (copy, uids) in copies {
+        if moving && store::is_local_account(&copy.account) {
+            let reservation = store::normalize_local_folder_name(&copy.folder)
+                .and_then(|target| engine.archive_transfers.move_into(&target));
+            match reservation {
+                Ok(guard) => archive_moves.push(guard),
+                Err(err) => {
+                    failure = Some(err);
+                    continue;
+                }
+            }
+        }
         // Each on its own: a bad destination mustn't cost the good ones the mail.
         match copy_rule_mail(engine, account, folder, copy, &uids).await {
             Ok(missing) => gone.extend(missing),
@@ -788,6 +805,18 @@ async fn copy_rule_mail(
                 )
             })
             .await?;
+        let fetched: BTreeSet<u32> = messages.iter().map(|message| message.uid).collect();
+        gone.extend(chunk.iter().filter(|uid| !fetched.contains(uid)));
+        if store::is_local_account(&copy.account) {
+            if !messages.is_empty() {
+                let target = store::normalize_local_folder_name(&copy.folder)?;
+                let archive = engine.host.local_archive(engine)?;
+                archive_server_messages(engine, &archive, account, folder, &target, messages)
+                    .await?;
+                report_rule_progress(engine, store::LOCAL_ACCOUNT_ID, &target);
+            }
+            continue;
+        }
         {
             let db = engine.db.lock().unwrap();
             let copies = BTreeMap::from([(folder.to_string(), chunk.to_vec())]);
@@ -831,8 +860,6 @@ async fn copy_rule_mail(
                 })
                 .await?;
         }
-        let fetched: BTreeSet<u32> = messages.iter().map(|message| message.uid).collect();
-        gone.extend(chunk.iter().filter(|uid| !fetched.contains(uid)));
     }
     Ok(gone)
 }

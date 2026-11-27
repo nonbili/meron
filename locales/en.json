@@ -1327,6 +1327,7 @@
   "rules.changedElsewhere": "Rules changed elsewhere. The list has been refreshed.",
   "rules.editConflict": "This rule changed while you were editing it. Saving again replaces the newer version with your draft.",
   "rules.lastFailed": "Last run failed",
+  "rules.localMoveHint": "Meron saves the mail on this computer, then moves the server original to Trash.",
   "rules.moveDown": "Move down",
   "rules.moveTo": "Move to",
   "rules.moveUp": "Move up",

@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "Kurallar başka bir yerde değiştirildi. Liste yenilendi.",
   "rules.editConflict": "Siz düzenlerken bu kural değişti. Yeniden kaydederseniz taslağınız daha yeni sürümün yerini alır.",
   "rules.lastFailed": "Son çalıştırma başarısız oldu",
+  "rules.localMoveHint": "Meron iletiyi bu bilgisayara kaydeder, ardından sunucudaki aslını Çöp Kutusu’na taşır.",
   "rules.moveDown": "Aşağı taşı",
   "rules.moveTo": "Şuraya taşı",
   "rules.moveUp": "Yukarı taşı",

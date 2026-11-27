@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "Các quy tắc đã được thay đổi ở nơi khác. Danh sách đã được làm mới.",
   "rules.editConflict": "Quy tắc này đã thay đổi trong khi bạn chỉnh sửa. Nếu lưu lại, bản nháp của bạn sẽ thay thế phiên bản mới hơn.",
   "rules.lastFailed": "Lần chạy gần nhất thất bại",
+  "rules.localMoveHint": "Meron lưu thư trên máy tính này, sau đó chuyển thư gốc trên máy chủ vào Thùng rác.",
   "rules.moveDown": "Chuyển xuống",
   "rules.moveTo": "Chuyển đến",
   "rules.moveUp": "Chuyển lên",

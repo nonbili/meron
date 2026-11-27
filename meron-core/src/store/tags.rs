@@ -74,21 +74,34 @@ pub fn message_tag_keys(
     account: &str,
     targets: &BTreeMap<String, Vec<u32>>,
 ) -> Result<Vec<String>> {
+    let mut keys = BTreeSet::new();
+    for (folder, uids) in targets {
+        keys.extend(
+            message_tag_keys_in_folder(conn, account, folder, uids)?
+                .into_iter()
+                .flatten(),
+        );
+    }
+    Ok(keys.into_iter().collect())
+}
+
+/// The tag key for each UID, in input order, including empty slots for absent mail.
+pub fn message_tag_keys_in_folder(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+) -> Result<Vec<Option<String>>> {
     let mut stmt = conn.prepare_cached(&format!(
         "SELECT {TAG_KEY_SQL} FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3"
     ))?;
-    let mut keys = BTreeSet::new();
-    for (folder, uids) in targets {
-        for uid in uids {
-            if let Some(key) = stmt
-                .query_row(params![account, folder, uid], |row| row.get::<_, String>(0))
-                .optional()?
-            {
-                keys.insert(key);
-            }
-        }
-    }
-    Ok(keys.into_iter().collect())
+    Ok(uids
+        .iter()
+        .map(|uid| {
+            stmt.query_row(params![account, folder, uid], |row| row.get(0))
+                .optional()
+        })
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Add and remove tags on messages. With `mirrored`, the change also waits to

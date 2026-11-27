@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "Reglerna ändrades på annat håll. Listan har uppdaterats.",
   "rules.editConflict": "Regeln ändrades medan du redigerade den. Om du sparar igen ersätter ditt utkast den nyare versionen.",
   "rules.lastFailed": "Senaste körningen misslyckades",
+  "rules.localMoveHint": "Meron sparar meddelandet på den här datorn och flyttar sedan originalet på servern till papperskorgen.",
   "rules.moveDown": "Flytta ned",
   "rules.moveTo": "Flytta till",
   "rules.moveUp": "Flytta upp",

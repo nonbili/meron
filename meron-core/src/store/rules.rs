@@ -605,6 +605,15 @@ pub enum RuleEdit {
 
 /// Change a single rule without overwriting concurrent edits to the list.
 pub fn edit_rule(conn: &Connection, edit: RuleEdit) -> Result<Rule> {
+    edit_rule_with_local_folders(conn, edit, &[])
+}
+
+/// Local destination IDs come from the archive, which has its own database.
+pub fn edit_rule_with_local_folders(
+    conn: &Connection,
+    edit: RuleEdit,
+    local_folders: &[String],
+) -> Result<Rule> {
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let previous = rules_for_editing(&tx)?;
     let mut next = previous.clone();
@@ -613,7 +622,7 @@ pub fn edit_rule(conn: &Connection, edit: RuleEdit) -> Result<Rule> {
         RuleEdit::Create(mut rule) => {
             rule.id.clear();
             let rule = clean_rule(rule)?;
-            validate_rule_edit(&tx, None, &rule)?;
+            validate_rule_edit(&tx, None, &rule, local_folders)?;
             next.push(rule.clone());
             rule
         }
@@ -624,7 +633,7 @@ pub fn edit_rule(conn: &Connection, edit: RuleEdit) -> Result<Rule> {
             let mut rule: Rule = serde_json::from_value(values)?;
             rule.id = id;
             let rule = clean_rule(rule)?;
-            validate_rule_edit(&tx, Some(&next[index]), &rule)?;
+            validate_rule_edit(&tx, Some(&next[index]), &rule, local_folders)?;
             restart_events = rule != next[index];
             next[index] = rule.clone();
             rule
@@ -654,7 +663,12 @@ fn rule_index(rules: &[Rule], id: &str) -> Result<usize> {
     Ok(index)
 }
 
-fn validate_rule_edit(conn: &Connection, previous: Option<&Rule>, rule: &Rule) -> Result<()> {
+fn validate_rule_edit(
+    conn: &Connection,
+    previous: Option<&Rule>,
+    rule: &Rule,
+    local_folders: &[String],
+) -> Result<()> {
     anyhow::ensure!(
         rule.trigger != RuleTrigger::Age || rule.disabled || previous == Some(rule),
         "age rules can act on existing Inbox mail. Save the rule disabled and enable it in Meron."
@@ -683,11 +697,23 @@ fn validate_rule_edit(conn: &Connection, previous: Option<&Rule>, rule: &Rule) -
         if rule.folder_account.is_empty() {
             validate_relative_move(conn, &accounts, rule)?;
         } else {
-            validate_rule_folder(conn, &accounts, &rule.folder_account, &rule.folder)?;
+            validate_rule_folder(
+                conn,
+                &accounts,
+                &rule.folder_account,
+                &rule.folder,
+                local_folders,
+            )?;
         }
     }
     if copy_changed && !rule.copy_folder.is_empty() {
-        validate_rule_folder(conn, &accounts, &rule.copy_account, &rule.copy_folder)?;
+        validate_rule_folder(
+            conn,
+            &accounts,
+            &rule.copy_account,
+            &rule.copy_folder,
+            local_folders,
+        )?;
     }
     Ok(())
 }
@@ -697,7 +723,16 @@ fn validate_rule_folder(
     accounts: &[String],
     id: &str,
     folder: &str,
+    local_folders: &[String],
 ) -> Result<()> {
+    if super::is_local_account(id) {
+        let wanted = super::normalize_local_folder_name(folder)?;
+        anyhow::ensure!(
+            super::has_local_account(conn)? && local_folders.contains(&wanted),
+            "unknown local folder {folder}"
+        );
+        return Ok(());
+    }
     anyhow::ensure!(
         accounts.iter().any(|account| account == id),
         "unknown mail account: {id}"
@@ -1379,11 +1414,15 @@ fn add_rule_effects(
     }
     let destination = rule_move(conn, account, folder, rule)?;
     let copy = rule_copy(account, folder, rule);
-    // Mail with no Message-ID can't be told from its own copies: each would
-    // count as new where it lands, and rules pointing at each other would never
-    // stop. It stays put, for the actions that can't loop.
-    let copying = copy.is_some() || destination.as_ref().is_some_and(|it| it.copy.is_some());
-    let ids = if copying {
+    // A server copy without a Message-ID can set off rules again where it
+    // lands. Local copies deduplicate by raw bytes and never trigger rules.
+    let server_copy = |copy: &RuleCopy| !super::is_local_account(&copy.account);
+    let copies_to_server = copy.as_ref().is_some_and(server_copy);
+    let moves_to_server = destination
+        .as_ref()
+        .and_then(|it| it.copy.as_ref())
+        .is_some_and(server_copy);
+    let ids = if copies_to_server || moves_to_server {
         super::cached_message_ids(conn, account, folder, &matched)?
     } else {
         Vec::new()
@@ -1408,13 +1447,13 @@ fn add_rule_effects(
         action.rule_ids.push(rule.id.clone());
         let destination = destination
             .as_ref()
-            .filter(|it| identified || it.copy.is_none());
+            .filter(|_| identified || !moves_to_server);
         if let Some(destination) = destination.filter(|_| !action.moves()) {
             action.trash = destination.trash;
             action.target = destination.target.clone();
             action.copies.extend(destination.copy.clone());
         }
-        if identified {
+        if identified || !copies_to_server {
             action.copies.extend(copy.clone());
         }
         action.copies.sort();

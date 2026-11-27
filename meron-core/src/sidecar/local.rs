@@ -76,7 +76,7 @@ impl EngineHost for ArchiveHost {
 /// never creates `archive.db`.
 static ARCHIVE: Mutex<Option<Arc<Engine>>> = Mutex::new(None);
 
-fn archive(main: &Arc<Engine>) -> anyhow::Result<Arc<Engine>> {
+pub(crate) fn archive(main: &Engine) -> anyhow::Result<Arc<Engine>> {
     let mut slot = ARCHIVE.lock().unwrap();
     if let Some(archive) = slot.as_ref() {
         return Ok(archive.clone());
@@ -193,6 +193,7 @@ pub(crate) async fn dispatch(
         // says it cannot be undone. The account goes only once the file is
         // gone: otherwise adding local folders again would bring the mail back.
         "account.remove" => {
+            let _transfer = main.archive_transfers.remove_archive()?;
             // Held to the end, so nothing reopens the archive while it goes.
             let mut slot = ARCHIVE.lock().unwrap();
             // A request still holding the engine (a long move) keeps the
@@ -320,6 +321,7 @@ async fn local_mail(
 
         "folders.delete" => {
             let folder = request_folder(p)?;
+            let _transfer = main.archive_transfers.edit(&folder, true)?;
             let db = archive.db.lock().unwrap();
             let (removed, deleted) = store::delete_local_folder(&db, &folder)?;
             for target in &removed {
@@ -336,6 +338,7 @@ async fn local_mail(
 
         "folders.rename" => {
             let folder = request_folder(p)?;
+            let _transfer = main.archive_transfers.edit(&folder, true)?;
             let db = archive.db.lock().unwrap();
             let renamed =
                 store::rename_local_folder(&db, &folder, &req_str(p, "name")?, &media_root)?;
@@ -607,6 +610,7 @@ async fn local_mail(
         // Local folders have no Trash: a delete is permanent, and the UI says so.
         "messages.delete" => {
             let folder = canon_local(p);
+            let _transfer = main.archive_transfers.edit(&folder, false)?;
             let db = archive.db.lock().unwrap();
             let uids = request_uids(&db, p, &folder)?;
             let deleted = store::delete_local_messages(&db, &folder, &uids)?;
@@ -629,6 +633,9 @@ async fn local_mail(
         "messages.move" | "messages.copy" => {
             let moving = req.method == "messages.move";
             let folder = canon_local(p);
+            let _transfer = moving
+                .then(|| main.archive_transfers.edit(&folder, false))
+                .transpose()?;
             let target_account =
                 req_str(p, "target_account").unwrap_or_else(|_| account.to_string());
             let target_folder = req_str(p, "target_folder")?;
@@ -836,6 +843,9 @@ async fn archive_from_server(main: &Arc<Engine>, req: &Request) -> anyhow::Resul
         engine::canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
     let target_folder = store::normalize_local_folder_name(&req_str(p, "target_folder")?)?;
     let thread_id = changed_thread_id(p, &account, &folder);
+    let _transfer = moving
+        .then(|| main.archive_transfers.move_into(&target_folder))
+        .transpose()?;
     let archive = archive(main)?;
     if !store::folder_exists(
         &archive.db.lock().unwrap(),
@@ -845,9 +855,6 @@ async fn archive_from_server(main: &Arc<Engine>, req: &Request) -> anyhow::Resul
         return Err(anyhow::anyhow!("Folder not found: {target_folder}"));
     }
     let uids = request_uids(&main.db.lock().unwrap(), p, &folder)?;
-    let source = store::archive_source_label(&main.db.lock().unwrap(), &account, &folder);
-    let media_root = parse::media_root();
-
     let mut target_uids = Vec::with_capacity(uids.len());
     let mut trash_folder = None;
     for chunk in uids.chunks(ARCHIVE_BATCH) {
@@ -861,61 +868,16 @@ async fn archive_from_server(main: &Arc<Engine>, req: &Request) -> anyhow::Resul
             })
             .await?;
         engine::require_complete_fetch(chunk, &messages)?;
-        let inputs = {
-            let db = main.db.lock().unwrap();
-            messages
-                .iter()
-                .map(|message| {
-                    let (thread_key, date) =
-                        store::cached_thread_key_and_date(&db, &account, &folder, message.uid)?;
-                    Ok((message, thread_key, date))
-                })
-                .collect::<anyhow::Result<Vec<_>>>()?
-        };
-        let stored = {
-            let archive = archive.clone();
-            let target_folder = target_folder.clone();
-            let source = source.clone();
-            let media_root = media_root.clone();
-            let inputs = inputs
-                .into_iter()
-                .map(|(message, thread_key, date)| {
-                    (
-                        message.raw.clone(),
-                        message.seen,
-                        message.starred,
-                        thread_key,
-                        date,
-                    )
-                })
-                .collect::<Vec<_>>();
-            tokio::task::spawn_blocking(move || {
-                let inputs = inputs
-                    .iter()
-                    .map(
-                        |(raw, seen, starred, thread_key, date)| store::ArchiveInput {
-                            raw,
-                            seen: *seen,
-                            starred: *starred,
-                            thread_key: thread_key.clone(),
-                            date_fallback: *date,
-                            source: source.clone(),
-                        },
-                    )
-                    .collect::<Vec<_>>();
-                store::archive_messages(
-                    &archive.db.lock().unwrap(),
-                    &target_folder,
-                    &inputs,
-                    &media_root,
-                )
-            })
-            .await??
-        };
+        let stored = engine::archive_server_messages(
+            main,
+            &archive,
+            &account,
+            &folder,
+            &target_folder,
+            messages,
+        )
+        .await?;
         target_uids.extend(stored);
-        let copies = std::collections::BTreeMap::from([(folder.clone(), chunk.to_vec())]);
-        let tags = store::carried_tags(&main.db.lock().unwrap(), &account, &copies)?;
-        store::apply_carried_tags(&archive.db.lock().unwrap(), LOCAL_ACCOUNT_ID, tags, false)?;
         if moving {
             let removed = engine::delete_to_trash(main, &account, &folder, chunk)
                 .await

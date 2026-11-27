@@ -47,7 +47,7 @@ func (s *mcpService) registerRuleTools(server *mcp.Server, c mcpClient) {
 	mcpRegister(s, server, c, "list_rules", "List this device's saved mail rules in evaluation order. Returns each rule's id and full definition.", mcpReadRules, func(struct{}) string { return "" }, func(_ struct{}, _ mcpClient) (any, error) {
 		return s.coreCall("rules.list", struct{}{})
 	})
-	mcpRegister(s, server, c, "list_rule_targets", "List mail account IDs, names and cached folder IDs and names for rule sources and destinations.", mcpReadRules, func(struct{}) string { return "" }, func(_ struct{}, _ mcpClient) (any, error) {
+	mcpRegister(s, server, c, "list_rule_targets", "List mail accounts and their cached folder IDs for rule sources and destinations. The optional local entry lists on-device folders that can be used as destinations.", mcpReadRules, func(struct{}) string { return "" }, func(_ struct{}, _ mcpClient) (any, error) {
 		return s.coreCall("rules.targets", struct{}{})
 	})
 	mcpRegister(s, server, c, "create_rule", "Append a mail rule and return it with its new id. Rules are disabled by default. Set disabled to false to enable a new arrival or read rule. Age rules can act on existing Inbox mail and must be enabled in Meron. Omitted conditions match all mail and omitted accounts cover all mail accounts. Retrying creates another rule.", mcpManageRules, func(mcpCreateRuleArgs) string { return "" }, func(args mcpCreateRuleArgs, _ mcpClient) (any, error) {

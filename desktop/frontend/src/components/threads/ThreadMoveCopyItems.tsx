@@ -302,6 +302,7 @@ export function FolderListStatus({ loading }: { loading: boolean }) {
  *  folders one level further out. */
 export function AccountFolderItem({
   account,
+  showLocalSubtitle = false,
   folders,
   excludedFolderIds,
   loading,
@@ -310,6 +311,7 @@ export function AccountFolderItem({
   onPick,
 }: {
   account: Account
+  showLocalSubtitle?: boolean
   folders: Folder[]
   excludedFolderIds: string[]
   loading: boolean
@@ -321,6 +323,7 @@ export function AccountFolderItem({
   const anchorRef = useRef<HTMLDivElement | null>(null)
   const position = useFlyoutPosition(open, anchorRef, ACCOUNT_FLYOUT_WIDTH)
   const label = accountLabel(account)
+  const title = isLocalAccountId(account.id) ? `${label} (${t('accounts.local.subtitle')})` : label
   return (
     <div ref={anchorRef} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <MenuItem
@@ -328,11 +331,8 @@ export function AccountFolderItem({
           <AccountAvatar accountId={account.id} name={label} src={account.avatar_url} size={18} className="shrink-0" />
         }
         label={
-          <span
-            className="min-w-0 truncate"
-            title={isLocalAccountId(account.id) ? `${label} (${t('accounts.local.subtitle')})` : label}
-          >
-            {label}
+          <span className="min-w-0 truncate" title={title}>
+            {showLocalSubtitle ? title : label}
           </span>
         }
         submenuOpen={open}

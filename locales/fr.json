@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "Les règles ont été modifiées ailleurs. La liste a été actualisée.",
   "rules.editConflict": "Cette règle a changé pendant votre modification. Si vous enregistrez à nouveau, votre brouillon remplacera la version plus récente.",
   "rules.lastFailed": "La dernière exécution a échoué",
+  "rules.localMoveHint": "Meron enregistre le message sur cet ordinateur, puis déplace l’original sur le serveur dans la corbeille.",
   "rules.moveDown": "Descendre",
   "rules.moveTo": "Déplacer vers",
   "rules.moveUp": "Monter",

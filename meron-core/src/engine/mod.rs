@@ -150,6 +150,8 @@ pub struct Engine {
     /// Hears the account and folder when rules changed mail with no sync around
     /// to say so. Set once by the host, which knows how to tell its clients.
     pub rule_progress: std::sync::OnceLock<Arc<dyn Fn(&str, &str) + Send + Sync>>,
+    /// Keep an archive destination in place through the server half of a move.
+    pub archive_transfers: ArchiveTransfers,
     /// Pulsed when an account is paused so live IDLE watchers wake and re-check
     /// their paused state (and stop) instead of blocking up to the IDLE timeout.
     pub pause_signal: Notify,
@@ -214,6 +216,10 @@ pub trait EngineHost: Send + Sync {
     /// Where attachment files go: the bridge's own directory on mobile.
     fn media_root(&self) -> std::path::PathBuf {
         crate::parse::media_root()
+    }
+    /// The desktop archive used by manual and rule-driven local transfers.
+    fn local_archive(&self, _main: &Engine) -> anyhow::Result<Arc<Engine>> {
+        anyhow::bail!("Local folders are unavailable on this device")
     }
     /// Forget an account's stored secret.
     fn delete_secret(&self, conn: &rusqlite::Connection, account: &str) -> anyhow::Result<()> {
@@ -475,6 +481,7 @@ impl Engine {
             tag_pushes: std::sync::Mutex::new(HashMap::new()),
             rule_workers: std::sync::Mutex::new(Default::default()),
             rule_progress: std::sync::OnceLock::new(),
+            archive_transfers: ArchiveTransfers::default(),
             pause_signal: Notify::new(),
             resume_signal: Notify::new(),
             pool: std::sync::Mutex::new(HashMap::new()),

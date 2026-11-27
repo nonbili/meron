@@ -323,14 +323,26 @@ pub fn archive_messages(
             bail!("The server returned an empty message");
         }
         let sha256 = sha256_hex(message.raw);
-        let existing: Option<u32> = conn
+        let existing: Option<(u32, bool)> = conn
             .query_row(
-                "SELECT uid FROM archive_raw WHERE folder = ?1 AND sha256 = ?2",
-                params![folder, sha256],
-                |row| row.get(0),
+                "SELECT r.uid, EXISTS (
+                    SELECT 1 FROM messages m
+                    WHERE m.account = ?3 AND m.folder = r.folder AND m.uid = r.uid
+                      AND m.body IS NOT NULL
+                 ) FROM archive_raw r WHERE r.folder = ?1 AND r.sha256 = ?2",
+                params![folder, sha256, LOCAL_ACCOUNT_ID],
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
-        if let Some(uid) = existing {
+        if let Some((uid, indexed)) = existing {
+            if raw_message(conn, folder, uid)?.as_deref() != Some(message.raw) {
+                bail!("archived message {uid} did not read back intact");
+            }
+            // An interrupted write may have kept the original before indexing
+            // it. Complete that write before a retry can remove the source.
+            if !indexed {
+                index_raw(conn, folder, uid, media_root)?;
+            }
             uids.push(uid);
             continue;
         }

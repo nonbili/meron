@@ -43,6 +43,10 @@ impl EngineHost for DesktopHost {
         store::open_notifying(announce_store_upgrade)
     }
 
+    fn local_archive(&self, main: &Engine) -> anyhow::Result<Arc<Engine>> {
+        sidecar::local::archive(main)
+    }
+
     fn apply_secret(&self, conn: &rusqlite::Connection, account: &str, creds: &mut imap::Creds) {
         let stored = match secrets::load(account) {
             Ok(stored) => stored,

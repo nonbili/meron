@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "Reguły zostały zmienione w innym miejscu. Lista została odświeżona.",
   "rules.editConflict": "Ta reguła zmieniła się podczas edycji. Ponowny zapis zastąpi nowszą wersję Twoją wersją roboczą.",
   "rules.lastFailed": "Ostatnie uruchomienie nie powiodło się",
+  "rules.localMoveHint": "Meron zapisuje wiadomość na tym komputerze, a następnie przenosi oryginał na serwerze do kosza.",
   "rules.moveDown": "Przenieś w dół",
   "rules.moveTo": "Przenieś do",
   "rules.moveUp": "Przenieś w górę",

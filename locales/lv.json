@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "Kārtulas tika mainītas citur. Saraksts ir atjaunināts.",
   "rules.editConflict": "Šī kārtula mainījās rediģēšanas laikā. Saglabājot vēlreiz, jaunākā versija tiks aizstāta ar jūsu melnrakstu.",
   "rules.lastFailed": "Pēdējā izpilde neizdevās",
+  "rules.localMoveHint": "Meron saglabā vēstuli šajā datorā un pēc tam pārvieto serverī esošo oriģinālu uz atkritni.",
   "rules.moveDown": "Pārvietot lejup",
   "rules.moveTo": "Pārvietot uz",
   "rules.moveUp": "Pārvietot augšup",

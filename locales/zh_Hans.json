@@ -1335,6 +1335,7 @@
   "rules.changedElsewhere": "规则已在其他位置更改，列表已刷新。",
   "rules.editConflict": "此规则在编辑期间已更改。再次保存会用你的草稿覆盖较新的版本。",
   "rules.lastFailed": "上次运行失败",
+  "rules.localMoveHint": "Meron 将邮件保存在此电脑上，然后将服务器上的原件移至废纸篓。",
   "rules.moveDown": "下移",
   "rules.moveTo": "移动到",
   "rules.moveUp": "上移",

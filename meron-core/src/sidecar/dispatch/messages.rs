@@ -143,7 +143,17 @@ pub(crate) async fn dispatch(
             let rule = serde_json::from_value(p.get("rule").cloned().unwrap_or_default())?;
             Ok(json!({ "source": store::rule_source(&rule)? }))
         }
-        "rules.targets" => store::rule_targets(&engine.db.lock().unwrap()),
+        "rules.targets" => {
+            let mut targets = store::rule_targets(&engine.db.lock().unwrap())?;
+            if let Some(folders) = local_rule_folders(engine) {
+                let folders: Vec<_> = folders
+                    .into_iter()
+                    .map(|folder| json!({ "id": folder.name, "name": folder.display_name }))
+                    .collect();
+                targets["local"] = json!({ "id": store::LOCAL_ACCOUNT_ID, "folders": folders });
+            }
+            Ok(targets)
+        }
         "rules.set" => {
             let rules = serde_json::from_value(p.get("rules").cloned().unwrap_or_default())?;
             let db = engine.db.lock().unwrap();
@@ -165,7 +175,20 @@ pub(crate) async fn dispatch(
                 ),
                 _ => store::RuleEdit::Delete(req_str(p, "rule_id")?),
             };
-            let rule = store::edit_rule(&engine.db.lock().unwrap(), edit)?;
+            let local_folders = if matches!(edit, store::RuleEdit::Delete(_)) {
+                Vec::new()
+            } else {
+                local_rule_folders(engine)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|folder| folder.name)
+                    .collect()
+            };
+            let rule = store::edit_rule_with_local_folders(
+                &engine.db.lock().unwrap(),
+                edit,
+                &local_folders,
+            )?;
             Ok(json!({ "rule": rule }))
         }
         "rules.status" => {
@@ -443,6 +466,12 @@ pub(crate) async fn dispatch(
 
         other => Err(anyhow::anyhow!("unknown method: {other}")),
     }
+}
+
+/// Server rule targets remain available when local folders cannot be opened.
+fn local_rule_folders(engine: &Engine) -> Option<Vec<meron_core::imap::Folder>> {
+    let archive = engine.host.local_archive(engine).ok()?;
+    store::get_folders(&archive.db.lock().unwrap(), store::LOCAL_ACCOUNT_ID).ok()
 }
 
 /// One `messages.recent` page: a mailbox view's cards, from the cache or a live

@@ -1,6 +1,7 @@
 import { afterEach, expect, it, spyOn } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'
+import { mail$ } from '../../states/mail'
 import type { Rule, RuleCondition, RuleStatus } from '../../states/mailRules'
 import { settleConfirm, ui$ } from '../../states/ui'
 import type { Account } from '../../types'
@@ -90,6 +91,7 @@ afterEach(() => {
   cleanup()
   delete (window as any).go
   accounts$.set([])
+  mail$.foldersByAccount.local.delete()
   ran.length = 0
   stopped.length = 0
   statusReply = { log: [], running: {} }
@@ -264,6 +266,40 @@ it('adds a rule that only moves mail, warning before Trash', async () => {
   expect(saved[0][0]).toMatchObject({ conditions: from('spam'), tags: [], move_to: 'trash' })
   await waitFor(() => expect(view.getByText('From: spam')).toBeTruthy())
   expect(view.queryByLabelText('From')).toBeNull()
+})
+
+it('offers local folders for both actions and explains what happens to the server original', async () => {
+  accounts$.set([
+    { id: 'a', email: 'a@x.test', provider: 'imap' },
+    { id: 'local', email: '', display_name: 'Local Folders', provider: 'local', auth_type: 'local' },
+  ] as Account[])
+  mail$.foldersByAccount.local.set([
+    { id: 'Receipts', name: 'Receipts', account_id: 'local', role: 'folder', unread: 0 },
+  ])
+  const saved = stubCore([])
+  const view = render(<RulesPanel />)
+  await view.findByText('No rules yet.')
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+  expect(view.queryByRole('button', { name: 'Selected accounts' })).toBeNull()
+
+  for (const action of ['Copy to', 'Move to']) {
+    addAction(view, action)
+    fireEvent.click(view.getByText('Local Folders (On this computer)'))
+    fireEvent.click(await view.findByText('Receipts'))
+    expect(view.getByRole('button', { name: action }).textContent).toBe('Receipts (On this computer)')
+  }
+  expect(view.getByText(/moves the server original to Trash/)).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: 'Add rule' }))
+  await waitFor(() =>
+    expect(saved[0]?.[0]).toMatchObject({
+      accounts: [],
+      copy_account: 'local',
+      copy_folder: 'Receipts',
+      move_to: 'folder',
+      folder_account: 'local',
+      folder: 'Receipts',
+    }),
+  )
 })
 
 it('edits a rule in place', async () => {

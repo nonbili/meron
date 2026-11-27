@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { ChevronDown } from 'lucide-react'
-import { accounts$, isSendableAccount } from '../../states/accounts'
+import { useTranslation } from '../../lib/i18n'
+import { accounts$, isLocalAccountId, isMailFolderAccount } from '../../states/accounts'
 import { mail$ } from '../../states/mail'
 import { ensureAccountFolders } from '../../states/mailFolders'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
@@ -14,11 +15,13 @@ export type RuleFolderTarget = { accountId: string; folderId: string }
 
 /** How a rule's target reads: its account too when there is more than one. */
 export function useRuleTargetLabel() {
-  const accounts = useValue(accounts$).filter(isSendableAccount)
+  const { t } = useTranslation()
+  const accounts = useValue(accounts$).filter(isMailFolderAccount)
   const foldersByAccount = useValue(mail$.foldersByAccount)
   return ({ accountId, folderId }: RuleFolderTarget) => {
     const folder = foldersByAccount[accountId]?.find((item) => item.id === folderId)
     const name = folder?.name ?? folderId
+    if (isLocalAccountId(accountId)) return `${name} (${t('accounts.local.subtitle')})`
     const account = accounts.find((item) => item.id === accountId)
     return accounts.length > 1 && account ? `${accountLabel(account)} / ${name}` : name
   }
@@ -26,8 +29,7 @@ export function useRuleTargetLabel() {
 
 /**
  * Picks where a rule sends mail, with the thread menu's Move to and Copy to lists:
- * `options` first, then one row per account opening its folders. Rules only run
- * on synced mail accounts, so those are the accounts offered.
+ * `options` first, then one row per account opening its folders.
  */
 export function RuleFolderPicker({
   label,
@@ -44,7 +46,7 @@ export function RuleFolderPicker({
   /** Opens the list as soon as it shows, for a target just asked for. */
   autoOpen?: boolean
 }) {
-  const accounts = useValue(accounts$).filter(isSendableAccount)
+  const accounts = useValue(accounts$).filter(isMailFolderAccount)
   const foldersByAccount = useValue(mail$.foldersByAccount)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
   const [openAccountId, setOpenAccountId] = useState<string | null>(null)
@@ -77,7 +79,7 @@ export function RuleFolderPicker({
     onPick({ accountId, folderId: folder.id })
   }
 
-  const inlineAccount = accounts.length === 1 ? accounts[0] : undefined
+  const inlineAccount = accounts.length === 1 && !isLocalAccountId(accounts[0].id) ? accounts[0] : undefined
   const menu: ReactNode = position && (
     <FloatingContextMenu
       x={position.x}
@@ -113,6 +115,7 @@ export function RuleFolderPicker({
           <AccountFolderItem
             key={account.id}
             account={account}
+            showLocalSubtitle
             folders={foldersByAccount[account.id] ?? []}
             excludedFolderIds={[]}
             loading={loading}
