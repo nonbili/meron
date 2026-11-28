@@ -20,6 +20,15 @@ export function firstDayOfWeek(locale?: string): number {
   return 0
 }
 
+/** The seven local dates in the week containing `day`. */
+export function weekGrid(day: Date, weekStart: number): Date[] {
+  const offset = (day.getDay() - weekStart + 7) % 7
+  return Array.from(
+    { length: 7 },
+    (_, index) => new Date(day.getFullYear(), day.getMonth(), day.getDate() - offset + index),
+  )
+}
+
 /** The six weeks a month view shows for `month` (any Date in it), starting on
  *  `weekStart`. Always 42 days, so the grid does not jump between months. */
 export function monthGrid(month: Date, weekStart = 0): Date[] {
@@ -38,6 +47,30 @@ export function gridRange(days: Date[]): { from: number; to: number } {
 }
 
 export type DayItem = { start: number; end: number; all_day: boolean }
+
+/** Reschedule from the displayed day, which may be a continuation of the event. */
+export function droppedEventStart(item: DayItem, from: Date, to: Date, hour?: number): number {
+  const utcMidnight = (day: Date) => Date.UTC(day.getFullYear(), day.getMonth(), day.getDate())
+  const days = (utcMidnight(to) - utcMidnight(from)) / DAY_MS
+  if (item.all_day) return item.start + (days * DAY_MS) / 1000
+
+  const start = new Date(item.start * 1000)
+  const startsOnSourceDay = sameDay(start, from)
+  const sourceHour = startsOnSourceDay ? start.getHours() : 0
+  if (!days && (hour === undefined || hour === sourceHour)) return item.start
+
+  if (hour === undefined) {
+    start.setDate(start.getDate() + days)
+  } else if (startsOnSourceDay) {
+    return new Date(to.getFullYear(), to.getMonth(), to.getDate(), hour).getTime() / 1000
+  } else {
+    // A continuation begins at midnight in its column. Keep that point of
+    // the event under the drop target.
+    const target = new Date(to.getFullYear(), to.getMonth(), to.getDate(), hour)
+    return item.start + (target.getTime() - from.getTime()) / 1000
+  }
+  return start.getTime() / 1000
+}
 
 /** Whether `item` happens on local day `day`. */
 export function occursOn(item: DayItem, day: Date): boolean {

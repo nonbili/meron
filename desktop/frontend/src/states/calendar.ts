@@ -1,6 +1,6 @@
 import { observable } from '@legendapp/state'
 import { invoke } from '../lib/bridge'
-import { firstDayOfWeek, gridRange, monthGrid } from '../lib/calendarGrid'
+import { firstDayOfWeek, gridRange, monthGrid, weekGrid } from '../lib/calendarGrid'
 import { errorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
 import type { Invite, InviteResponse, Message } from '../types'
@@ -96,6 +96,7 @@ export type EventInput = {
   /** On update, the input as the editor first showed it. Fields left as
    * they were keep what a sync brought in meanwhile. */
   original?: EventInput
+  repeat_as_shown?: boolean
 }
 
 export type EventEditor = { mode: 'new'; day: number } | { mode: 'edit'; item: CalendarItem }
@@ -261,19 +262,19 @@ export function toggleCalendarPanel() {
   }
 }
 
-/** Re-read the month on show, and the panel's agenda where it runs past it. A
- * read that finishes after a newer one started is dropped, so paging quickly
- * lands on the month the user stopped at. */
+/** Reload the dates covered by the month, week and agenda. Discard responses
+ * superseded by a newer load so rapid paging shows the latest dates. */
 export async function loadCalendar() {
   const seq = ++loadSeq
-  // The grid CalendarView draws, week start included, or its first days go unasked.
-  const days = monthGrid(new Date(calendar$.month.peek()), firstDayOfWeek())
+  const weekStart = firstDayOfWeek()
+  const days = monthGrid(new Date(calendar$.month.peek()), weekStart)
   const day = new Date(calendar$.day.peek())
   const agenda = [day, new Date(day.getFullYear(), day.getMonth(), day.getDate() + AGENDA_DAYS - 1)]
   const grid = gridRange(days)
-  const week = gridRange(agenda)
-  const from = Math.min(grid.from, week.from)
-  const to = Math.max(grid.to, week.to)
+  const agendaRange = gridRange(agenda)
+  const week = gridRange(weekGrid(day, weekStart))
+  const from = Math.min(grid.from, agendaRange.from, week.from)
+  const to = Math.max(grid.to, agendaRange.to, week.to)
   calendar$.loading.set(true)
   void loadSyncedCalendars()
   try {
@@ -333,6 +334,12 @@ export function shiftMonth(delta: number) {
   void loadCalendar()
 }
 
+export function shiftWeek(delta: number) {
+  const day = new Date(calendar$.day.peek())
+  day.setDate(day.getDate() + delta * 7)
+  selectDay(day)
+}
+
 export function goToToday() {
   calendar$.month.set(Date.now())
   calendar$.day.set(startOfDay(new Date()).getTime())
@@ -371,6 +378,32 @@ export async function updateEvent(eventId: string, input: EventInput): Promise<b
   }
   await loadCalendar()
   return true
+}
+
+export function canRescheduleEvent(item: CalendarItem, calendars: SyncedCalendar[]): boolean {
+  return item.source === 'event' && (!item.calendar || calendarOf(item, calendars)?.writable === true)
+}
+
+export async function rescheduleEvent(item: CalendarItem, start: number) {
+  if (start === item.start || !canRescheduleEvent(item, calendar$.calendars.peek())) return
+  const original: EventInput = {
+    title: item.title,
+    notes: item.notes,
+    location: item.location,
+    start: item.start,
+    end: item.end,
+    all_day: item.all_day,
+    repeat: item.repeat,
+    alerts: item.alerts ?? null,
+    occurrence_start: item.recurring ? item.start : undefined,
+  }
+  await updateEvent(item.id, {
+    ...original,
+    start,
+    end: start + (item.end - item.start),
+    original,
+    repeat_as_shown: false,
+  })
 }
 
 /** Delete an event, with an Undo that hands the core back what it removed:

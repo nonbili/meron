@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { gridRange, localInstant, monthGrid, occursOn, utcDate, utcDateValue } from './calendarGrid'
+import { droppedEventStart, gridRange, localInstant, monthGrid, occursOn, utcDate, utcDateValue } from './calendarGrid'
 
 describe('monthGrid', () => {
   it('shows six weeks from the week the month starts in', () => {
@@ -44,5 +44,20 @@ describe('occursOn', () => {
     const instant = { start, end: start, all_day: false }
     expect(occursOn(instant, new Date(2026, 9, 5))).toBe(true)
     expect(occursOn(instant, new Date(2026, 9, 6))).toBe(false)
+  })
+})
+
+describe('droppedEventStart', () => {
+  it('moves a multi-day all-day event from the date grabbed across a month boundary', () => {
+    const event = { start: utcDate('2026-10-30'), end: utcDate('2026-11-02'), all_day: true }
+    expect(droppedEventStart(event, new Date(2026, 9, 31), new Date(2026, 10, 3))).toBe(utcDate('2026-11-02'))
+  })
+
+  it('keeps the continuation of an overnight event under the dropped hour', () => {
+    const start = localInstant('2026-10-05', '22:00')
+    const event = { start, end: localInstant('2026-10-06', '02:00'), all_day: false }
+    expect(droppedEventStart(event, new Date(2026, 9, 6), new Date(2026, 9, 8), 9)).toBe(
+      localInstant('2026-10-08', '07:00'),
+    )
   })
 })

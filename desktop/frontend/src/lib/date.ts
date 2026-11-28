@@ -89,7 +89,7 @@ export function formatEventRange(start: number, end: number, allDay: boolean): s
   return formatRange(new Intl.DateTimeFormat([], options), from, new Date(Math.max(start, end) * 1000))
 }
 
-function formatRange(format: Intl.DateTimeFormat, from: Date, to: Date): string {
+export function formatRange(format: Intl.DateTimeFormat, from: Date, to: Date): string {
   if (from.getTime() === to.getTime()) return format.format(from)
   return format.formatRange ? format.formatRange(from, to) : `${format.format(from)} – ${format.format(to)}`
 }
