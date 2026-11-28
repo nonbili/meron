@@ -17,7 +17,11 @@ const pendingBytes = new Map<string, number>()
 /** The files that still fit the message `key`, which already carries
  *  `attachedBytes`. Each one taken is counted until settleAttachment says it
  *  landed, or failed. */
-export function takeWithinAttachmentLimits(key: string, files: File[], attachedBytes: number): File[] {
+export function takeWithinAttachmentLimits<T extends { size: number }>(
+  key: string,
+  files: T[],
+  attachedBytes: number,
+): T[] {
   const pending = pendingBytes.get(key) ?? 0
   let total = attachedBytes + pending
   const taken = files.filter((file) => {
@@ -30,7 +34,7 @@ export function takeWithinAttachmentLimits(key: string, files: File[], attachedB
 }
 
 /** A file taken by takeWithinAttachmentLimits is attached now, or won't be. */
-export function settleAttachment(key: string, file: File) {
+export function settleAttachment(key: string, file: { size: number }) {
   const pending = (pendingBytes.get(key) ?? 0) - file.size
   if (pending > 0) pendingBytes.set(key, pending)
   else pendingBytes.delete(key)

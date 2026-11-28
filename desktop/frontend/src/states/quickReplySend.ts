@@ -51,6 +51,8 @@ import {
   publishSendingDraftIds,
   quickReplyBoxGeneration,
   quickReplyDraftSaveInFlight,
+  quickReplyScope,
+  waitForQuickReplyRead,
   quickReplyOutgoingText,
   nextQuickReplyOwnershipTick,
   type QuickReplySendClaim,
@@ -101,6 +103,10 @@ export function conversationHtmlBody(text: string, attachments: ComposerAttachme
 }
 
 export async function sendReply() {
+  const scope = quickReplyScope
+  const pending = waitForQuickReplyRead()
+  if (pending) await pending
+  if (scope !== quickReplyScope) return
   const composerText = quickReplyOutgoingText()
   const attachments = compose$.composerAttachments.get()
   const activeT = getActiveThread()
@@ -259,7 +265,6 @@ export async function sendReply() {
     sign: compose$.quickReplySign.peek(),
     encryptChoice: compose$.quickReplyEncrypt.peek(),
   }
-  compose$.composerAttachments.set([])
   // The next reply in this thread starts as a plain one.
   compose$.quickReplyAdded.set([])
   clearQuickReplyDraftOwnership()

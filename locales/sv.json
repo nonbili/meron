@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Det gick inte att rensa det föregående kontots utkast",
   "composer.status.couldNotDiscardDraft": "Det gick inte att ta bort utkastet",
   "composer.status.draftAutosaveFailed": "Automatisk sparande av utkast misslyckades",
+  "composer.status.draftChangedElsewhere": "Det här utkastet har ändrats på en annan plats.",
   "composer.status.savedToDrafts": "Sparat i Utkast",
   "composer.status.savedToServer": "Sparad på servern",
   "composer.status.savingDraft": "Sparar utkast...",

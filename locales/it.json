@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Impossibile rimuovere la bozza dell'account precedente",
   "composer.status.couldNotDiscardDraft": "Impossibile eliminare la bozza",
   "composer.status.draftAutosaveFailed": "Salvataggio automatico della bozza fallito",
+  "composer.status.draftChangedElsewhere": "Questa bozza è stata modificata altrove.",
   "composer.status.savedToDrafts": "Salvato nelle bozze",
   "composer.status.savedToServer": "Salvato sul server",
   "composer.status.savingDraft": "Salvataggio bozza in corso...",

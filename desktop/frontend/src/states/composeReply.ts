@@ -347,8 +347,7 @@ export function quickReplyOffByUser(target: Message): boolean {
 
 /** The quick reply's sign switch as the user set it for this thread, or
  * undefined for the account's default (decided by the core). Reactive. */
-export function quickReplySigns(): boolean | undefined {
-  const target = quickReplyTarget()
+export function quickReplySigns(target = quickReplyTarget()): boolean | undefined {
   const choice = compose$.quickReplySign.get()
   return target && choice?.threadId === target.thread_id ? choice.on : undefined
 }
@@ -356,8 +355,7 @@ export function quickReplySigns(): boolean | undefined {
 /** Whether the quick reply is encrypted: the user's choice for this thread,
  * or by default on when the message answered was itself encrypted (sticky:
  * an encrypted conversation stays encrypted unless the user says otherwise). */
-export function quickReplyEncrypts(): boolean {
-  const target = quickReplyTarget()
+export function quickReplyEncrypts(target = quickReplyTarget()): boolean {
   if (!target) return false
   const choice = compose$.quickReplyEncrypt.get()
   if (choice && choice.threadId === target.thread_id) return choice.on

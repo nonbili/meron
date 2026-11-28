@@ -38,6 +38,17 @@ describe('addQuickReplyAttachments', () => {
     ui$.selectedThread.set(before)
   })
 
+  it('leaves out a stale file read even when the reader returns to the original conversation', async () => {
+    const before = ui$.selectedThread.peek()
+    ui$.selectedThread.set('thread-a')
+    addQuickReplyAttachments([new File(['old'], 'old.txt')])
+    ui$.selectedThread.set('thread-b')
+    ui$.selectedThread.set('thread-a')
+    addQuickReplyAttachments([new File(['new'], 'new.txt')])
+    expect((await attachmentsSettled(1)).map((attachment) => attachment.filename)).toEqual(['new.txt'])
+    ui$.selectedThread.set(before)
+  })
+
   it('leaves out what goes over the size limits, counting what is already attached', async () => {
     const sized = (name: string, megabytes: number) =>
       Object.defineProperty(new File(['x'], name), 'size', { value: megabytes * 1024 * 1024 })

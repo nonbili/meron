@@ -43,6 +43,8 @@ import {
   quickReplyBoxShown,
   nextQuickReplyOwnershipTick,
   quickReplyDraftSaveInFlight,
+  quickReplyScope,
+  waitForQuickReplyRead,
   unconfirmedQuickReplyDraftId,
   startFreshQuickReply,
 } from './quickReply'
@@ -247,6 +249,14 @@ function isRssMessage(message: Message): boolean {
 }
 
 export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
+  const loading = waitForQuickReplyRead()
+  if (loading) {
+    const scope = quickReplyScope
+    void loading.then(() => {
+      if (scope === quickReplyScope) openReplyInFullEditor(options)
+    })
+    return
+  }
   const t = getActiveThread()
   if (!t) return
   const target = pickReplyTarget(t)
@@ -308,7 +318,6 @@ export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
     threadId: t.thread_id,
     quote: quote && !bodyHasReplyQuote(carried, quote) ? quote : undefined,
   })
-  compose$.composerAttachments.set([])
   clearQuickReplyDraftOwnership()
   compose$.quickReplyFrom.set('')
   compose$.quickReplyAdded.set([])

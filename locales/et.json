@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Eelmise konto mustandit ei õnnestunud eemaldada",
   "composer.status.couldNotDiscardDraft": "Mustandit ei saanud kustutada",
   "composer.status.draftAutosaveFailed": "Mustandi automaatne salvestamine ebaõnnestus",
+  "composer.status.draftChangedElsewhere": "Seda mustandit muudeti mujal.",
   "composer.status.savedToDrafts": "Salvestatud mustanditesse",
   "composer.status.savedToServer": "Serverisse salvestatud",
   "composer.status.savingDraft": "Mustandi salvestamine...",

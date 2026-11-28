@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "تعذر تنظيف مسودة الحساب السابق",
   "composer.status.couldNotDiscardDraft": "تعذر حذف المسودة",
   "composer.status.draftAutosaveFailed": "فشل حفظ المسودة تلقائيًا",
+  "composer.status.draftChangedElsewhere": "تغيّرت هذه المسودة من مكان آخر.",
   "composer.status.savedToDrafts": "تم الحفظ في المسودات",
   "composer.status.savedToServer": "تم الحفظ في الخادم",
   "composer.status.savingDraft": "جاري حفظ المسودة...",

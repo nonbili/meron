@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Impossible de supprimer le brouillon du compte précédent",
   "composer.status.couldNotDiscardDraft": "Impossible de supprimer le brouillon",
   "composer.status.draftAutosaveFailed": "Échec de l'enregistrement automatique du brouillon",
+  "composer.status.draftChangedElsewhere": "Ce brouillon a été modifié ailleurs.",
   "composer.status.savedToDrafts": "Enregistré dans les brouillons",
   "composer.status.savedToServer": "Enregistré sur le serveur",
   "composer.status.savingDraft": "Enregistrement du brouillon...",

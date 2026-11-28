@@ -4,9 +4,12 @@ import type { Message } from '../types'
 import { openComposeTab, saveComposedDraft, sendComposed } from './compose'
 import { compose$ } from './composeState'
 import {
+  beginQuickReplyDraftRead,
   discardQuickReplyDraftIfEmpty,
   quickReplyDraftBelongsToThread,
+  quickReplyDraftSaveInFlight,
   saveQuickReplyDraft,
+  scheduleQuickReplyDraftSave,
   withoutHydratedQuickReplyDraft,
 } from './quickReply'
 import { sendReply } from './quickReplySend'
@@ -65,6 +68,247 @@ describe('quick reply draft sharing', () => {
     expect(calls.filter((c) => c.command === 'mail.allocateIdentity')).toHaveLength(1)
     expect(compose$.quickReplyDraftId.get()).toBe(firstDraftId)
     expect((saveCalls[1].payload as { draft_id: string }).draft_id).toBe(firstDraftId)
+  })
+
+  it('saves the outgoing text before the debounce and never writes it to the incoming thread', async () => {
+    const first = message({ account_id: 'acc-1', thread_id: 'first', message_id: 'first@example.com' })
+    const second = message({ account_id: 'acc-1', thread_id: 'second', message_id: 'second@example.com' })
+    mail$.threads.set([first, second])
+    ui$.selectedThread.set(first.thread_id)
+    compose$.composer.set('Outgoing edit')
+    scheduleQuickReplyDraftSave()
+
+    ui$.selectedThread.set(second.thread_id)
+    expect(compose$.composer.peek()).toBe('')
+    await quickReplyDraftSaveInFlight
+
+    const saves = calls.filter((call) => call.command === 'mail.saveDraft')
+    expect(saves).toHaveLength(1)
+    expect(saves[0].payload).toMatchObject({ body: 'Outgoing edit', in_reply_to: 'first@example.com' })
+    expect(compose$.quickReplyDraftId.peek()).toBe('')
+
+    ui$.selectedThread.set(first.thread_id)
+    expect(compose$.composer.peek()).toBe('Outgoing edit')
+    expect(compose$.quickReplyDraftSaved.peek()).toBe(true)
+  })
+
+  it('keeps newer edits when switching while the original draft identity is still being allocated', async () => {
+    const first = message({ account_id: 'acc-1', thread_id: 'first', message_id: 'first@example.com' })
+    const second = message({ account_id: 'acc-1', thread_id: 'second', message_id: 'second@example.com' })
+    mail$.threads.set([first, second])
+    const identity = Promise.withResolvers<{ message_id: string }>()
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.allocateIdentity') return identity.promise
+      return {}
+    }
+    ui$.selectedThread.set(first.thread_id)
+    compose$.composer.set('Original')
+    const original = saveQuickReplyDraft()
+    compose$.composer.set('Latest edit')
+    scheduleQuickReplyDraftSave()
+    ui$.selectedThread.set(second.thread_id)
+
+    ui$.selectedThread.set(first.thread_id)
+    expect(compose$.composer.peek()).toBe('Latest edit')
+    identity.resolve({ message_id: 'same-draft@example.com' })
+    await original
+    await quickReplyDraftSaveInFlight
+
+    expect(calls.filter((call) => call.command === 'mail.allocateIdentity')).toHaveLength(1)
+    const saves = calls.filter((call) => call.command === 'mail.saveDraft')
+    expect(saves).toHaveLength(2)
+    expect(saves[1].payload).toMatchObject({ draft_id: 'same-draft@example.com', body: 'Latest edit' })
+    expect(compose$.quickReplyDraftSaved.peek()).toBe(true)
+  })
+
+  it('merges restored files with newly added attachments before autosaving', async () => {
+    const ancestor = message({ account_id: 'acc-1', thread_id: 'first', message_id: 'first@example.com', date: 1000 })
+    const draft = message({
+      ...ancestor,
+      id: 'draft',
+      date: 2000,
+      folder_id: 'Drafts',
+      message_id: 'saved-draft@example.com',
+      subject: 'Re: Notification thread',
+      to: ancestor.from_addr,
+      from_addr: 'me@example.com',
+      body: 'Saved draft',
+      has_attachments: true,
+      attachments: [{ filename: 'saved.txt', mime: 'text/plain', size: 1, key: 'saved-key' }],
+    })
+    const file = Promise.withResolvers<{ data: string; mime: string; size: number }>()
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.readAttachment') return file.promise
+      return {}
+    }
+    mail$.threads.set([ancestor])
+    ui$.selectedThread.set(ancestor.thread_id)
+    mail$.messages.set([ancestor, draft])
+    expect(compose$.composer.peek()).toBe('Saved draft')
+    compose$.composerAttachments.push({ id: 'added', filename: 'added.txt', mime: 'text/plain', size: 1, data: 'Yg==' })
+
+    const saving = saveQuickReplyDraft()
+    expect(calls.some((call) => call.command === 'mail.saveDraft')).toBe(false)
+    file.resolve({ data: 'YQ==', mime: 'text/plain', size: 1 })
+    await saving
+
+    expect(compose$.composerAttachments.peek().map((attachment) => attachment.filename)).toEqual([
+      'saved.txt',
+      'added.txt',
+    ])
+    const saved = calls.find((call) => call.command === 'mail.saveDraft')
+    expect(saved?.payload).toMatchObject({
+      draft_id: 'saved-draft@example.com',
+      attachments: [{ filename: 'saved.txt' }, { filename: 'added.txt' }],
+    })
+  })
+
+  it.each(['edited', 'removed'])('uses the fresh page when a parked draft was %s elsewhere', async (change) => {
+    const ancestor = message({
+      account_id: 'acc-1',
+      thread_id: `changed-${change}`,
+      message_id: 'ancestor@example.com',
+      date: 1000,
+    })
+    const draft = message({
+      ...ancestor,
+      id: 'old-draft-row',
+      folder_id: 'Drafts',
+      message_id: 'changed-draft@example.com',
+      subject: 'Re: Notification thread',
+      to: ancestor.from_addr,
+      from_addr: 'me@example.com',
+      body: 'Older reply',
+      date: 2000,
+    })
+    mail$.threads.set([ancestor])
+    ui$.selectedThread.set(ancestor.thread_id)
+    mail$.messages.set([ancestor, draft])
+    ui$.selectedThread.set('another-conversation')
+    ui$.selectedThread.set(ancestor.thread_id)
+    expect(compose$.composer.peek()).toBe('Older reply')
+
+    const fresh = change === 'edited' ? [ancestor, { ...draft, id: 'new-draft-row', body: 'Newer reply' }] : [ancestor]
+    const finishRead = beginQuickReplyDraftRead(ancestor.thread_id)
+    expect(finishRead).toBeDefined()
+    await finishRead?.(fresh)
+    mail$.messages.set(fresh)
+    expect(compose$.composer.peek()).toBe(change === 'edited' ? 'Newer reply' : '')
+  })
+
+  it('keeps draft ownership when a fresh page first shows its own saved reply', async () => {
+    const ancestor = message({
+      account_id: 'acc-1',
+      thread_id: 'first-observation',
+      message_id: 'ancestor@example.com',
+      date: 1000,
+    })
+    mail$.threads.set([ancestor])
+    mail$.messages.set([ancestor])
+    ui$.selectedThread.set(ancestor.thread_id)
+    compose$.composer.set('Our reply')
+    scheduleQuickReplyDraftSave()
+    ui$.selectedThread.set('another-conversation')
+    await quickReplyDraftSaveInFlight
+    ui$.selectedThread.set(ancestor.thread_id)
+
+    const finishRead = beginQuickReplyDraftRead(ancestor.thread_id)
+    expect(finishRead).toBeDefined()
+    compose$.composer.set('Our reply, edited since returning')
+    await finishRead?.([
+      ancestor,
+      message({
+        ...ancestor,
+        id: 'saved-row',
+        folder_id: 'Drafts',
+        message_id: 'draft-core@example.com',
+        subject: 'Re: Notification thread',
+        to: ancestor.from_addr,
+        from_addr: 'me@example.com',
+        body: 'Our reply\r\n',
+        date: 2000,
+      }),
+    ])
+
+    expect(compose$.composer.peek()).toBe('Our reply, edited since returning')
+    expect(compose$.quickReplyDraftId.peek()).toBe('draft-core@example.com')
+  })
+
+  it('stops comparing an older restored reply after the editor saves new text', async () => {
+    const ancestor = message({
+      account_id: 'acc-1',
+      thread_id: 'new-save-after-restore',
+      message_id: 'ancestor@example.com',
+    })
+    mail$.threads.set([ancestor])
+    mail$.messages.set([ancestor])
+    ui$.selectedThread.set(ancestor.thread_id)
+    compose$.composer.set('Initial reply')
+    scheduleQuickReplyDraftSave()
+    ui$.selectedThread.set('another-conversation')
+    await quickReplyDraftSaveInFlight
+    ui$.selectedThread.set(ancestor.thread_id)
+
+    const finishRead = beginQuickReplyDraftRead(ancestor.thread_id)
+    expect(finishRead).toBeDefined()
+    await finishRead?.([ancestor])
+    expect(compose$.composer.peek()).toBe('Initial reply')
+
+    compose$.composer.set('Updated reply')
+    await saveQuickReplyDraft()
+    expect(beginQuickReplyDraftRead(ancestor.thread_id)).toBeUndefined()
+    expect(compose$.quickReplyDraftId.peek()).toBe('draft-core@example.com')
+  })
+
+  it('waits for draft validation that starts during the attachment read', async () => {
+    const ancestor = message({
+      account_id: 'acc-1',
+      thread_id: 'overlapping-draft-reads',
+      message_id: 'ancestor@example.com',
+      date: 1000,
+    })
+    const draft = message({
+      ...ancestor,
+      id: 'saved-row',
+      folder_id: 'Drafts',
+      message_id: 'attached-draft@example.com',
+      subject: 'Re: Notification thread',
+      to: ancestor.from_addr,
+      from_addr: 'me@example.com',
+      body: 'Reply with a file',
+      date: 2000,
+      has_attachments: true,
+      attachments: [{ filename: 'saved.txt', mime: 'text/plain', size: 1, key: 'saved-key' }],
+    })
+    const file = Promise.withResolvers<{ data: string; mime: string; size: number }>()
+    ;(window as any).go.main.App.Invoke = async (command: string, payload: unknown) => {
+      calls.push({ command, payload })
+      if (command === 'mail.readAttachment') return file.promise
+      return {}
+    }
+    mail$.threads.set([ancestor])
+    ui$.selectedThread.set(ancestor.thread_id)
+    mail$.messages.set([ancestor, draft])
+    ui$.selectedThread.set('another-conversation')
+    ui$.selectedThread.set(ancestor.thread_id)
+    compose$.composer.set('Edited reply with a file')
+
+    const saving = saveQuickReplyDraft()
+    const finishRead = beginQuickReplyDraftRead(ancestor.thread_id)
+    expect(finishRead).toBeDefined()
+    file.resolve({ data: 'YQ==', mime: 'text/plain', size: 1 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(calls.some((call) => call.command === 'mail.saveDraft')).toBe(false)
+
+    await finishRead?.([ancestor, draft])
+    await saving
+    expect(calls.find((call) => call.command === 'mail.saveDraft')?.payload).toMatchObject({
+      draft_id: 'attached-draft@example.com',
+      body: 'Edited reply with a file',
+      attachments: [{ filename: 'saved.txt' }],
+    })
   })
 
   it('marks a newly minted draft unsaved when the hydrated draft is claimed by an editor', async () => {

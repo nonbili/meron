@@ -16,6 +16,7 @@ import { bareAddr, splitAddressList } from '../lib/address'
 import { decrementFolderUnread, isDraftFolder, updateCachedFolderUnread } from './mailFolders'
 import { mail$ } from './mailState'
 import { compose$ } from './composeState'
+import { beginQuickReplyDraftRead } from './quickReply'
 
 export function threadFromTab(tab: MessageTab, fallback: Message | null): Message {
   if (fallback?.thread_id === tab.threadId) return fallback
@@ -328,10 +329,9 @@ export function selectAdjacentThread(delta: number) {
   if (target) ui$.selectedThread.set(target.thread_id)
 }
 
-export function getActiveThread() {
+export function getActiveThread(selected = ui$.selectedThread.get()) {
   const filtered = getFilteredThreads()
   const threads = mail$.threads.get()
-  const selected = ui$.selectedThread.get()
   // Nothing selected means an empty conversation pane. Falling back to the top
   // of the list here would re-open — and so mark read — a thread the user never
   // picked, which is exactly what `loadThreads` refuses to do.
@@ -1032,12 +1032,17 @@ export async function loadThread(threadId: string) {
     mail$.messagesCursorThread.set(threadId)
     mail$.messagesLoadingMore.set(data.loadingMore.peek())
   }
+  const validateDraft = beginQuickReplyDraftRead(threadId)
   try {
     const result = await invoke<{ messages: Message[]; next_cursor?: string }>('mail.threadRead', {
       thread_id: threadId,
       limit: CONVERSATION_PAGE_SIZE,
     })
     if (threadRequests.get(threadId) !== request) return
+    if (validateDraft) {
+      await validateDraft(result.messages)
+      if (threadRequests.get(threadId) !== request) return
+    }
     const refreshed = result.messages.filter((message) => !message.body_missing)
     const current = data.messages.peek()
     // A refresh reads the newest page. Keep history already paged in, including
@@ -1072,6 +1077,7 @@ export async function loadThread(threadId: string) {
     data.error.set(true)
     if (ui$.selectedThread.peek() === threadId) mail$.threadErrorId.set(threadId)
   } finally {
+    void validateDraft?.()
     if (threadRequests.get(threadId) === request) {
       data.loading.set(false)
       if (ui$.selectedThread.peek() === threadId) mail$.threadLoading.set(false)

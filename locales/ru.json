@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Не удалось удалить черновик из предыдущего аккаунта",
   "composer.status.couldNotDiscardDraft": "Не удалось удалить черновик",
   "composer.status.draftAutosaveFailed": "Не удалось автоматически сохранить черновик",
+  "composer.status.draftChangedElsewhere": "Этот черновик изменён в другом месте.",
   "composer.status.savedToDrafts": "Сохранено в черновиках",
   "composer.status.savedToServer": "Сохранено на сервере",
   "composer.status.savingDraft": "Сохранение черновика…",

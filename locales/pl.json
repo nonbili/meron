@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Nie udało się usunąć wersji roboczej poprzedniego konta",
   "composer.status.couldNotDiscardDraft": "Nie udało się odrzucić wersji roboczej",
   "composer.status.draftAutosaveFailed": "Automatyczne zapisywanie wersji roboczej nie powiodło się",
+  "composer.status.draftChangedElsewhere": "Ta wersja robocza została zmieniona w innym miejscu.",
   "composer.status.savedToDrafts": "Zapisano w folderze Robocze",
   "composer.status.savedToServer": "Zapisano na serwerze",
   "composer.status.savingDraft": "Zapisywanie wersji roboczej...",

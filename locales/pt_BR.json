@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Não foi possível limpar o rascunho da conta anterior",
   "composer.status.couldNotDiscardDraft": "Não foi possível descartar o rascunho",
   "composer.status.draftAutosaveFailed": "Falha no salvamento automático do rascunho",
+  "composer.status.draftChangedElsewhere": "Este rascunho foi alterado em outro lugar.",
   "composer.status.savedToDrafts": "Salvo em Rascunhos",
   "composer.status.savedToServer": "Salvo no servidor",
   "composer.status.savingDraft": "Salvando rascunho...",

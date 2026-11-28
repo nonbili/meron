@@ -493,6 +493,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Couldn't clean up the previous account's draft",
   "composer.status.couldNotDiscardDraft": "Could not discard draft",
   "composer.status.draftAutosaveFailed": "Draft autosave failed",
+  "composer.status.draftChangedElsewhere": "This draft changed elsewhere.",
   "composer.status.savedToDrafts": "Saved to Drafts",
   "composer.status.savedToServer": "Saved to Server",
   "composer.status.savingDraft": "Saving draft...",

@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Entwurf des vorherigen Kontos konnte nicht entfernt werden",
   "composer.status.couldNotDiscardDraft": "Entwurf konnte nicht verworfen werden",
   "composer.status.draftAutosaveFailed": "Automatische Speicherung des Entwurfs fehlgeschlagen",
+  "composer.status.draftChangedElsewhere": "Dieser Entwurf wurde an anderer Stelle geändert.",
   "composer.status.savedToDrafts": "In Entwürfen gespeichert",
   "composer.status.savedToServer": "Auf Server gespeichert",
   "composer.status.savingDraft": "Entwurf wird gespeichert...",

@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Не вдалося вилучити чернетку з попереднього облікового запису",
   "composer.status.couldNotDiscardDraft": "Не вдалося вилучити чернетку",
   "composer.status.draftAutosaveFailed": "Не вдалося автоматично зберегти чернетку",
+  "composer.status.draftChangedElsewhere": "Цю чернетку було змінено в іншому місці.",
   "composer.status.savedToDrafts": "Збережено в чернетках",
   "composer.status.savedToServer": "Збережено на сервері",
   "composer.status.savingDraft": "Збереження чернетки…",

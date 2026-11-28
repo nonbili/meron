@@ -4,15 +4,14 @@ import { useTranslation } from '../../lib/i18n'
 import { compose$ } from '../../states/composeState'
 import {
   cancelQuickReplyDraftSave,
-  clearQuickReplyDraftOwnership,
   discardQuickReplyDraftIfEmpty,
   isQuickReplyBlank,
   quickReplyCaretOffset,
-  quickReplyDraftBelongsToThread,
+  quickReplyScope,
   saveQuickReplyDraft,
   saveQuickReplyDraftNow,
   scheduleQuickReplyDraftSave,
-  startFreshQuickReply,
+  waitForQuickReplyRead,
 } from '../../states/quickReply'
 import { sendReply } from '../../states/quickReplySend'
 import { confirmKeyChanges } from '../../states/crypto'
@@ -64,13 +63,18 @@ function attachmentSnapshot(attachments: readonly ComposerAttachment[]): Compose
   return attachments.map((attachment) => ({ ...attachment }))
 }
 
+function appendQuickReplyAttachment(attachment: ComposerAttachment) {
+  compose$.composerAttachments.set((attachments) => [...attachments, attachment])
+  if (ui$.selectedThread.peek()) scheduleQuickReplyDraftSave()
+}
+
 /** Adds files to the chat reply as attachments: from the file picker, a pasted
  *  image, or files dropped onto the conversation (MessagePane). Reading a file
  *  takes a moment; one read after the reader moved to another conversation is
  *  left out, not attached to that conversation's reply. So is what goes over
  *  the size limits. The reader is told. */
 export function addQuickReplyAttachments(files: ArrayLike<File>) {
-  const thread = ui$.selectedThread.peek()
+  const scope = quickReplyScope
   logComposerPaste(
     'adding attachments',
     Array.from(files).map((file) => ({
@@ -80,14 +84,14 @@ export function addQuickReplyAttachments(files: ArrayLike<File>) {
     })),
   )
   const attached = compose$.composerAttachments.peek().reduce((bytes, attachment) => bytes + attachment.size, 0)
-  const key = `reply:${thread}`
+  const key = `reply:${scope}`
   const taken = takeWithinAttachmentLimits(key, Array.from(files), attached)
   if (taken.length < files.length) reportUnattachedFiles()
   for (const file of taken) {
     readAttachment(file)
       .then(({ attachment }) => {
-        if (ui$.selectedThread.peek() !== thread) return reportUnattachedFiles()
-        compose$.composerAttachments.push(attachment)
+        if (quickReplyScope !== scope) return reportUnattachedFiles()
+        appendQuickReplyAttachment(attachment)
       }, reportUnattachedFiles)
       .finally(() => settleAttachment(key, file))
   }
@@ -121,12 +125,24 @@ export function useQuickReply() {
     try {
       // A recipient's key changed since the last encrypted mail: ask first,
       // before the send claims the box's draft.
-      const target = quickReplyTarget()
-      if (target && quickReplyEncrypts()) {
+      const scope = quickReplyScope
+      const pending = waitForQuickReplyRead()
+      if (pending) await pending
+      while (scope === quickReplyScope) {
+        const target = quickReplyTarget()
+        if (!target || !quickReplyEncrypts()) {
+          await sendReply()
+          break
+        }
         const { to, cc } = quickReplyRecipients()
-        if (!(await confirmKeyChanges(target.account_id, recipientAddresses(to, cc)))) return
+        if (!(await confirmKeyChanges(target.account_id, recipientAddresses(to, cc)))) break
+        if (scope !== quickReplyScope) break
+        const current = quickReplyRecipients()
+        if (quickReplyTarget()?.account_id === target.account_id && current.to === to && current.cc === cc) {
+          await sendReply()
+          break
+        }
       }
-      await sendReply()
     } finally {
       setSendingReply(false)
     }
@@ -149,35 +165,16 @@ export function useQuickReply() {
     textarea?.setSelectionRange(caret, caret)
   }, [replyFocus])
 
-  // Reset quick reply state when the user switches threads. Any pending
-  // debounced save for the outgoing thread is dropped rather than flushed
-  // (mirrors the mobile app's behavior), and the incoming thread's saved draft
-  // (if its tail message is one) is re-hydrated by hydrateQuickReplyFromTailDraft
-  // once its messages load.
+  // Thread changes reset the box in state. Ignore the reset and any draft
+  // already hydrated for the incoming thread in this effect flush.
   useEffect(() => {
-    const previous = lastHydratedThreadRef.current
-    if (previous === selectedThreadId) return
-    cancelQuickReplyDraftSave()
+    if (lastHydratedThreadRef.current === selectedThreadId) return
     lastHydratedThreadRef.current = selectedThreadId
+    previousAttachmentsRef.current = attachmentSnapshot(compose$.composerAttachments.peek())
     suppressNextDraftSaveRef.current = true
-    // The composer effect normally consumes this suppression during the same
-    // effect flush. If its dependency value did not change, disarm it after the
-    // flush so the user's next real edit still autosaves.
     queueMicrotask(() => {
       if (lastHydratedThreadRef.current === selectedThreadId) suppressNextDraftSaveRef.current = false
     })
-    // A fast conversation read can hydrate its tail draft before this passive
-    // effect runs (notably when opening a draft-backed conversation). That
-    // state already belongs to the new thread; clearing it here loses ownership
-    // of the server copy, so sending later deletes only a newly-created draft
-    // and leaves the original bubble and list badge behind.
-    if (quickReplyDraftBelongsToThread(selectedThreadId)) return
-    clearQuickReplyDraftOwnership()
-    compose$.quickReplyFrom.set('')
-    compose$.quickReplyAdded.set([])
-    // The signature isn't in the box: it is added on send (see
-    // quickReplyOutgoingText), and the box's signature button shows it.
-    startFreshQuickReply()
   }, [selectedThreadId])
 
   // Save or discard the current quick reply after text changes. Keyed on
@@ -232,15 +229,22 @@ export function useQuickReply() {
 
   const pickAttachmentFiles = async () => {
     try {
+      const scope = quickReplyScope
       const files = await pickFiles(t('composer.actions.attachFiles'))
-      if (files.length > 0) addAttachmentFiles(files)
+      if (files.length === 0) return
+      if (scope !== quickReplyScope) return reportUnattachedFiles()
+      addAttachmentFiles(files)
     } catch (error) {
       showToast(error instanceof Error ? error.message : t('chat.failedToChooseFiles'), 'error')
     }
   }
 
   const addNativeClipboardImage = (image: NativeClipboardImage) => {
-    compose$.composerAttachments.push({
+    const key = `reply:${quickReplyScope}`
+    const attached = compose$.composerAttachments.peek().reduce((bytes, attachment) => bytes + attachment.size, 0)
+    if (takeWithinAttachmentLimits(key, [image], attached).length === 0) return reportUnattachedFiles()
+    settleAttachment(key, image)
+    appendQuickReplyAttachment({
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       filename: image.filename,
       mime: image.mime || 'application/octet-stream',
@@ -289,14 +293,15 @@ export function useQuickReply() {
     }
     if (!isPaste || !needsClipboardImageFallback()) return
 
+    const scope = quickReplyScope
     const pasteStartedAt = Date.now()
     void readClipboardImages()
       .then((images) => {
-        if (lastImagePasteAtRef.current >= pasteStartedAt) return
+        if (scope !== quickReplyScope || lastImagePasteAtRef.current >= pasteStartedAt) return
         logComposerPaste('async clipboard image count', images.length)
         if (images.length === 0) {
           return readNativeClipboardImage().then((image) => {
-            if (!image || lastImagePasteAtRef.current >= pasteStartedAt) return
+            if (!image || scope !== quickReplyScope || lastImagePasteAtRef.current >= pasteStartedAt) return
             lastImagePasteAtRef.current = Date.now()
             addNativeClipboardImage(image)
           })
@@ -306,9 +311,10 @@ export function useQuickReply() {
       })
       .catch((error) => {
         logComposerPaste('async clipboard read failed', error)
+        if (scope !== quickReplyScope) return
         void readNativeClipboardImage()
           .then((image) => {
-            if (!image || lastImagePasteAtRef.current >= pasteStartedAt) return
+            if (!image || scope !== quickReplyScope || lastImagePasteAtRef.current >= pasteStartedAt) return
             lastImagePasteAtRef.current = Date.now()
             addNativeClipboardImage(image)
           })

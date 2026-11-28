@@ -1,7 +1,7 @@
 import { threadWindowSession } from '../lib/windowSession'
 import { externalThreadDrafts$ } from '../lib/windowSession'
 import { externalComposeDraft$ } from '../lib/composeWindow'
-import type { Message } from '../types'
+import type { ComposerAttachment, Message } from '../types'
 import { contextualErrorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
 import { decryptFailed } from '../lib/crypto'
@@ -11,6 +11,7 @@ import { getActiveThread, normalizeMessageId } from './mail'
 // From the leaf module: this one subscribes to it while loading, which can be
 // inside an import cycle through mail.ts.
 import { mail$ } from './mailState'
+import { threadData$ } from './threadData'
 import { isDraftFolder } from './mailFolders'
 import { discardSavedDraftCopy } from './mailMoves'
 import { getPendingSend, getUnsentRescue, unsentRescues } from './pendingSends'
@@ -64,9 +65,6 @@ ui$.selectedThread.onChange(({ value }) => {
   // folder changes clear it, and board navigation selects another card. Show that
   // selection in Current so the displayed conversation and action target agree.
   if (activeTab?.kind === 'thread' && activeTab.threadId !== value) compose$.activeTab.set('')
-  // The box still holds the thread being left: leaving, not the user, is what
-  // blanks it from here (see quickReplyLeftWithReplyTick).
-  if (!isQuickReplyBlank()) quickReplyLeftWithReplyTick = nextQuickReplyOwnershipTick()
   if (compose$.activeTab.peek() === '') compose$.conversationThread.set(value)
 })
 
@@ -77,8 +75,7 @@ ui$.selectedThread.onChange(({ value }) => {
  * user switched it off for this reply (`compose$.quickReplySignatureOff`).
  * Accounts that can't send have none.
  */
-export function quickReplySignature(): Signature {
-  const thread = getActiveThread()
+export function quickReplySignature(thread = getActiveThread()): Signature {
   const accountId = thread?.account_id || ui$.selectedAccount.peek()
   const account = accounts$.peek().find((acc) => acc.id === accountId)
   return isSendableAccount(account) ? resolveSignatureFor(account) : signatureForms('')
@@ -89,9 +86,14 @@ export function quickReplySignature(): Signature {
  * thread switch, and after a send or an escalation took the box's reply.
  */
 export function startFreshQuickReply() {
+  quickReplyScope += 1
+  loadingQuickReplyAttachments = null
+  restoredQuickReply?.validation?.resolve()
+  restoredQuickReply = null
   watchQuickReplySignatureSources()
   hydratedWithoutSignature = null
   compose$.composer.set('')
+  compose$.composerAttachments.set([])
   compose$.quickReplySignatureOff.set(false)
   compose$.quickReplySignatureUnmanaged.set(false)
   // The OpenPGP switches are per reply too: back to the defaults.
@@ -130,10 +132,10 @@ export function quickReplyBoxShown(): boolean {
  * the reply as it would go out, and `hydrateQuickReplyFromTailDraft` takes the
  * signature back off when it loads it.
  */
-export function quickReplyOutgoingText(): string {
+export function quickReplyOutgoingText(thread?: Message): string {
   const text = compose$.composer.peek()
   if (compose$.quickReplySignatureOff.peek()) return text
-  return textWithTrailingSignature(text, quickReplySignature().text)
+  return textWithTrailingSignature(text, quickReplySignature(thread).text)
 }
 
 /** Switch the signature on or off for this reply; a saved draft follows. */
@@ -166,11 +168,39 @@ export let quickReplyDraftSaveInFlight: Promise<void> | null = null
 // than a separate persistence path. No-op when there's nothing to save or no
 // sendable account. The draft id is minted once and reused across autosaves
 // so the server-side copy is replaced, not duplicated.
+// A queued save normally reads the latest box. Navigation supplies a snapshot
+// before clearing it, so the same queue can finish a save for an outgoing reply.
+type DraftSave = { threadId: string; outgoing?: DraftSaveSnapshot; superseded?: boolean }
+const queuedQuickReplySaves = new Set<DraftSave>()
+
 export function saveQuickReplyDraft(): Promise<void> {
+  return queueQuickReplyDraftSave({ threadId: ui$.selectedThread.peek() })
+}
+
+function queueQuickReplyDraftSave(request: DraftSave): Promise<void> {
   const previous = quickReplyDraftSaveInFlight
+  queuedQuickReplySaves.add(request)
   const run = (async () => {
     if (previous) await previous
-    await performQuickReplyDraftSave()
+    while (!request.outgoing && ui$.selectedThread.peek() === request.threadId) {
+      const pending = pendingQuickReplyRead()
+      if (!pending) break
+      await pending
+    }
+    queuedQuickReplySaves.delete(request)
+    if (request.superseded) return
+    const snapshot =
+      request.outgoing ??
+      (ui$.selectedThread.peek() === request.threadId ? snapshotQuickReplyDraft(request.threadId) : null)
+    if (!snapshot) return
+    const restored = request.outgoing ? null : restoredQuickReply
+    await performQuickReplyDraftSave(snapshot)
+    // The active editor has now written a newer version than the copy it
+    // restored on return. Future reads must stop checking that older copy.
+    if (restored && restored === restoredQuickReply && snapshot.identity.saved && !snapshot.identity.failed) {
+      restored.validation?.resolve()
+      restoredQuickReply = null
+    }
   })()
   quickReplyDraftSaveInFlight = run
   void run.finally(() => {
@@ -179,39 +209,196 @@ export function saveQuickReplyDraft(): Promise<void> {
   return run
 }
 
-async function performQuickReplyDraftSave() {
-  const activeT = getActiveThread()
-  if (!activeT) return
-  const text = quickReplyOutgoingText()
-  const attachments = compose$.composerAttachments.peek()
-  if (isQuickReplyBlank()) return
+type DraftIdentity = { id: string; saved: boolean; failed?: boolean }
+type DraftSaveSnapshot = {
+  threadId: string
+  identity: DraftIdentity
+  args: Omit<Parameters<typeof saveComposedDraft>[0], 'draftMessageId'>
+  loading: LoadingQuickReplyAttachments | null
+  startTick: number
+}
+type LoadingQuickReplyAttachments = { files: Promise<ComposerAttachment[]> }
+let loadingQuickReplyAttachments: LoadingQuickReplyAttachments | null = null
+
+let writingQuickReplyDraft: DraftIdentity | null = null
+// Keep the outgoing editor for the next visit. The tab can replay its cached
+// draft before the thread read returns, even after the newer save succeeds.
+type DepartingQuickReply = {
+  snapshot: DraftSaveSnapshot
+  row: Message | undefined
+  restore: () => void
+  unchanged: () => boolean
+}
+const departingQuickReplies = new Map<string, DepartingQuickReply>()
+let restoredQuickReply: {
+  reply: DepartingQuickReply
+  validation?: { promise: Promise<void>; resolve: () => void }
+  read?: object
+} | null = null
+
+function pendingQuickReplyRead() {
+  return restoredQuickReply?.validation?.promise ?? loadingQuickReplyAttachments?.files
+}
+
+/** Wait for both the draft page and its files. A page refresh can start
+ * during an attachment read, and validation can hydrate a new draft. */
+export function waitForQuickReplyRead(): Promise<void> | undefined {
+  const first = pendingQuickReplyRead()
+  if (!first) return
+  const scope = quickReplyScope
+  return (async () => {
+    let pending: Promise<unknown> | undefined = first
+    while (pending && scope === quickReplyScope) {
+      await pending
+      pending = pendingQuickReplyRead()
+    }
+  })()
+}
+
+function draftRow(messages: Message[], draftId: string) {
+  const id = normalizeMessageId(draftId)
+  return messages.find(
+    (message) => isDraftFolder(message.folder_id, message.account_id) && normalizeMessageId(message.message_id) === id,
+  )
+}
+
+async function matchesRestoredDraft(snapshot: DraftSaveSnapshot, row: Message) {
+  const { args } = snapshot
+  const from = args.from || accounts$.peek().find((account) => account.id === args.accountId)?.email
+  const normalizeBody = (body: string) => body.replace(/\r\n/g, '\n').replace(/\n+$/, '')
+  if (
+    row.body_missing ||
+    decryptFailed(row.crypto) ||
+    row.body_html?.trim() ||
+    row.bcc?.trim() ||
+    row.reply_to?.trim() ||
+    normalizeBody(row.body ?? '') !== normalizeBody(args.content) ||
+    row.subject.trim() !== args.subject.trim() ||
+    addressesOf(row.from_addr) !== addressesOf(from) ||
+    addressesOf(row.to) !== addressesOf(args.to) ||
+    addressesOf(row.cc) !== addressesOf(args.cc) ||
+    !!row.crypto?.encrypted !== !!args.encrypt ||
+    (row.draft_sign ?? undefined) !== args.sign
+  )
+    return false
+
+  const expected = snapshot.loading ? [...(await snapshot.loading.files), ...args.attachments] : args.attachments
+  if (expected.length === 0) return !row.has_attachments
+  const manifest = row.attachments ?? []
+  if (manifest.length !== expected.length) return false
+  if (
+    manifest.some((attachment, index) => {
+      const previous = expected[index]
+      return (
+        attachment.filename !== previous.filename ||
+        (attachment.mime && attachment.mime !== previous.mime) ||
+        (attachment.size && attachment.size !== previous.size)
+      )
+    })
+  )
+    return false
+  const attachments = await readComposerAttachments(manifest, '')
+  // A temporarily unreadable attachment isn't evidence of an external edit.
+  if (attachments.length !== expected.length) return true
+  return attachments.every((attachment, index) => {
+    const previous = expected[index]
+    return (
+      attachment.filename === previous.filename &&
+      attachment.mime === previous.mime &&
+      attachment.data === previous.data
+    )
+  })
+}
+
+/** A cached page can arrive before the new read. Only the latter can tell us
+ * that a previously visible draft was replaced or removed while we were away. */
+export function beginQuickReplyDraftRead(threadId: string) {
+  const restored = restoredQuickReply
+  if (!restored || restored.reply.snapshot.threadId !== threadId) return
+  const { snapshot, row } = restored.reply
+  const { identity } = snapshot
+  if (
+    !identity.saved ||
+    identity.failed ||
+    writingQuickReplyDraft?.id === identity.id ||
+    [...queuedQuickReplySaves].some((request) => request.outgoing?.identity === identity)
+  )
+    return
+
+  if (!restored.validation) {
+    let resolve!: () => void
+    const promise = new Promise<void>((done) => {
+      resolve = done
+    })
+    restored.validation = { promise, resolve }
+  }
+  const validation = restored.validation
+  const read = {}
+  restored.read = read
+  return async (messages?: Message[]) => {
+    if (restoredQuickReply !== restored || restored.read !== read) return
+    const current = messages ? draftRow(messages, identity.id) : undefined
+    const replaced = current && current.id !== row?.id && !(await matchesRestoredDraft(snapshot, current))
+    if (restoredQuickReply !== restored || restored.read !== read) return
+    restored.read = undefined
+    restored.validation = undefined
+    validation.resolve()
+    if (!messages) return
+    // A save can precede the Drafts sync that makes it visible in this
+    // conversation. Only a previously observed row can be inferred removed.
+    if (!current && !row) return
+    restoredQuickReply = null
+    if (!replaced && current) return
+    if (compose$.quickReplyDraftId.peek() !== identity.id) return
+    clearQuickReplyDraftOwnership()
+    showToast(t('composer.status.draftChangedElsewhere'))
+    if (!restored.reply.unchanged()) return
+    compose$.quickReplyFrom.set('')
+    compose$.quickReplyAdded.set([])
+    startFreshQuickReply()
+  }
+}
+
+function snapshotQuickReplyDraft(threadId: string): DraftSaveSnapshot | null {
+  if (!threadId) return null
+  const activeT =
+    getActiveThread(threadId) ??
+    (threadId !== ui$.selectedThread.peek()
+      ? (mail$.messages.peek().find((message) => message.thread_id === threadId) ??
+        threadData$[threadId].messages.peek()?.[0])
+      : null)
+  if (!activeT || (isQuickReplyBlank() && !loadingQuickReplyAttachments)) return null
+  const text = quickReplyOutgoingText(activeT)
+  const attachments = compose$.composerAttachments.peek().slice()
 
   const replyAccountId = activeT.account_id || ui$.selectedAccount.peek()
-  if (!replyAccountId || replyAccountId === 'unified') return
+  if (!replyAccountId || replyAccountId === 'unified') return null
   const accounts = accounts$.peek()
   const activeAcc = accounts.find((acc) => acc.id === replyAccountId) || accounts[0] || null
-  if (activeAcc?.provider === 'rss' || activeAcc?.auth_type === 'rss' || isLocalAccountId(replyAccountId)) return
+  if (activeAcc?.provider === 'rss' || activeAcc?.auth_type === 'rss' || isLocalAccountId(replyAccountId)) return null
 
   const target = pickReplyTarget(activeT)
   const { to, cc } = quickReplyAddressing(target)
   const { in_reply_to, references } = buildReplyThreading(target)
   const fromEmail = resolveQuickReplyFrom(target, activeAcc)
   const subject = replySubject(activeT.subject, target)
-  // Whatever is in the box now is a different reply from the one a send took, so
-  // it needs a draft of its own: reusing the claimed id would write this text
-  // over the copy that send is about to discard, taking the box's safety copy
-  // with it.
   const boxDraftId = compose$.quickReplyDraftId.peek()
   const draftId = boxDraftId && !draftClaimedElsewhere(boxDraftId) ? boxDraftId : newDraftMessageId()
-  ownQuickReplyDraft(draftId, activeT.thread_id, boxDraftId === draftId && compose$.quickReplyDraftSaved.peek())
-  const startTick = ++quickReplyOwnershipTick
-
-  let savedDraftId = draftId
-  // Whether the server is known to hold the copy. A save that failed after its
-  // id was allocated may or may not have written it.
-  let confirmed = true
-  try {
-    savedDraftId = await saveComposedDraft({
+  const pendingIdentity = [...queuedQuickReplySaves].find((request) => request.outgoing?.identity.id === draftId)
+    ?.outgoing?.identity
+  const identity =
+    writingQuickReplyDraft?.id === draftId
+      ? writingQuickReplyDraft
+      : pendingIdentity?.id === draftId
+        ? pendingIdentity
+        : { id: draftId, saved: boxDraftId === draftId && compose$.quickReplyDraftSaved.peek() }
+  ownQuickReplyDraft(identity.id, threadId, identity.saved)
+  return {
+    threadId,
+    identity,
+    loading: loadingQuickReplyAttachments,
+    startTick: nextQuickReplyOwnershipTick(),
+    args: {
       accountId: replyAccountId,
       from: fromEmail,
       to,
@@ -221,48 +408,62 @@ async function performQuickReplyDraftSave() {
       content: text,
       inReplyTo: in_reply_to,
       references,
-      draftMessageId: draftId,
       attachments,
-      encrypt: quickReplyEncrypts(),
-      sign: quickReplySigns(),
-    })
-    // Only when the box still points at the placeholder this save started from:
-    // a send (or a thread switch) that cleared it in the meantime has moved on,
-    // and writing the server id back would leave it claiming a draft that is
-    // about to be discarded.
-    if (savedDraftId !== draftId && compose$.quickReplyDraftId.peek() === draftId) {
-      compose$.quickReplyDraftId.set(savedDraftId)
-    }
+      encrypt: isSendableAccount(activeAcc) && quickReplyEncrypts(target),
+      sign: isSendableAccount(activeAcc) ? quickReplySigns(target) : undefined,
+    },
+  }
+}
+
+async function performQuickReplyDraftSave(snapshot: DraftSaveSnapshot) {
+  const { threadId, identity, args, loading, startTick } = snapshot
+  const replyAccountId = args.accountId
+  const draftId = identity.id
+  let savedDraftId = draftId
+  let confirmed = true
+  writingQuickReplyDraft = identity
+  try {
+    const attachments = loading ? [...(await loading.files), ...args.attachments] : args.attachments
+    savedDraftId = await saveComposedDraft({ ...args, draftMessageId: draftId, attachments })
     unconfirmedDraftIds.delete(normalizeMessageId(savedDraftId))
+    identity.failed = false
   } catch (error) {
     console.error('Quick reply draft autosave failed:', error)
-    // A save that allocated an id may have written the draft anyway, so the id
-    // is kept — for the next save to overwrite and a send to clean up — but
-    // never as a saved copy: nothing may rely on it holding the reply.
+    identity.failed = true
+    if (departingQuickReplies.get(threadId)?.snapshot.identity === identity) {
+      showToast(contextualErrorMessage(error, t('composer.status.draftAutosaveFailed')), 'error')
+    }
     const attemptedId = draftIdOfFailedSave(error)
     if (!attemptedId || attemptedId === draftId) return
     savedDraftId = attemptedId
     confirmed = false
     unconfirmedDraftIds.add(normalizeMessageId(savedDraftId))
-    if (compose$.quickReplyDraftId.peek() === draftId) compose$.quickReplyDraftId.set(savedDraftId)
+  } finally {
+    writingQuickReplyDraft = null
+  }
+
+  identity.id = savedDraftId
+  identity.saved = confirmed
+  if (compose$.quickReplyDraftId.peek() === draftId && savedDraftId !== draftId) {
+    compose$.quickReplyDraftId.set(savedDraftId)
   }
 
   // A send that took the box *after* this save started consumed the very text it
   // just wrote; hand the id over and let the post-send discard drop the copy.
   // Without this the draft is left in Drafts beside the message it was sent as.
-  if (handOverToOvertakingSend(activeT.thread_id, startTick, savedDraftId, confirmed)) return
+  if (handOverToOvertakingSend(threadId, startTick, savedDraftId, confirmed)) return
 
   // Same story for an escalation that couldn't hand this id to the full editor:
   // the tab is editing a draft of its own, so this copy is an orphan whoever is
   // typing in the box by now.
-  const abandonedAt = quickReplyAbandonedSaves.get(activeT.thread_id) ?? 0
+  const abandonedAt = quickReplyAbandonedSaves.get(threadId) ?? 0
   if (abandonedAt > startTick) {
-    quickReplyAbandonedSaves.delete(activeT.thread_id)
+    quickReplyAbandonedSaves.delete(threadId)
     if (compose$.quickReplyDraftId.peek() === savedDraftId) {
       clearQuickReplyDraftOwnership()
     }
     await discardSavedDraftCopy({
-      threadId: activeT.thread_id,
+      threadId: threadId,
       messageId: '',
       folderId: '',
       accountId: replyAccountId,
@@ -275,7 +476,7 @@ async function performQuickReplyDraftSave() {
   // the user, a send, or escalation to the full editor) — any discard that ran
   // in that window saw quickReplyDraftSaved still false and bailed. Drop the
   // draft we just wrote instead of letting it resurrect on the next thread open.
-  const sameThread = ui$.selectedThread.peek() === activeT.thread_id
+  const sameThread = ui$.selectedThread.peek() === threadId
   const leftWithReply = quickReplyLeftWithReplyTick > startTick
   // ...unless something else took this exact draft over in the meantime.
   if (sameThread && !leftWithReply && isQuickReplyBlank() && !draftClaimedElsewhere(savedDraftId)) {
@@ -283,7 +484,7 @@ async function performQuickReplyDraftSave() {
       clearQuickReplyDraftOwnership()
     }
     await discardSavedDraftCopy({
-      threadId: activeT.thread_id,
+      threadId: threadId,
       messageId: '',
       folderId: '',
       accountId: replyAccountId,
@@ -312,10 +513,15 @@ export function unconfirmedQuickReplyDraftId(): string {
 // Discard the quick reply's server-side draft once the user has cleared the
 // text/attachments back to blank, mirroring the full composer's discard flow.
 export async function discardQuickReplyDraftIfEmpty() {
+  const threadId = ui$.selectedThread.peek()
+  const scope = quickReplyScope
+  const pending = waitForQuickReplyRead()
+  if (pending) await pending
+  if (scope !== quickReplyScope) return
   // Wait out any in-flight autosave before peeking the flags below; the save
   // itself re-checks on completion and self-discards if the composer is blank.
   while (quickReplyDraftSaveInFlight) await quickReplyDraftSaveInFlight
-  if (!isQuickReplyBlank()) return
+  if (ui$.selectedThread.peek() !== threadId || !isQuickReplyBlank()) return
   // A copy a failed save may have left goes too: if it did land, it holds the
   // text the user just cleared and would come back on the next thread open.
   const draftId = compose$.quickReplyDraftSaved.peek()
@@ -397,6 +603,11 @@ export function nextQuickReplyOwnershipTick(): number {
 // the box blank on landing, back on that thread, sees what leaving cleared, not
 // a reply the user deleted, and must keep the copy it wrote.
 let quickReplyLeftWithReplyTick = 0
+// Invalidate asynchronous UI actions when the foreground reply changes.
+export let quickReplyScope = 0
+compose$.activeTab.onChange(() => {
+  quickReplyScope += 1
+})
 // Bumped whenever the box changes hands: the user typing or attaching, or the
 // conversation switching. A send captures it at the click and resets the box
 // only if it hasn't moved since — comparing content instead can't tell "they
@@ -415,6 +626,7 @@ compose$.quickReplyAdded.onChange(() => {
   quickReplyBoxGeneration += 1
 })
 ui$.selectedThread.onChange(() => {
+  quickReplyScope += 1
   quickReplyBoxGeneration += 1
 })
 // Sends that have taken the box but haven't reached their guard yet: the
@@ -496,19 +708,14 @@ export function scheduleQuickReplyDraftSave() {
   }, QUICK_REPLY_DRAFT_SAVE_DELAY_MS)
 }
 
-/** Run a pending autosave now, for a caller about to leave the thread: a save
- * reads the box as it starts, so it has to start before leaving clears the box.
- * Resolves once every save has read the box, not when the last one lands. A
- * blank box is left as leaving it does today. */
+/** Flush the debounce before closing the board pane. A queued save can
+ * capture the outgoing reply if the pane closes while it is still waiting. */
 export async function saveQuickReplyDraftNow(): Promise<void> {
   const pending = quickReplyDraftSaveTimer !== null
   cancelQuickReplyDraftSave()
-  // A save still on the wire holds back any queued behind it (an autosave
-  // that fired meanwhile, or this one), and those read the box only once it
-  // lands: let the whole queue drain while the box is still there.
-  while (quickReplyDraftSaveInFlight) await quickReplyDraftSaveInFlight
-  if (!pending || isQuickReplyBlank()) return
-  void saveQuickReplyDraft()
+  const previous = quickReplyDraftSaveInFlight
+  if (pending && (!isQuickReplyBlank() || loadingQuickReplyAttachments)) void saveQuickReplyDraft()
+  await previous
 }
 
 /** Copy one of the people Reply all reaches on the quick reply (picked from
@@ -530,10 +737,7 @@ export function cancelQuickReplyDraftSave() {
   }
 }
 
-ui$.selectedThread.onChange(({ value }) => {
-  // The box still holds the thread being left: leaving, not the user, is what
-  // blanks it from here (see quickReplyLeftWithReplyTick).
-  if (!isQuickReplyBlank()) quickReplyLeftWithReplyTick = nextQuickReplyOwnershipTick()
+ui$.selectedThread.onChange(({ value, getPrevious }) => {
   // A failed send keeps its consumed draft suppressed while the user remains
   // in that editor. Once they leave, make the server safety copy available for
   // a later reopen; in-flight sends remain guarded across navigation.
@@ -541,17 +745,87 @@ ui$.selectedThread.onChange(({ value }) => {
     if (!guard.inFlight && guard.threadId !== value) guard.suppressDraft = false
   }
   publishSendingDraftIds()
-  if (value) return
+  const pending = quickReplyDraftSaveTimer !== null
   cancelQuickReplyDraftSave()
-  compose$.composer.set('')
-  compose$.composerAttachments.set([])
+  if (quickReplyDraftBelongsToThread(value)) return
+  const outgoingThread = getPrevious()
+  const queued = [...queuedQuickReplySaves].filter(
+    (request) => request.threadId === outgoingThread && !request.outgoing && !request.superseded,
+  )
+  const outgoing = snapshotQuickReplyDraft(outgoingThread)
+  if (outgoing) {
+    rememberDepartingQuickReply(outgoing)
+    if (pending || queued.length > 0) {
+      const last = queued.pop()
+      for (const request of queued) request.superseded = true
+      if (last) last.outgoing = outgoing
+      else void queueQuickReplyDraftSave({ threadId: outgoingThread, outgoing })
+    }
+  }
+  // Saves started before navigation must keep their result even if the user
+  // returns to a blank box on the same thread before the write lands.
+  if (!isQuickReplyBlank() || loadingQuickReplyAttachments) quickReplyLeftWithReplyTick = nextQuickReplyOwnershipTick()
   clearQuickReplyDraftOwnership()
   compose$.quickReplyFrom.set('')
   compose$.quickReplyAdded.set([])
-  compose$.quickReplySignatureOff.set(false)
-  compose$.quickReplySignatureUnmanaged.set(false)
-  hydratedWithoutSignature = null
+  startFreshQuickReply()
+  const returning = departingQuickReplies.get(value)
+  if (returning) {
+    departingQuickReplies.delete(value)
+    const draftId = returning.snapshot.identity.id
+    if (!draftClaimedElsewhere(draftId) && !sentDraftDiscards.has(normalizeMessageId(draftId))) {
+      returning.restore()
+      restoredQuickReply = { reply: returning }
+      if (returning.snapshot.identity.failed) scheduleQuickReplyDraftSave()
+    }
+  }
 })
+
+function rememberDepartingQuickReply(snapshot: DraftSaveSnapshot) {
+  const text = compose$.composer.peek()
+  const from = compose$.quickReplyFrom.peek()
+  const added = compose$.quickReplyAdded.peek()
+  const signatureOff = compose$.quickReplySignatureOff.peek()
+  const signatureUnmanaged = compose$.quickReplySignatureUnmanaged.peek()
+  const encrypt = compose$.quickReplyEncrypt.peek()
+  const sign = compose$.quickReplySign.peek()
+  const row =
+    draftRow(
+      mail$.messages.peek().filter((message) => message.thread_id === snapshot.threadId),
+      snapshot.identity.id,
+    ) ?? draftRow(threadData$[snapshot.threadId].messages.peek() ?? [], snapshot.identity.id)
+  departingQuickReplies.set(snapshot.threadId, {
+    snapshot,
+    row,
+    unchanged: () => {
+      const attachments = compose$.composerAttachments.peek()
+      return (
+        compose$.composer.peek() === text &&
+        compose$.quickReplyFrom.peek() === from &&
+        compose$.quickReplyAdded.peek().join('\u001f') === added.join('\u001f') &&
+        compose$.quickReplySignatureOff.peek() === signatureOff &&
+        compose$.quickReplySignatureUnmanaged.peek() === signatureUnmanaged &&
+        compose$.quickReplyEncrypt.peek() === encrypt &&
+        compose$.quickReplySign.peek() === sign &&
+        attachments.length === snapshot.args.attachments.length &&
+        attachments.every((attachment, index) => attachment.id === snapshot.args.attachments[index].id)
+      )
+    },
+    restore: () => {
+      const { id, saved } = snapshot.identity
+      ownQuickReplyDraft(id, snapshot.threadId, saved)
+      compose$.composer.set(text)
+      compose$.composerAttachments.set(snapshot.args.attachments.slice())
+      compose$.quickReplyFrom.set(from)
+      compose$.quickReplyAdded.set(added)
+      compose$.quickReplySignatureOff.set(signatureOff)
+      compose$.quickReplySignatureUnmanaged.set(signatureUnmanaged)
+      compose$.quickReplyEncrypt.set(encrypt)
+      compose$.quickReplySign.set(sign)
+      if (snapshot.loading) loadQuickReplyAttachments(snapshot.loading)
+    },
+  })
+}
 
 const addressesOf = (raw: string | undefined) =>
   parseAddressList(raw)
@@ -668,15 +942,21 @@ function hydrateQuickReplyFromTailDraft(messages: Message[]) {
   ownQuickReplyDraft(tailDraftId, activeThreadId, true)
   compose$.quickReplyFrom.set(tail.from_addr ?? '')
   compose$.quickReplyAdded.set(holds.added)
-  loadDraftBodyIntoQuickReply(activeThreadId, tail.body ?? '')
-
   if (tail.has_attachments) {
-    void readComposerAttachments(tail.attachments ?? [], tail.body_html ?? '').then((valid) => {
-      if (ui$.selectedThread.peek() === activeThreadId && compose$.quickReplyDraftId.peek() === tailDraftId) {
-        compose$.composerAttachments.set(valid)
-      }
-    })
+    loadQuickReplyAttachments({ files: readComposerAttachments(tail.attachments ?? [], tail.body_html ?? '') })
   }
+  loadDraftBodyIntoQuickReply(activeThreadId, tail.body ?? '')
+}
+
+function loadQuickReplyAttachments(loading: LoadingQuickReplyAttachments) {
+  loadingQuickReplyAttachments = loading
+  void loading.files.then((attachments) => {
+    if (loadingQuickReplyAttachments !== loading) return
+    loadingQuickReplyAttachments = null
+    if (attachments.length > 0) {
+      compose$.composerAttachments.set((added) => [...attachments, ...added])
+    }
+  })
 }
 
 /** Whether the quick-reply draft currently belongs to `threadId`. Ownership is
@@ -721,6 +1001,11 @@ export async function discardSentDraft(
   retryDelays: number[] = SENT_DRAFT_DISCARD_RETRY_DELAYS_MS,
 ): Promise<boolean> {
   const id = normalizeMessageId(draft.draftMessageId)
+  if (id) {
+    for (const [threadId, reply] of departingQuickReplies) {
+      if (normalizeMessageId(reply.snapshot.identity.id) === id) departingQuickReplies.delete(threadId)
+    }
+  }
   // A row known only by its local id can be neither suppressed nor retried by
   // Message-ID: one plain attempt, failing out loud.
   if (!id) return discardSavedDraftCopy(draft)

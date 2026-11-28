@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "No se pudo limpiar el borrador de la cuenta anterior",
   "composer.status.couldNotDiscardDraft": "No se pudo descartar el borrador",
   "composer.status.draftAutosaveFailed": "Error al autoguardar el borrador",
+  "composer.status.draftChangedElsewhere": "Este borrador cambió en otro lugar.",
   "composer.status.savedToDrafts": "Guardado en Borradores",
   "composer.status.savedToServer": "Guardado en el servidor",
   "composer.status.savingDraft": "Guardando borrador...",

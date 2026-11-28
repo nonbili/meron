@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "이전 계정의 임시보관함 메일을 정리할 수 없습니다",
   "composer.status.couldNotDiscardDraft": "임시 저장을 삭제할 수 없습니다",
   "composer.status.draftAutosaveFailed": "임시 저장 자동 저장 실패",
+  "composer.status.draftChangedElsewhere": "이 임시 보관 메일이 다른 곳에서 변경되었습니다.",
   "composer.status.savedToDrafts": "임시보관함에 저장됨",
   "composer.status.savedToServer": "서버에 저장됨",
   "composer.status.savingDraft": "임시 저장 중...",

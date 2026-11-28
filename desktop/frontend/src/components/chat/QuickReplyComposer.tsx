@@ -79,7 +79,10 @@ export function QuickReplyComposer() {
         <textarea
           ref={textareaRef}
           value={composer}
-          onChange={(event) => compose$.composer.set(event.target.value)}
+          onChange={(event) => {
+            compose$.composer.set(event.target.value)
+            if (!isQuickReplyBlank()) scheduleQuickReplyDraftSave()
+          }}
           placeholder={t('composer.placeholders.quickMessage')}
           rows={1}
           spellCheck={spellCheck}

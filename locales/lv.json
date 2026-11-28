@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Neizdevās notīrīt iepriekšējā konta melnrakstu",
   "composer.status.couldNotDiscardDraft": "Neizdevās atmest melnrakstu",
   "composer.status.draftAutosaveFailed": "Melnraksta automātiskā saglabāšana neizdevās",
+  "composer.status.draftChangedElsewhere": "Šis melnraksts ir mainīts citur.",
   "composer.status.savedToDrafts": "Saglabāts melnrakstos",
   "composer.status.savedToServer": "Saglabāts serverī",
   "composer.status.savingDraft": "Saglabā melnrakstu...",

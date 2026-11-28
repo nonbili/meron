@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Δεν ήταν δυνατή η εκκαθάριση του προσχεδίου του προηγούμενου λογαριασμού",
   "composer.status.couldNotDiscardDraft": "Δεν ήταν δυνατή η διαγραφή του προσχεδίου",
   "composer.status.draftAutosaveFailed": "Η αυτόματη αποθήκευση προσχεδίου απέτυχε",
+  "composer.status.draftChangedElsewhere": "Αυτό το πρόχειρο άλλαξε από αλλού.",
   "composer.status.savedToDrafts": "Αποθηκεύτηκε στα Πρόχειρα",
   "composer.status.savedToServer": "Αποθηκεύτηκε στον διακομιστή",
   "composer.status.savingDraft": "Αποθήκευση προσχεδίου...",

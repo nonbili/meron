@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "無法清理上一個帳號的草稿",
   "composer.status.couldNotDiscardDraft": "無法捨棄草稿",
   "composer.status.draftAutosaveFailed": "草稿自動儲存失敗",
+  "composer.status.draftChangedElsewhere": "此草稿已在其他地方變更。",
   "composer.status.savedToDrafts": "已儲存至草稿",
   "composer.status.savedToServer": "已儲存至伺服器",
   "composer.status.savingDraft": "正在儲存草稿...",

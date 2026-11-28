@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test'
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { compose$ } from '../../states/composeState'
 import { cancelQuickReplyDraftSave } from '../../states/quickReply'
 import { ui$ } from '../../states/ui'
@@ -95,6 +95,35 @@ it('keeps the Linux asynchronous image paste fallback in quick reply', async () 
     await waitFor(() => expect(compose$.composerAttachments.peek()).toHaveLength(1))
     expect(read).toHaveBeenCalledTimes(1)
     expect(compose$.composerAttachments.peek()[0].mime).toBe('image/png')
+  } finally {
+    read.mockRestore()
+  }
+})
+
+it('ignores an asynchronous image paste after the active thread changes', async () => {
+  setPlatform('Linux x86_64')
+  let resolveItems!: (items: ClipboardItems) => void
+  const items = new Promise<ClipboardItems>((resolve) => {
+    resolveItems = resolve
+  })
+  const read = spyOn(navigator.clipboard, 'read').mockReturnValue(items)
+  try {
+    ui$.selectedThread.set('thread-a')
+    const view = render(<ReplyBox />)
+    fireEvent.keyDown(view.container.querySelector('textarea')!, { key: 'v', ctrlKey: true })
+    expect(read).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      ui$.selectedThread.set('thread-b')
+      resolveItems([
+        {
+          types: ['image/png'],
+          presentationStyle: 'unspecified',
+          getType: async () => new Blob(['image'], { type: 'image/png' }),
+        },
+      ])
+    })
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(compose$.composerAttachments.peek()).toEqual([])
   } finally {
     read.mockRestore()
   }

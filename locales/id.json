@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Tidak dapat membersihkan draf akun sebelumnya",
   "composer.status.couldNotDiscardDraft": "Tidak dapat membuang draf",
   "composer.status.draftAutosaveFailed": "Penyimpanan otomatis draf gagal",
+  "composer.status.draftChangedElsewhere": "Draf ini diubah di tempat lain.",
   "composer.status.savedToDrafts": "Disimpan ke Draf",
   "composer.status.savedToServer": "Disimpan ke Server",
   "composer.status.savingDraft": "Menyimpan draf…",

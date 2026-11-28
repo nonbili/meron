@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test'
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { MessagePane } from './MessagePane'
 import {
   activateConversationTab,
@@ -9,6 +9,7 @@ import {
   finishClosingMessageTab,
 } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
+import { quickReplyDraftSaveInFlight } from '../../states/quickReply'
 import { accounts$ } from '../../states/accounts'
 import { pageOpenMessage } from './messagePaging'
 import { mail$ } from '../../states/mail'
@@ -178,20 +179,105 @@ it('keeps a single quick-reply editor across conversation and reader switches', 
   const first = { ...a, account_id: 'acc' }
   const second = { ...b, account_id: 'acc' }
   mail$.threads.set([first, second])
-  ;(window as any).go.main.App.Invoke = async (command: string, payload: any) =>
-    command === 'mail.threadRead' ? { messages: [{ ...message(payload.thread_id), account_id: 'acc' }] } : { ok: true }
+  ;(window as any).go.main.App.Invoke = async (command: string, payload: any) => {
+    if (command === 'mail.threadRead') return { messages: [{ ...message(payload.thread_id), account_id: 'acc' }] }
+    if (command === 'mail.allocateIdentity') return { message_id: 'draft@example.com' }
+    return { ok: true }
+  }
   const view = render(<MessagePane />)
   await waitFor(() => expect(view.container.querySelectorAll('[data-message-id]').length).toBe(1))
   const editor = view.container.querySelector('textarea')!
   expect(editor !== null).toBe(true)
+  await act(async () => {
+    compose$.composerAttachments.set([
+      { id: 'reply-file', filename: 'first-thread.txt', mime: 'text/plain', size: 1, data: 'YQ==' },
+    ])
+  })
+  expect(view.queryByTitle('first-thread.txt')).not.toBeNull()
   await act(async () => openThreadTab(second))
   expect(view.container.querySelectorAll('textarea').length).toBe(1)
   expect(view.container.querySelector('textarea') === editor).toBe(true)
+  expect(view.queryByTitle('first-thread.txt')).toBeNull()
+  expect(compose$.composerAttachments.peek()).toEqual([])
   await act(async () => openMessageTab(second))
   expect(view.container.querySelector('textarea') === editor).toBe(true)
   expect(editor.closest('[aria-hidden="true"]') !== null).toBe(true)
   await act(async () => activateConversationTab())
   expect(view.container.querySelector('textarea') === editor).toBe(true)
+  expect(view.queryByTitle('first-thread.txt')).not.toBeNull()
+  act(() => compose$.composerAttachments.set([]))
+})
+
+it.each(['in flight', 'finished'])('restores the reply across pinned tabs with autosave %s', async (saveStatus) => {
+  accounts$[0].id.set('acc')
+  const first = { ...message(`reply-a-${saveStatus}`), account_id: 'acc', message_id: 'first@example.com' }
+  const second = { ...message(`reply-b-${saveStatus}`), account_id: 'acc', message_id: 'second@example.com' }
+  mail$.threads.set([first, second])
+  const save = Promise.withResolvers<void>()
+  const saves: Array<{ body: string; attachments: Array<{ filename: string }> }> = []
+  ;(window as any).go.main.App.Invoke = async (command: string, payload: any) => {
+    if (command === 'mail.threadRead') {
+      // As on a cached tab activation, this page may have no updated draft yet.
+      return { messages: [payload.thread_id === first.thread_id ? first : second] }
+    }
+    if (command === 'mail.allocateIdentity') return { message_id: 'draft@example.com' }
+    if (command === 'pgp.keys.forRecipients') return { missing: [], changed: [] }
+    if (command === 'mail.saveDraft') {
+      saves.push(payload)
+      await save.promise
+    }
+    return { ok: true }
+  }
+
+  openThreadTab(second)
+  openThreadTab(first)
+  const view = render(<MessagePane />)
+  const editor = view.container.querySelector('textarea')!
+  const firstTab = view.container.querySelector(`[data-tab-id="thread-${first.thread_id}"]`)!
+  const secondTab = view.container.querySelector(`[data-tab-id="thread-${second.thread_id}"]`)!
+  await act(async () => {
+    await Promise.resolve()
+  })
+  fireEvent.change(editor, { target: { value: 'My quick reply' } })
+  fireEvent.paste(editor, {
+    clipboardData: {
+      files: [new File(['image'], 'reply.png', { type: 'image/png' })],
+      items: [],
+      types: ['Files'],
+    },
+  })
+  await waitFor(() => expect(saves).toHaveLength(1))
+  expect(saves[0]).toMatchObject({ body: 'My quick reply', attachments: [{ filename: 'reply.png' }] })
+  expect(view.queryByTitle('reply.png')).not.toBeNull()
+  if (saveStatus === 'finished') {
+    await act(async () => {
+      save.resolve()
+      await quickReplyDraftSaveInFlight
+    })
+  }
+
+  fireEvent.click(secondTab)
+  expect(editor.value).toBe('')
+  expect(view.queryByTitle('reply.png')).toBeNull()
+  fireEvent.click(firstTab)
+  expect(editor.value).toBe('My quick reply')
+  expect(view.queryByTitle('reply.png')).not.toBeNull()
+
+  await act(async () => {
+    save.resolve()
+    await quickReplyDraftSaveInFlight
+  })
+  fireEvent.click(secondTab)
+  fireEvent.click(firstTab)
+  expect(editor.value).toBe('My quick reply')
+  expect(view.queryByTitle('reply.png')).not.toBeNull()
+  expect(saves).toHaveLength(1)
+
+  await act(async () => {
+    compose$.composer.set('')
+    compose$.composerAttachments.set([])
+    await quickReplyDraftSaveInFlight
+  })
 })
 
 it('keeps two views of the same thread independent when revealing content and closing a tab', async () => {

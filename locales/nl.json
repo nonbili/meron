@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "Kon concept van het vorige account niet opruimen",
   "composer.status.couldNotDiscardDraft": "Kon concept niet verwijderen",
   "composer.status.draftAutosaveFailed": "Automatisch opslaan van concept mislukt",
+  "composer.status.draftChangedElsewhere": "Dit concept is ergens anders gewijzigd.",
   "composer.status.savedToDrafts": "Opgeslagen in Concepten",
   "composer.status.savedToServer": "Opgeslagen op server",
   "composer.status.savingDraft": "Concept opslaan...",

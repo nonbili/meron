@@ -501,6 +501,7 @@
   "composer.status.couldNotCleanUpPreviousAccountDraft": "以前のアカウントの下書きを削除できませんでした",
   "composer.status.couldNotDiscardDraft": "下書きを破棄できませんでした",
   "composer.status.draftAutosaveFailed": "下書きの自動保存に失敗しました",
+  "composer.status.draftChangedElsewhere": "この下書きは別の場所で変更されました。",
   "composer.status.savedToDrafts": "下書きに保存しました",
   "composer.status.savedToServer": "サーバーに保存しました",
   "composer.status.savingDraft": "下書きを保存中...",
