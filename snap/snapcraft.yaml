@@ -2,10 +2,21 @@ name: meron
 title: Meron
 base: core22
 adopt-info: meron
-summary: Modern mail and feed client
+summary: Fast, secure mail client with kanban and chat views
 description: |
-  Meron is a modern mail and feed client. It speaks IMAP/SMTP and reads RSS
-  feeds, with a fast Rust core engine bundled as a sidecar.
+  The one-in-a-melon email client: unified inbox, kanban boards and chat view,
+  open source on every platform.
+
+  - Unified Inbox, kanban and chat views
+  - Tags synced as IMAP keywords and mail rules for automatic organization
+  - IMAP/SMTP email and RSS/Atom feeds
+  - Threaded conversations with rich-text composing and media galleries
+  - Built-in calendar, tasks, and contacts
+  - Easy setup with OAuth or automatic mailbox discovery
+  - End-to-end OpenPGP encryption with Autocrypt, WKD, and keyserver lookup
+  - Encrypted local storage with credentials kept in the OS keyring
+  - Optional local MCP server for AI clients with per-client account permissions
+  - Themes and 20+ languages
 
 grade: stable
 confinement: strict

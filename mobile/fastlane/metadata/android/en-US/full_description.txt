@@ -1,10 +1,12 @@
-Bring your email accounts together in Meron Mail. Read messages in a unified inbox, organize email on kanban boards, and follow conversations in a chat view. An RSS feed reader keeps blogs and news alongside your mail.
+The one-in-a-melon email client: unified inbox, kanban boards and chat view, open source on every platform.
+
+Bring your email accounts together in Meron Mail, with a built-in calendar, tasks, and contacts alongside your mail.
 
 ONE INBOX FOR YOUR ACCOUNTS
 Read mail from multiple accounts in one place or switch to an individual mailbox. Connect IMAP/SMTP accounts with OAuth sign-in where supported or automatic mailbox discovery.
 
 ORGANIZE EMAIL ON A KANBAN BOARD
-See mail in columns for folders, tags or saved searches. Use tags to group messages and rules to automate actions such as tagging, starring, archiving and moving mail.
+Arrange mail in columns by folder, tag or saved search. Use rules to tag, archive, move or forward messages automatically.
 
 READ AND REPLY LIKE A CONVERSATION
 Choose chat or traditional conversation layouts. Keep replies together in threaded conversations, write with rich-text formatting, and browse attachments in media galleries.

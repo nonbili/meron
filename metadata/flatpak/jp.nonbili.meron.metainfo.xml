@@ -13,6 +13,7 @@
   <project_license>AGPL-3.0-or-later</project_license>
 
   <description>
+    <p>The one-in-a-melon email client: unified inbox, kanban boards and chat view, open source on every platform.</p>
     <ul>
       <li>Unified Inbox, kanban and chat views</li>
       <li>Tags synced as IMAP keywords and mail rules for automatic organization</li>

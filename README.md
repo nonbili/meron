@@ -99,3 +99,7 @@ building, testing, and translating Meron.
 Meron is licensed under the [GNU Affero General Public License v3.0](LICENSE).
 
 Copyright © 2026 Nonbili Inc.
+
+---
+
+<p align="center">The one-in-a-melon open source and cross-platform email client.</p>
