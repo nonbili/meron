@@ -16,6 +16,8 @@ import { applyRemoteContentPolicy } from './remoteContentCsp'
 import { useMessageFrameFont } from './useMessageFrameFont'
 import { useReaderTheme } from './useFrameTheme'
 import { VideoAttachment } from './VideoAttachment'
+import { attachmentDragProps } from '../../lib/attachmentDrag'
+import { downloadAttachment } from '../../states/mail'
 import { useTranslation } from '../../lib/i18n'
 import { frameMetrics, MIN_FRAME_HEIGHT, measureFrameHeight } from './frameHeight'
 
@@ -93,6 +95,9 @@ export function HtmlMessageView({
         <VideoAttachment
           key={`${scrollKey}-${index}`}
           src={mediaSrc(video)}
+          attachment={video}
+          onSave={video.key ? () => downloadAttachment(video) : undefined}
+          saveLabel={t('chat.saveFile', { filename: video.filename })}
           externalUrl={video.url ?? mediaSrc(video)}
           externalLabel={t('chat.openExternalPlayer')}
         />
@@ -384,12 +389,13 @@ function AttachmentImageGrid({ images, onOpen }: { images: Attachment[]; onOpen:
           type="button"
           onClick={() => onOpen(index)}
           // Read by the reader's context menu to offer save/copy.
+          {...attachmentDragProps(image)}
           data-media-key={image.key ?? undefined}
           data-media-src={mediaSrc(image)}
           title={image.filename}
           className="overflow-hidden rounded-lg border border-border bg-black/[0.03] cursor-zoom-in"
         >
-          <img src={mediaSrc(image)} alt={image.filename} className={`w-full object-contain ${imageClass}`} />
+          <img src={mediaSrc(image)} alt={image.filename} draggable={false} className={`w-full object-contain ${imageClass}`} />
         </button>
       ))}
     </div>

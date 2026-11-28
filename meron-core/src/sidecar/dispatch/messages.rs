@@ -557,39 +557,39 @@ async fn messages_recent(engine: &Arc<Engine>, p: &Value, out: &Writer) -> anyho
         }
         thread_list::MailSource::Recent { .. } => unreachable!("cached page returned above"),
         thread_list::MailSource::Search => {
-            // Chat-view search spans the selected folder plus Sent, so a
-            // lookup surfaces both received and self-sent mail (and old
-            // messages filed under Sent), not just the current mailbox.
             let folders = query_folders(
                 &engine.db.lock().unwrap(),
                 &account,
                 &folder,
                 &request.query,
             );
-            if refresh || request.search_before_cursor.as_ref().is_some() {
-                let page = search_mail_messages(
-                    engine,
-                    &account,
-                    &folders,
-                    &request.query,
-                    limit,
-                    request.search_before_cursor.as_ref(),
-                )
-                .await?;
-                search_incomplete = page.incomplete;
-                (page.messages, page.next_cursor)
-            } else {
-                let messages = store::search_messages_in_folders(
-                    &engine.db.lock().unwrap(),
-                    &account,
-                    &folders,
-                    &request.query,
-                    limit,
-                    None,
-                )?;
-                let next_cursor = store::search_next_cursor(&messages, limit, 0);
-                (messages, next_cursor)
-            }
+            let (mut messages, next_cursor) =
+                if refresh || request.search_before_cursor.as_ref().is_some() {
+                    let page = search_mail_messages(
+                        engine,
+                        &account,
+                        &folders,
+                        &request.query,
+                        limit,
+                        request.search_before_cursor.as_ref(),
+                    )
+                    .await?;
+                    search_incomplete = page.incomplete;
+                    (page.messages, page.next_cursor)
+                } else {
+                    let messages = store::search_messages_in_folders(
+                        &engine.db.lock().unwrap(),
+                        &account,
+                        &folders,
+                        &request.query,
+                        limit,
+                        None,
+                    )?;
+                    let next_cursor = store::search_next_cursor(&messages, limit, 0);
+                    (messages, next_cursor)
+                };
+            store::dedupe_search_hits(&mut messages, &folders);
+            (messages, next_cursor)
         }
     };
     if refresh && request.wants_background_sync() {

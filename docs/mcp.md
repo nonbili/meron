@@ -134,7 +134,7 @@ results are kept for one hour while Meron runs.
 | --- | --- |
 | `list_accounts` | Approved account IDs, names, email addresses and provider only; no credentials or server settings. |
 | `list_folders` | Folders for one approved account. |
-| `search_messages` | Up to 50 conversations, from one account or from every approved account at once when `account_id` is omitted; defaults to INBOX and cached results. `filter: "unread"` or `"starred"` narrows the page before it is returned. Text search includes the selected folder and Sent; `tag:name` finds tagged mail anywhere in the account outside Trash and Junk, and is answered from the local cache. Use `server_search: true` with a query to search the mail server. RSS searches use the local cache. |
+| `search_messages` | Up to 50 conversations, from one account or from every approved account at once when `account_id` is omitted; defaults to INBOX and cached results. `filter: "unread"` or `"starred"` narrows the page before it is returned. Inbox text search covers the account outside Trash and Junk. Text search from other folders includes the selected folder and Sent; `tag:name` finds tagged mail anywhere in the account outside Trash and Junk, and is answered from the local cache. Use `server_search: true` with a query to search the mail server. RSS searches use the local cache. |
 | `list_tags` | The tags in use in one approved account, with how many messages carry each. |
 | `list_rules` | Lists saved mail rules in evaluation order, including their IDs and full definitions. Requires **Manage mail rules**. |
 | `list_rule_targets` | Lists mail account and cached folder IDs and names for rules. Requires **Manage mail rules**. |

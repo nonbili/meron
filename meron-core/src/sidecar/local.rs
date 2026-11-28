@@ -429,7 +429,7 @@ async fn local_mail(
                 )?,
                 thread_list::MailSource::Search => {
                     let folders = engine::query_folders(&db, account, &folder, &request.query);
-                    let messages = store::search_messages_in_folders(
+                    let mut messages = store::search_messages_in_folders(
                         &db,
                         account,
                         &folders,
@@ -438,6 +438,7 @@ async fn local_mail(
                         request.search_before_cursor.as_ref(),
                     )?;
                     let next_cursor = store::search_next_cursor(&messages, request.limit, 0);
+                    store::dedupe_search_hits(&mut messages, &folders);
                     (messages, next_cursor)
                 }
             };

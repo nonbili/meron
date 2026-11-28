@@ -561,6 +561,8 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.mailMove(payload)
 	case "mail.copy":
 		return a.mailCopy(payload)
+	case "mail.dragAttachment":
+		return dragAttachment(payload)
 	case "mail.saveAttachment":
 		return a.saveAttachment(payload)
 	case "mail.cacheRemoteImage":

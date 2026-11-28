@@ -4,6 +4,7 @@ use super::ENCRYPTED_COLUMN_M;
 use anyhow::Result;
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::imap::MessageHeader;
@@ -333,6 +334,46 @@ pub fn search_messages_in_folders(
     }
     sort_search_hits(&mut messages, limit);
     Ok(messages)
+}
+
+/// Drops repeat copies of one message from a search page spanning several
+/// mailboxes (a Gmail message sits in Inbox, All Mail and each of its labels),
+/// keyed by Message-ID. The copy from the earliest mailbox in `folders` stays,
+/// in its place in the page; hits without a Message-ID are always kept. A hit
+/// from a mailbox missing from `folders` ranks last: the first live Inbox
+/// search can widen its scope to mailboxes it has just discovered, past the
+/// list its caller resolved.
+pub fn dedupe_search_hits(messages: &mut Vec<MessageHeader>, folders: &[String]) {
+    if messages.len() < 2 {
+        return;
+    }
+    let rank = |folder: &str| {
+        folders
+            .iter()
+            .position(|known| known.eq_ignore_ascii_case(folder))
+            .unwrap_or(usize::MAX)
+    };
+    let mut best: HashMap<&str, (usize, usize)> = HashMap::new();
+    for (index, message) in messages.iter().enumerate() {
+        let id = message.message_id.trim();
+        if id.is_empty() {
+            continue;
+        }
+        let candidate = (rank(&message.folder), index);
+        best.entry(id)
+            .and_modify(|kept| *kept = (*kept).min(candidate))
+            .or_insert(candidate);
+    }
+    let keep = messages
+        .iter()
+        .enumerate()
+        .map(|(index, message)| {
+            let id = message.message_id.trim();
+            id.is_empty() || best.get(id).is_some_and(|&(_, kept)| kept == index)
+        })
+        .collect::<Vec<_>>();
+    let mut keep = keep.into_iter();
+    messages.retain(|_| keep.next().unwrap_or(true));
 }
 
 /// Newest first by epoch send time, capped at `limit`; unknown dates (0) sort

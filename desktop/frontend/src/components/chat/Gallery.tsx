@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Copy, Download, X } from 'lucide-react'
+import { attachmentDragProps } from '../../lib/attachmentDrag'
 import { useTranslation } from '../../lib/i18n'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 import { copyAttachmentImage, downloadAttachment } from '../../states/mail'
 import { MenuItem } from '../menu/MenuItem'
-import { imageSource } from './messageHelpers'
+import { imageSource, mediaKeyFromSrc } from './messageHelpers'
 import { VideoAttachment } from './VideoAttachment'
 
 // The native WebKitGTK image context menu ("Save Image As", "Open Image in New
@@ -179,6 +180,7 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
     void copyAttachmentImage(source)
   }
   const canSave = imageSource(current.src) !== null
+  const attachment = { key: mediaKeyFromSrc(current.src), filename: current.filename, mime: current.mime }
 
   // Portal to <body> so the fixed overlay isn't trapped inside a transformed or
   // overflow-clipped ancestor (e.g. a chat bubble's slide-up animation), which
@@ -197,6 +199,7 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
         <div className="flex items-center gap-1">
           {canSave && (
             <button
+              {...attachmentDragProps(attachment)}
               onClick={(event) => {
                 event.stopPropagation()
                 saveCurrent()
@@ -247,6 +250,7 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
           >
             <VideoAttachment
               src={current.src}
+              attachment={attachment}
               externalUrl={current.url ?? current.src}
               externalLabel={t('chat.openExternalPlayer')}
               className="group relative w-full"

@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { attachmentDragProps } from '../../lib/attachmentDrag'
 import { useTranslation } from '../../lib/i18n'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 import { copyText, openExternal } from '../../lib/native'
@@ -22,7 +23,7 @@ import { Avatar } from '../avatar/Avatar'
 import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
-import { fileIconFor, formatFileSize } from './messageHelpers'
+import { fileIconFor, formatFileSize, mediaKeyFromSrc } from './messageHelpers'
 
 export type ConversationMediaItem = {
   type: 'image' | 'video'
@@ -181,11 +182,13 @@ export function ConversationDetailsPanel({
                       }}
                       className="h-full w-full hover:opacity-90 cursor-pointer"
                       title={item.filename}
+                      {...attachmentDragProps({ filename: item.filename, key: mediaKeyFromSrc(item.src) })}
                     >
                       {item.type === 'image' ? (
                         <img
                           src={item.src}
                           alt={item.filename}
+                          draggable={false}
                           loading="lazy"
                           decoding="async"
                           className="h-full w-full object-cover"
@@ -227,6 +230,7 @@ export function ConversationDetailsPanel({
                     <button
                       type="button"
                       disabled={!downloadable}
+                      {...attachmentDragProps(file)}
                       onClick={() => openAttachment(file)}
                       title={downloadable ? t('chat.openFile', { filename: file.filename }) : file.filename}
                       className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-l-xl p-2.5 text-left ${

@@ -1,4 +1,5 @@
 import { Download } from 'lucide-react'
+import { attachmentDragProps } from '../../lib/attachmentDrag'
 import { useTranslation } from '../../lib/i18n'
 import { downloadAttachment, openAttachment } from '../../states/mail'
 import { thread$ } from '../../states/thread'
@@ -92,6 +93,7 @@ export function MessageContent({
                   type="button"
                   onClick={() => onOpenImage(galleryOffset + attachmentImages.indexOf(image))}
                   // Read by the message list's context menu to offer save/copy.
+                  {...attachmentDragProps(image)}
                   data-media-key={image.key ?? undefined}
                   data-media-filename={image.filename}
                   className={`block w-full overflow-hidden hover:opacity-90 cursor-pointer ${btnClass}`}
@@ -101,6 +103,7 @@ export function MessageContent({
                     <img
                       src={mediaSrc(image)}
                       alt={image.filename}
+                      draggable={false}
                       loading="lazy"
                       className="w-full h-full object-cover object-top"
                     />
@@ -122,6 +125,7 @@ export function MessageContent({
             <RetryWhenRestored key={idx} mediaMissing={message.media_missing ?? 0}>
               <VideoAttachment
                 src={mediaSrc(video)}
+                attachment={video}
                 externalUrl={video.url ?? mediaSrc(video)}
                 externalLabel={t('chat.openExternalPlayer')}
                 onSave={video.key ? () => downloadAttachment(video) : undefined}
@@ -166,6 +170,7 @@ export function MessageContent({
             <button
               type="button"
               disabled={!downloadable}
+              {...attachmentDragProps(file)}
               onClick={() => openAttachment(file)}
               title={downloadable ? t('chat.openFile', { filename: file.filename }) : file.filename}
               className={`flex min-w-0 flex-1 items-center gap-2 rounded-l-xl p-2 text-left ${

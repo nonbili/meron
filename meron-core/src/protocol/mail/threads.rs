@@ -91,7 +91,9 @@ fn list_mobile_account_threads(
             // reads (the live snapshot, else cached keyset order), served
             // straight from the store so they need neither the engine nor valid
             // credentials — a paused account keeps paging its snapshot.
-            if let Some(cursor) = request.search_before_cursor.as_ref() {
+            let (mut messages, next_cursor) = if let Some(cursor) =
+                request.search_before_cursor.as_ref()
+            {
                 let page = match continue_mobile_search(
                     data_dir,
                     &account_id,
@@ -159,7 +161,9 @@ fn list_mobile_account_threads(
                 )?;
                 let next_cursor = store::search_next_cursor(&messages, limit, 0);
                 (messages, next_cursor)
-            }
+            };
+            store::dedupe_search_hits(&mut messages, &folders);
+            (messages, next_cursor)
         }
     };
     with_mobile_db(data_dir, |conn| {
@@ -317,8 +321,7 @@ fn get_cached_mobile_starred(
     store::get_starred(&conn, account_id, folder_id, limit).map_err(|err| err.to_string())
 }
 
-/// The mailboxes a mobile search covers: the open folder plus Sent, read from
-/// the local store so it works with or without a connection.
+/// Resolve the same search scope with or without a live connection.
 fn mobile_search_folders(
     data_dir: &str,
     account_id: &str,

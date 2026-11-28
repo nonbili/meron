@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Download, ExternalLink, Play } from 'lucide-react'
+import { attachmentDragProps, type DraggableAttachment } from '../../lib/attachmentDrag'
 import { clearMediaSession } from '../../lib/mediaSession'
 import { openExternal } from '../../lib/native'
 
@@ -7,6 +8,7 @@ interface VideoAttachmentProps {
   src: string
   externalUrl: string
   externalLabel: string
+  attachment?: DraggableAttachment
   // Shows a save button beside the external-player one when set.
   onSave?: () => void
   saveLabel?: string
@@ -26,6 +28,7 @@ export function VideoAttachment({
   src,
   externalUrl,
   externalLabel,
+  attachment,
   onSave,
   saveLabel,
   className = 'group relative w-full max-w-[320px]',
@@ -51,7 +54,7 @@ export function VideoAttachment({
   }, [active])
 
   return (
-    <div className={className}>
+    <div className={className} {...attachmentDragProps(active ? undefined : attachment)}>
       {active ? (
         <video
           ref={videoRef}
@@ -74,6 +77,7 @@ export function VideoAttachment({
         <button
           type="button"
           onClick={onSave}
+          {...attachmentDragProps(active ? attachment : undefined)}
           title={saveLabel}
           aria-label={saveLabel}
           className={`absolute top-1.5 ${externalUrl ? 'right-10' : 'right-1.5'} z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/45 text-white/90 opacity-0 group-hover:opacity-100 hover:bg-black/70 transition-opacity cursor-pointer`}

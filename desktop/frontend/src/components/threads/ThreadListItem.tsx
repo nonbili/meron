@@ -80,7 +80,8 @@ export function ThreadListItem({
         data-bulk-selectable={bulkSelectable || undefined}
         className={clsx(
           // Rows are inset pills, told apart by spacing rather than divider
-          // lines; unread weight and the count badge mark unread, not a tint.
+          // lines. Unread is told by weight: semibold against regular, in the same
+          // colours, with the preview regular either way. No tint.
           'relative w-full rounded-lg px-2.5 py-2.5 text-primary transition-colors duration-150 flex items-center gap-2.5 cursor-pointer select-none text-left',
           (bulkSelectable ? bulkSelected : active)
             ? 'bg-accent/[0.13] dark:bg-accent/20'
@@ -151,7 +152,7 @@ export function ThreadListItem({
               <span
                 className={clsx(
                   'text-[0.8125rem] truncate',
-                  unread ? 'font-semibold text-primary' : 'font-medium text-primary/80',
+                  unread ? 'font-semibold text-primary' : 'font-normal text-primary/80',
                 )}
               >
                 {thread.senders && thread.senders.length > 1
@@ -210,7 +211,7 @@ export function ThreadListItem({
               {hasDraft && <span className="mr-1 font-normal text-rose-500">{t('chat.draft')}</span>}
               <span className={clsx(unread ? 'text-primary' : 'text-primary/85')}>{threadTitle}</span>
               {!previewLine && thread.preview && (
-                <span className={clsx(unread ? 'text-secondary/90 font-medium' : 'text-secondary/75 font-normal')}>
+                <span className={clsx('font-normal', unread ? 'text-secondary/90' : 'text-secondary/75')}>
                   {' - '}
                   {thread.preview}
                 </span>
@@ -228,7 +229,7 @@ export function ThreadListItem({
             <p
               className={clsx(
                 'truncate text-[0.75rem] leading-snug',
-                unread ? 'text-secondary/90 font-medium' : 'text-secondary/75 font-normal',
+                unread ? 'text-secondary/90' : 'text-secondary/75',
               )}
             >
               {thread.preview}

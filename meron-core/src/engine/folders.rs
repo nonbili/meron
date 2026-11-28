@@ -63,27 +63,47 @@ pub fn search_folders(conn: &Connection, account: &str, folder: &str) -> Vec<Str
     folders
 }
 
-/// The mailboxes `query` reads from `folder`. A tag belongs to the message
-/// wherever it is filed, so a tag search spans the account, short of the mail
-/// its owner threw away; the mailbox asked for stays first, and always included.
+/// An Inbox search or a tag search spans the account, outside Trash and Junk.
+/// Searches from other folders keep the folder plus Sent scope. Where the
+/// account has an All Mail (`\All`) mailbox, as Gmail does, a text search from
+/// the Inbox reads Inbox, Sent and All Mail: All Mail already holds Drafts
+/// and every label once, and searching each label too returned a message once
+/// per label it carried. Sent stays in, though All Mail covers it, because it is
+/// synced locally while All Mail mostly is not, so cached and offline searches
+/// still find sent mail; the Message-ID dedupe drops the All Mail copies.
 pub fn query_folders(conn: &Connection, account: &str, folder: &str, query: &str) -> Vec<String> {
-    if crate::search_query::SearchQuery::parse(query)
+    let tagged = !crate::search_query::SearchQuery::parse(query)
         .tags
-        .is_empty()
-    {
+        .is_empty();
+    let inbox = folder.eq_ignore_ascii_case("INBOX");
+    if !inbox && !tagged {
         return search_folders(conn, account, folder);
     }
+    let known = store::get_folders(conn, account).unwrap_or_default();
+    if !tagged
+        && let Some(all_mail) = known
+            .iter()
+            .find(|known| known.special_use.as_deref() == Some("all"))
+    {
+        let mut folders = search_folders(conn, account, folder);
+        if !folders
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(&all_mail.name))
+        {
+            folders.push(all_mail.name.clone());
+        }
+        return folders;
+    }
     let mut folders = vec![folder.to_string()];
-    let names = store::get_folders(conn, account).unwrap_or_default();
     folders.extend(
-        names
+        known
             .into_iter()
-            .map(|known| known.name)
-            .filter(|name| !name.eq_ignore_ascii_case(folder))
-            .filter(|name| {
-                let role = store::folder_role(conn, account, name).unwrap_or_default();
-                role != "trash" && role != "junk"
-            }),
+            .filter(|known| !known.name.eq_ignore_ascii_case(folder))
+            .filter(|known| {
+                !matches!(known.role.as_str(), "trash" | "junk")
+                    && !matches!(known.special_use.as_deref(), Some("flagged" | "noselect"))
+            })
+            .map(|known| known.name),
     );
     folders
 }
@@ -144,15 +164,120 @@ mod query_folder_tests {
     use super::*;
 
     #[test]
-    fn a_tag_search_spans_the_account_short_of_trash_and_junk() {
+    fn inbox_and_tag_searches_span_the_account_short_of_trash_and_junk() {
         let path = std::env::temp_dir().join(format!("meron-qf-{}.db", uuid::Uuid::new_v4()));
         let conn = store::open_at(&path).unwrap();
-        for folder in ["INBOX", "Projects", "Trash", "Junk"] {
+        for folder in ["INBOX", "Archive", "Projects", "Trash", "Junk"] {
             store::ensure_folder(&conn, "a", folder).unwrap();
+            store::upsert_messages(
+                &conn,
+                "a",
+                folder,
+                &[imap::MessageHeader {
+                    uid: 1,
+                    subject: "Fictional project".to_string(),
+                    ..Default::default()
+                }],
+            )
+            .unwrap();
         }
+        store::upsert_folders(
+            &conn,
+            "a",
+            &[imap::Folder {
+                name: "Parent".to_string(),
+                special_use: Some("noselect".to_string()),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
         let mut folders = query_folders(&conn, "a", "INBOX", "tag:todo");
         assert_eq!(folders.remove(0), "INBOX");
-        assert_eq!(folders, ["Projects"]);
-        assert_eq!(query_folders(&conn, "a", "INBOX", "plain"), ["INBOX"]);
+        assert_eq!(folders, ["Archive", "Projects"]);
+        let folders = query_folders(&conn, "a", "INBOX", "fictional");
+        assert_eq!(folders, ["INBOX", "Archive", "Projects"]);
+        let hits =
+            store::search_messages_in_folders(&conn, "a", &folders, "fictional", 10, None).unwrap();
+        let mut hit_folders = hits.into_iter().map(|hit| hit.folder).collect::<Vec<_>>();
+        hit_folders.sort();
+        assert_eq!(hit_folders, ["Archive", "INBOX", "Projects"]);
+        assert_eq!(query_folders(&conn, "a", "Projects", "plain"), ["Projects"]);
+    }
+
+    #[test]
+    fn an_inbox_search_with_all_mail_reads_inbox_sent_and_all_mail_once() {
+        let path = std::env::temp_dir().join(format!("meron-qf-{}.db", uuid::Uuid::new_v4()));
+        let conn = store::open_at(&path).unwrap();
+        let folder = |name: &str, special_use: Option<&str>| imap::Folder {
+            name: name.to_string(),
+            special_use: special_use.map(str::to_string),
+            ..Default::default()
+        };
+        store::upsert_folders(
+            &conn,
+            "g",
+            &[
+                folder("INBOX", None),
+                folder("[Gmail]/All Mail", Some("all")),
+                folder("[Gmail]/Sent Mail", Some("sent")),
+                folder("[Gmail]/Trash", Some("trash")),
+                folder("Projects", None),
+            ],
+        )
+        .unwrap();
+        let hit = |uid: u32| imap::MessageHeader {
+            uid,
+            subject: "Fictional launch".to_string(),
+            message_id: "<launch@example.com>".to_string(),
+            date: 1_700_000_000,
+            ..Default::default()
+        };
+        for (name, uid) in [("INBOX", 7), ("[Gmail]/All Mail", 40), ("Projects", 3)] {
+            store::upsert_messages(&conn, "g", name, &[hit(uid)]).unwrap();
+        }
+
+        let folders = query_folders(&conn, "g", "INBOX", "launch");
+        assert_eq!(folders, ["INBOX", "[Gmail]/Sent Mail", "[Gmail]/All Mail"]);
+        let mut hits =
+            store::search_messages_in_folders(&conn, "g", &folders, "launch", 10, None).unwrap();
+        assert_eq!(hits.len(), 2);
+        store::dedupe_search_hits(&mut hits, &folders);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].folder, "INBOX");
+
+        // Sent is synced locally while All Mail mostly is not, so a sent
+        // message cached only under Sent is still found offline.
+        let sent = imap::MessageHeader {
+            uid: 12,
+            subject: "Fictional launch notes".to_string(),
+            message_id: "<notes@example.com>".to_string(),
+            date: 1_700_000_100,
+            ..Default::default()
+        };
+        store::upsert_messages(&conn, "g", "[Gmail]/Sent Mail", &[sent]).unwrap();
+        let mut hits =
+            store::search_messages_in_folders(&conn, "g", &folders, "launch", 10, None).unwrap();
+        store::dedupe_search_hits(&mut hits, &folders);
+        let found = hits
+            .iter()
+            .map(|hit| hit.folder.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(found, ["[Gmail]/Sent Mail", "INBOX"]);
+
+        // The first live search can find All Mail after the caller resolved
+        // an Inbox-only scope; its copy still gives way to the Inbox one.
+        let mut hits =
+            store::search_messages_in_folders(&conn, "g", &folders, "launch", 10, None).unwrap();
+        hits.retain(|hit| hit.message_id == "<launch@example.com>");
+        store::dedupe_search_hits(&mut hits, &["INBOX".to_string()]);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].folder, "INBOX");
+
+        // A tag lives on the copy it was put on, so tag searches keep every label.
+        let folders = query_folders(&conn, "g", "INBOX", "tag:todo");
+        assert_eq!(
+            folders,
+            ["INBOX", "Projects", "[Gmail]/All Mail", "[Gmail]/Sent Mail"]
+        );
     }
 }

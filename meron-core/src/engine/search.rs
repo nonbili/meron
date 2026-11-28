@@ -604,6 +604,19 @@ pub async fn search_mail_messages(
         return cached_search_mail_page(&db, account, folders, query, limit, before_cursor);
     }
     let mut incomplete = false;
+    // A freshly synced Unified Inbox can have messages before Meron has listed
+    // the account's other mailboxes. Discover them on the first live search.
+    let discovered;
+    let folders = if before_cursor.is_none()
+        && folders.len() == 1
+        && folders[0].eq_ignore_ascii_case("INBOX")
+    {
+        incomplete = sync_folders(engine, account).await.is_err();
+        discovered = query_folders(&engine.db.lock().unwrap(), account, &folders[0], query);
+        &discovered
+    } else {
+        folders
+    };
     let cursor = match before_cursor {
         Some(cursor) => cursor.clone(),
         None => {
@@ -628,7 +641,7 @@ pub async fn search_mail_messages(
                 page.incomplete = true;
                 return Ok(page);
             }
-            incomplete = searched.len() < folders.len();
+            incomplete |= searched.len() < folders.len();
             let pending =
                 date_search_hits(engine, account, query, &searched, &mut incomplete).await?;
             let token = store::create_search_snapshot(
