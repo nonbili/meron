@@ -73,6 +73,7 @@ fun MainViewController(
     googleClientId: String = "",
     googleRedirectUri: String = "",
     coreProtocolVersion: Int = 0,
+    translationBridge: IosMailTranslationBridge? = null,
 ): UIViewController {
     ComposeFoundationFlags.isNewContextMenuEnabled = true
     val appPrefs = IosAppPreferences("meron_app")
@@ -88,7 +89,7 @@ fun MainViewController(
     val bundle = NSBundle.mainBundle
     val appVersion = (bundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String).orEmpty()
     val packageName = bundle.bundleIdentifier.orEmpty()
-    val services = IosPlatformServices()
+    val services = IosPlatformServices(translationBridge?.let(::IosMailTranslator))
     // Built once, outside the composition: MeronApp keys its state on the host,
     // so a new instance per recomposition (a system appearance change, say)
     // would rebuild MeronMobileState and drop everything loaded into it.
@@ -371,7 +372,9 @@ private class DocumentPickerDelegate(
     }
 }
 
-private class IosPlatformServices : PlatformServices {
+private class IosPlatformServices(
+    override val mailTranslator: MailTranslator?,
+) : PlatformServices {
     private val authPresentationContext = IosAuthPresentationContext()
     private var authSession: ASWebAuthenticationSession? = null
 

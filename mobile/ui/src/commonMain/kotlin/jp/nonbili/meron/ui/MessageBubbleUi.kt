@@ -218,7 +218,9 @@ internal fun MessageBubble(
     // Capped, a long body scrolls inside its bubble; uncapped (the full
     // messages setting), it grows to fit and only the conversation scrolls.
     val bodyMaxHeight = if (LocalChatFullMessages.current) Dp.Unspecified else 360.dp
-    val htmlBody = usesHtmlBody(message, preferHtml, searchQuery)
+    val visibleTranslations = LocalMessageTranslations.current.takeIf { searchQuery.isBlank() }
+    val translated = visibleTranslations?.state(message)?.translatedBody != null
+    val htmlBody = !translated && usesHtmlBody(message, preferHtml, searchQuery)
     // The web view paints the mail on white, so a tinted light bubble (Material
     // You) would frame it as a square white box inside a rounded card. Let the
     // whole bubble be white instead, so the header and body read as one card.
@@ -382,7 +384,7 @@ internal fun MessageBubble(
                 RemoteContentButton(
                     message = message,
                     remoteContent = remoteContent,
-                    preferHtml = preferHtml,
+                    preferHtml = preferHtml && !translated,
                     searchQuery = searchQuery,
                 )
                 Text(
@@ -412,6 +414,7 @@ internal fun MessageBubble(
                     preferHtml = preferHtml,
                     allowRemote = remoteContent.allowRemote,
                     message = message,
+                    translations = visibleTranslations,
                     isRss = isRss,
                     tint = textColor.copy(alpha = 0.55f),
                     actionsEnabled = actionsEnabled,
@@ -479,6 +482,7 @@ internal fun MessageActionsButton(
     preferHtml: Boolean,
     allowRemote: Boolean,
     message: MessageBody,
+    translations: MessageTranslations?,
     isRss: Boolean,
     tint: Color,
     actionsEnabled: Boolean,
@@ -509,6 +513,7 @@ internal fun MessageActionsButton(
             preferHtml = preferHtml,
             allowRemote = allowRemote,
             message = message,
+            translations = translations,
             isRss = isRss,
             actionsEnabled = actionsEnabled,
             onForward = onForward,
@@ -599,7 +604,13 @@ internal fun ColumnScope.MessageBodyContent(
             modifier = Modifier.padding(horizontal = chromeInset).padding(bottom = 6.dp),
         )
     }
-    val htmlBody = usesHtmlBody(message, preferHtml, searchQuery)
+    val translations = LocalMessageTranslations.current.takeIf { searchQuery.isBlank() }
+    val translation = translations?.state(message)
+    val translatedBody = translation?.translatedBody
+    val htmlBody = translatedBody == null && usesHtmlBody(message, preferHtml, searchQuery)
+    if (translation != null) {
+        MessageTranslationControls(message, translation, translations, textColor, Modifier.padding(horizontal = chromeInset))
+    }
     val standaloneAttachmentsForMessage = standaloneAttachments(message)
     val (imageAttachments, otherAttachments) =
         standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
@@ -662,8 +673,8 @@ internal fun ColumnScope.MessageBodyContent(
         val bodyText: @Composable () -> Unit = {
             Column {
                 SelectableMessageText(
-                    text = quoted.reply.ifBlank { "(no content)" },
-                    links = if (quoted.reply.isBlank()) emptyList() else quoted.replyLinks,
+                    text = translatedBody ?: quoted.reply.ifBlank { "(no content)" },
+                    links = if (translatedBody != null || quoted.reply.isBlank()) emptyList() else quoted.replyLinks,
                     onOpenUrl = onOpenUrl,
                     searchQuery = searchQuery,
                     activeSearchMatch = activeSearchMatch,

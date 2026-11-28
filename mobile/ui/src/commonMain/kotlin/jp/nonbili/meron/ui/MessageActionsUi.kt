@@ -1,5 +1,6 @@
 package jp.nonbili.meron.ui
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.automirrored.filled.ReplyAll
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -20,8 +22,6 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import jp.nonbili.meron.shared.MessageBody
@@ -50,8 +50,10 @@ internal fun MessageActionsMenu(
     onOpenUrl: (String) -> Unit,
     // Reply all, forward and delete sit in the reader's bottom bar instead.
     mailActionsInBar: Boolean = false,
+    translations: MessageTranslations? = null,
 ) {
     val printMessage = rememberPrintMessage(preferHtml, allowRemote)
+    val translation = translations?.state(message)
     val messageTextLabel = tr("chat.messageText")
     val subjectLabel = tr("composer.fields.subject")
     val messageIdLabel = tr("chat.messageId")
@@ -64,11 +66,19 @@ internal fun MessageActionsMenu(
         icon: ImageVector,
         enabled: Boolean = true,
         danger: Boolean = false,
+        supportingText: String? = null,
         onClick: () -> Unit,
     ) {
         val error = MaterialTheme.colorScheme.error
         DropdownMenuItem(
-            text = { Text(label, color = if (danger) error else Color.Unspecified) },
+            text = {
+                Column {
+                    Text(label, color = if (danger) error else Color.Unspecified)
+                    supportingText?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
             leadingIcon = { Icon(icon, contentDescription = null, tint = if (danger) error else LocalContentColor.current) },
             enabled = enabled,
             onClick = {
@@ -80,6 +90,24 @@ internal fun MessageActionsMenu(
 
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (!isRss) {
+            // The core supplies plain text for both plain-text and HTML email.
+            if (translations != null && !message.bodyMissing && message.translatableText().isNotBlank()) {
+                val label =
+                    when {
+                        translation?.translatedBody != null -> "chat.actions.showOriginal"
+                        translation?.result != null -> "chat.translation.showTranslation"
+                        translations.attribution != null -> "chat.translation.withGoogle"
+                        else -> "chat.actions.translate"
+                    }
+                Item(
+                    tr(label),
+                    Icons.Filled.Translate,
+                    enabled = translation?.loading != true,
+                    supportingText = if (label == "chat.translation.withGoogle") tr("chat.translation.onDevicePrivacy") else null,
+                ) {
+                    translations.toggle(message)
+                }
+            }
             Item(tr("chat.actions.print"), Icons.Filled.Print, enabled = !message.bodyMissing) {
                 printMessage(message)
             }

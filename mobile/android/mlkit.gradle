@@ -1,0 +1,10 @@
+dependencies {
+    if (project.ext.mlkitDebugEnabled) {
+        debugImplementation "com.google.mlkit:translate:17.0.3"
+        debugImplementation "com.google.mlkit:language-id:17.0.6"
+    }
+    if (project.ext.mlkitReleaseEnabled) {
+        releaseImplementation "com.google.mlkit:translate:17.0.3"
+        releaseImplementation "com.google.mlkit:language-id:17.0.6"
+    }
+}

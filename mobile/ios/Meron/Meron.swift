@@ -87,15 +87,18 @@ struct Meron: App {
                 }
                 .padding()
             } else {
-                IosComposeHost(
-                    core: core,
-                    coreLoaded: coreLoaded,
-                    coreInitJson: coreInitJson,
-                    incomingMailtoEvents: incomingMailtoEvents,
-                    incomingOAuthCallbackUrl: incomingOAuthCallbackUrl,
-                    incomingThreadEvents: incomingThreadEvents,
-                    coreProtocolVersion: coreProtocolVersion
-                )
+                IosComposeWindow { translation in
+                    IosComposeHost(
+                        core: core,
+                        coreLoaded: coreLoaded,
+                        coreInitJson: coreInitJson,
+                        incomingMailtoEvents: incomingMailtoEvents,
+                        incomingOAuthCallbackUrl: incomingOAuthCallbackUrl,
+                        incomingThreadEvents: incomingThreadEvents,
+                        coreProtocolVersion: coreProtocolVersion,
+                        translationBridge: translation
+                    )
+                }
                 .ignoresSafeArea()
                 .onOpenURL(perform: handleOpenUrl)
                 .onReceive(NotificationCenter.default.publisher(for: .iosNotificationThreadTargetOpened)) { notification in

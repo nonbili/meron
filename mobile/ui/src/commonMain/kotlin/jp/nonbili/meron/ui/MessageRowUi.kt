@@ -191,9 +191,14 @@ private fun CollapsedMessageRow(
     searchQuery: String,
     onClick: () -> Unit,
 ) {
+    val translatedBody =
+        LocalMessageTranslations.current
+            .takeIf { searchQuery.isBlank() }
+            ?.state(message)
+            ?.translatedBody
     val preview =
-        remember(message.id, message.body, message.bodyHtml) {
-            messagePlainText(message)
+        remember(message.id, message.body, message.bodyHtml, translatedBody) {
+            (translatedBody ?: messagePlainText(message))
                 .replace(Regex("\\s+"), " ")
                 .trim()
                 .take(COLLAPSED_PREVIEW_CHARS)
@@ -222,7 +227,7 @@ private fun CollapsedMessageRow(
             RemoteContentButton(
                 message = message,
                 remoteContent = remoteContent,
-                preferHtml = preferHtml,
+                preferHtml = preferHtml && translatedBody == null,
                 searchQuery = searchQuery,
             )
             MessageRowBadges(message = message, isDraft = isDraft, mutedColor = mutedColor)
@@ -324,6 +329,7 @@ internal fun MessageRowHeader(
     // sits on top of the text being read.
     compact: Boolean = false,
 ) {
+    val translations = LocalMessageTranslations.current.takeIf { searchQuery.isBlank() }
     var addressesOpen by remember(message.id) { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth(),
@@ -393,7 +399,7 @@ internal fun MessageRowHeader(
         RemoteContentButton(
             message = message,
             remoteContent = remoteContent,
-            preferHtml = preferHtml,
+            preferHtml = preferHtml && translations?.state(message)?.translatedBody == null,
             searchQuery = searchQuery,
         )
         MessageRowBadges(message = message, isDraft = isDraft, mutedColor = mutedColor)
@@ -416,6 +422,7 @@ internal fun MessageRowHeader(
             preferHtml = preferHtml,
             allowRemote = remoteContent.allowRemote,
             message = message,
+            translations = translations,
             isRss = isRss,
             tint = mutedColor,
             actionsEnabled = actionsEnabled,

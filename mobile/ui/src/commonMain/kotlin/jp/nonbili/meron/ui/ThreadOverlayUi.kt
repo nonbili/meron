@@ -77,212 +77,214 @@ internal fun OpenThreadPager(
         ) {
             for ((pageThread, slot) in pages) {
                 key(pageThread?.id) {
-                    val active = slot == 0
-                    val pageAccount = pageThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
-                    val pagePreferHtml = pageAccount?.let { conversationHtmlOverrides[it.id] ?: it.conversationHtml } ?: true
-                    val preview = pageThread?.let { threadPreviews[it.id]?.page }
-                    val pageMessages = if (active) visibleThreadMessages() else preview?.messages.orEmpty()
-                    val pageCursor = if (active) messageCursor else preview?.nextCursor.orEmpty()
-                    ThreadScreen(
-                        active = active,
-                        modifier = Modifier.graphicsLayer { translationX = threadSwipe.offsetPx + slot * size.width },
-                        loadPrintMessages = ::loadThreadForPrinting,
-                        onPrintError = { status = it },
-                        thread = pageThread,
-                        messages = pageMessages,
-                        accountEmail = pageAccount?.email.orEmpty(),
-                        wallpaperPresetId = pageAccount?.chatWallpaperPresetId.orEmpty(),
-                        wallpaperCustomUrl =
-                            pageAccount
-                                ?.takeIf { it.chatWallpaperKind == "custom" }
-                                ?.chatWallpaperUrl
-                                .orEmpty(),
-                        preferHtml = pagePreferHtml,
-                        onPreferHtmlChange = { preferHtml ->
-                            if (selectedThreadAccountId.isNotBlank()) {
-                                conversationHtmlOverrides = conversationHtmlOverrides + (selectedThreadAccountId to preferHtml)
-                            }
-                        },
-                        onBack = popAppBack,
-                        onArchive = {
-                            selectedCoreThread?.let {
-                                archiveOrRemove(it)
-                                popAppBack()
-                            }
-                        },
-                        onMarkAsSpam =
-                            pageThread
-                                ?.takeIf { active && spamFolderForThread(it) != null }
-                                ?.let { thread -> { markThreadAsSpam(thread, onMoved = popAppBack) } },
-                        isRssArticle = pageThread?.let { threadIdIsRss(it.id) && it.rssItemKeys().isNotEmpty() } == true,
-                        // A feed's own page, not one of its entries opened on its own.
-                        onRenameFeed =
-                            pageThread
-                                ?.takeIf { active && threadIdIsRss(it.id) && it.rssItemKeys().isEmpty() }
-                                ?.let { feed -> { name -> renameFeed(feed, name) } },
-                        onDelete = {
-                            selectedCoreThread?.let {
-                                deleteThread(it)
-                                popAppBack()
-                            }
-                        },
-                        onToggleStar = {
-                            selectedCoreThread?.let { t ->
-                                toggleStar(t)
-                                selectedCoreThread = t.copy(starred = !t.starred)
-                            }
-                        },
-                        toolbar = conversationToolbar,
-                        onTags =
-                            selectedCoreThread
-                                ?.takeIf { !threadIdIsRss(it.id) }
-                                ?.let { thread -> { selectedTagThread = thread } },
-                        onAddToTasks =
-                            selectedCoreThread
-                                ?.takeIf { tasksEnabled && !threadIdIsRss(it.id) }
-                                ?.let { thread ->
-                                    {
-                                        scope.launch {
-                                            requestAddMailToTasks(thread)
+                    MessageTranslationScope {
+                        val active = slot == 0
+                        val pageAccount = pageThread?.accountId?.let { accountId -> coreAccounts.firstOrNull { it.id == accountId } }
+                        val pagePreferHtml = pageAccount?.let { conversationHtmlOverrides[it.id] ?: it.conversationHtml } ?: true
+                        val preview = pageThread?.let { threadPreviews[it.id]?.page }
+                        val pageMessages = if (active) visibleThreadMessages() else preview?.messages.orEmpty()
+                        val pageCursor = if (active) messageCursor else preview?.nextCursor.orEmpty()
+                        ThreadScreen(
+                            active = active,
+                            modifier = Modifier.graphicsLayer { translationX = threadSwipe.offsetPx + slot * size.width },
+                            loadPrintMessages = ::loadThreadForPrinting,
+                            onPrintError = { status = it },
+                            thread = pageThread,
+                            messages = pageMessages,
+                            accountEmail = pageAccount?.email.orEmpty(),
+                            wallpaperPresetId = pageAccount?.chatWallpaperPresetId.orEmpty(),
+                            wallpaperCustomUrl =
+                                pageAccount
+                                    ?.takeIf { it.chatWallpaperKind == "custom" }
+                                    ?.chatWallpaperUrl
+                                    .orEmpty(),
+                            preferHtml = pagePreferHtml,
+                            onPreferHtmlChange = { preferHtml ->
+                                if (selectedThreadAccountId.isNotBlank()) {
+                                    conversationHtmlOverrides = conversationHtmlOverrides + (selectedThreadAccountId to preferHtml)
+                                }
+                            },
+                            onBack = popAppBack,
+                            onArchive = {
+                                selectedCoreThread?.let {
+                                    archiveOrRemove(it)
+                                    popAppBack()
+                                }
+                            },
+                            onMarkAsSpam =
+                                pageThread
+                                    ?.takeIf { active && spamFolderForThread(it) != null }
+                                    ?.let { thread -> { markThreadAsSpam(thread, onMoved = popAppBack) } },
+                            isRssArticle = pageThread?.let { threadIdIsRss(it.id) && it.rssItemKeys().isNotEmpty() } == true,
+                            // A feed's own page, not one of its entries opened on its own.
+                            onRenameFeed =
+                                pageThread
+                                    ?.takeIf { active && threadIdIsRss(it.id) && it.rssItemKeys().isEmpty() }
+                                    ?.let { feed -> { name -> renameFeed(feed, name) } },
+                            onDelete = {
+                                selectedCoreThread?.let {
+                                    deleteThread(it)
+                                    popAppBack()
+                                }
+                            },
+                            onToggleStar = {
+                                selectedCoreThread?.let { t ->
+                                    toggleStar(t)
+                                    selectedCoreThread = t.copy(starred = !t.starred)
+                                }
+                            },
+                            toolbar = conversationToolbar,
+                            onTags =
+                                selectedCoreThread
+                                    ?.takeIf { !threadIdIsRss(it.id) }
+                                    ?.let { thread -> { selectedTagThread = thread } },
+                            onAddToTasks =
+                                selectedCoreThread
+                                    ?.takeIf { tasksEnabled && !threadIdIsRss(it.id) }
+                                    ?.let { thread ->
+                                        {
+                                            scope.launch {
+                                                requestAddMailToTasks(thread)
+                                            }
+                                            Unit
                                         }
-                                        Unit
+                                    },
+                            moveFolders =
+                                coreAccounts
+                                    .filterNot { accountSummaryIsRss(it) }
+                                    .flatMap { account -> foldersByAccount[account.id].orEmpty() },
+                            transferAccounts = coreAccounts.filterNot { accountSummaryIsRss(it) },
+                            loadTransferFolders = {
+                                selectedCoreThread?.let { thread -> ensureThreadActionFolders(thread, includeAllMailAccounts = true) {} }
+                            },
+                            copyFolders =
+                                coreAccounts
+                                    .filterNot { accountSummaryIsRss(it) }
+                                    .flatMap { account -> foldersByAccount[account.id].orEmpty() },
+                            onMoveToFolder = { folder ->
+                                selectedCoreThread?.let { thread ->
+                                    moveThreadToFolder(thread, folder.name, folder.accountId.ifBlank { thread.accountId }) {
+                                        popAppBack()
                                     }
-                                },
-                        moveFolders =
-                            coreAccounts
-                                .filterNot { accountSummaryIsRss(it) }
-                                .flatMap { account -> foldersByAccount[account.id].orEmpty() },
-                        transferAccounts = coreAccounts.filterNot { accountSummaryIsRss(it) },
-                        loadTransferFolders = {
-                            selectedCoreThread?.let { thread -> ensureThreadActionFolders(thread, includeAllMailAccounts = true) {} }
-                        },
-                        copyFolders =
-                            coreAccounts
-                                .filterNot { accountSummaryIsRss(it) }
-                                .flatMap { account -> foldersByAccount[account.id].orEmpty() },
-                        onMoveToFolder = { folder ->
-                            selectedCoreThread?.let { thread ->
-                                moveThreadToFolder(thread, folder.name, folder.accountId.ifBlank { thread.accountId }) {
-                                    popAppBack()
                                 }
-                            }
-                        },
-                        recentTransfers = if (active) recentTransferItems(selectedCoreThread) else emptyList(),
-                        loadRecentTransferFolders = { loadRecentTransferFolders(selectedCoreThread) },
-                        onCreateFolderAndMove = { name ->
-                            selectedCoreThread?.let { thread ->
-                                createFolderAndMoveThread(thread, name) {
-                                    popAppBack()
+                            },
+                            recentTransfers = if (active) recentTransferItems(selectedCoreThread) else emptyList(),
+                            loadRecentTransferFolders = { loadRecentTransferFolders(selectedCoreThread) },
+                            onCreateFolderAndMove = { name ->
+                                selectedCoreThread?.let { thread ->
+                                    createFolderAndMoveThread(thread, name) {
+                                        popAppBack()
+                                    }
                                 }
-                            }
-                        },
-                        onCopyToFolder = { folder ->
-                            selectedCoreThread?.let { thread ->
-                                copyThreadToFolder(thread, folder)
-                            }
-                        },
-                        quickReplyBody = if (active) quickReplyBody else pageThread?.let(::seededQuickReplyBody).orEmpty(),
-                        canLoadOlder = pageCursor.isNotBlank(),
-                        loadingOlder = active && loadingMoreMessages,
-                        onLoadOlder = ::loadMoreThreadMessages,
-                        onQuickReplyChange = ::onQuickReplyBodyChange,
-                        quickReplyAttachments = if (active) quickReplyAttachments else emptyList(),
-                        quickReplyFailure = if (active) quickReplyFailure else "",
-                        quickReplyHasContent = active && !quickReplyIsBlank(),
-                        quickReplySending = active && quickReplySendInFlight,
-                        sendShortcutMode = sendShortcutMode,
-                        conversationLayout = conversationLayout,
-                        onQuickReplyAttach = {
-                            pickAttachmentInto { picked ->
-                                quickReplyAttachments = quickReplyAttachments + picked
+                            },
+                            onCopyToFolder = { folder ->
+                                selectedCoreThread?.let { thread ->
+                                    copyThreadToFolder(thread, folder)
+                                }
+                            },
+                            quickReplyBody = if (active) quickReplyBody else pageThread?.let(::seededQuickReplyBody).orEmpty(),
+                            canLoadOlder = pageCursor.isNotBlank(),
+                            loadingOlder = active && loadingMoreMessages,
+                            onLoadOlder = ::loadMoreThreadMessages,
+                            onQuickReplyChange = ::onQuickReplyBodyChange,
+                            quickReplyAttachments = if (active) quickReplyAttachments else emptyList(),
+                            quickReplyFailure = if (active) quickReplyFailure else "",
+                            quickReplyHasContent = active && !quickReplyIsBlank(),
+                            quickReplySending = active && quickReplySendInFlight,
+                            sendShortcutMode = sendShortcutMode,
+                            conversationLayout = conversationLayout,
+                            onQuickReplyAttach = {
+                                pickAttachmentInto { picked ->
+                                    quickReplyAttachments = quickReplyAttachments + picked
+                                    ++quickReplyGeneration
+                                    quickReplyFailure = ""
+                                    autoSaveQuickReplyDraft()
+                                }
+                            },
+                            onRemoveQuickReplyAttachment = { attachment ->
+                                quickReplyAttachments = quickReplyAttachments.filterNot { it.id == attachment.id }
                                 ++quickReplyGeneration
                                 quickReplyFailure = ""
-                                autoSaveQuickReplyDraft()
-                            }
-                        },
-                        onRemoveQuickReplyAttachment = { attachment ->
-                            quickReplyAttachments = quickReplyAttachments.filterNot { it.id == attachment.id }
-                            ++quickReplyGeneration
-                            quickReplyFailure = ""
-                            if (quickReplyIsBlank()) {
-                                discardQuickReplyDraftIfEmpty()
-                            } else {
-                                autoSaveQuickReplyDraft()
-                            }
-                        },
-                        onOpenFullReply = { openQuickReplyInFullEditor() },
-                        onReplyAll = { openQuickReplyInFullEditor(replyAll = true) },
-                        canReplyAllToThread = canReplyAllToThread(pageThread, pageMessages),
-                        onSendReply = ::sendQuickReply,
-                        onRetryReply = ::retryQuickReplySend,
-                        quickReplyFromIdentities = quickReplyIdentities(pageThread),
-                        quickReplyRecipients = quickReplyRecipients(pageThread, pageMessages),
-                        quickReplySelectedFrom = selectedQuickReplyIdentity(pageThread, pageMessages),
-                        onSelectQuickReplyFrom = { identity ->
-                            quickReplyFrom = identity.email
-                            ++quickReplyGeneration
-                            // The saved draft carries the From header, so re-save it
-                            // against the newly chosen identity instead of waiting
-                            // for the next keystroke's debounce.
-                            if (quickReplyDraftSaved) autoSaveQuickReplyDraft()
-                        },
-                        onForward = { openMessageCompose(it, forward = true) },
-                        onReplyToMessage = { replyToMessage(it, replyAll = false) },
-                        onReplyAllToMessage = ::replyAllToMessage,
-                        canReplyAllToMessage = ::canReplyAllToMessage,
-                        onEditAsNew = { openMessageCompose(it, forward = false) },
-                        conversationFooter = if (active) effectiveConversationFooter() else conversationFooter,
-                        conversationReplyTarget = conversationActionTarget(pageThread, pageMessages),
-                        onOpenDraft = { message ->
-                            selectedCoreThread?.let { thread ->
-                                openDraftCompose(message, thread, returnScreen = Screen.Thread)
-                            }
-                        },
-                        onToggleMessageRead = ::toggleMessageRead,
-                        onToggleMessageStarred = ::toggleMessageStarred,
-                        onDeleteMessage = { message -> deleteMessage(message, onThreadEmptied = popAppBack) },
-                        onOpenAttachment = ::openMessageAttachment,
-                        onSaveAttachment = ::saveMessageAttachment,
-                        onShareImageAttachment = ::shareImageAttachment,
-                        onCopyImageAttachment = ::copyImageAttachment,
-                        loadImageAttachment = { attachment ->
-                            val cacheKey = attachment.key.ifBlank { attachment.url }
-                            loadCachedImageBitmap(cacheKey) {
-                                if (attachment.key.isNotBlank()) {
-                                    withContext(ioDispatcher) { decodeImageBitmap(readAttachmentBytes(attachment)) }
+                                if (quickReplyIsBlank()) {
+                                    discardQuickReplyDraftIfEmpty()
                                 } else {
-                                    loadImageBitmapRef(attachment.url)
+                                    autoSaveQuickReplyDraft()
                                 }
-                            }
-                        },
-                        remoteContentPolicy =
-                            RemoteContentPolicy(
-                                // Feed accounts load remote content by definition —
-                                // a feed item is little else — which is what the
-                                // core defaults them to (see `load_remote_images`).
-                                accountAllows = pageAccount?.loadRemoteImages ?: false,
-                                allowedSenders = remoteImageSenders,
-                            ),
-                        onAllowRemoteSender = { addr -> setRemoteImageSender(addr, true) },
-                        onComposeTo = { email ->
-                            openComposeTo(email, selectedCoreThread?.accountId ?: selectedCoreAccountId)
-                        },
-                        onCopyMessageText = { label, value ->
-                            services.copyText(label, value)
-                            status = trs("common.copied")
-                        },
-                        onRetryLoadMessages = { retryOpenThreadLoad() },
-                        onRespondToInvite = { message, response -> scope.launch { respondToInvite(message, response) } },
-                        onRemoveInviteEvent = { message -> scope.launch { removeInviteFromCalendar(message) } },
-                        onAddInviteToCalendar = { message -> scope.launch { addInviteToCalendar(message) } },
-                        onMessagesRead = ::markMessagesReadOnScroll,
-                        onViewedToBottom = ::markThreadReadOnScroll,
-                        snackbarHost = if (active) snackbarHost else previewSnackbarHost,
-                        swipe = threadSwipe,
-                        pull = pull,
-                        onSwipeToPrevious = newerThread?.takeIf { swipeable }?.let { thread -> { browseToThread(thread) } },
-                        onSwipeToNext = olderThread?.takeIf { swipeable }?.let { thread -> { browseToThread(thread) } },
-                    )
+                            },
+                            onOpenFullReply = { openQuickReplyInFullEditor() },
+                            onReplyAll = { openQuickReplyInFullEditor(replyAll = true) },
+                            canReplyAllToThread = canReplyAllToThread(pageThread, pageMessages),
+                            onSendReply = ::sendQuickReply,
+                            onRetryReply = ::retryQuickReplySend,
+                            quickReplyFromIdentities = quickReplyIdentities(pageThread),
+                            quickReplyRecipients = quickReplyRecipients(pageThread, pageMessages),
+                            quickReplySelectedFrom = selectedQuickReplyIdentity(pageThread, pageMessages),
+                            onSelectQuickReplyFrom = { identity ->
+                                quickReplyFrom = identity.email
+                                ++quickReplyGeneration
+                                // The saved draft carries the From header, so re-save it
+                                // against the newly chosen identity instead of waiting
+                                // for the next keystroke's debounce.
+                                if (quickReplyDraftSaved) autoSaveQuickReplyDraft()
+                            },
+                            onForward = { openMessageCompose(it, forward = true) },
+                            onReplyToMessage = { replyToMessage(it, replyAll = false) },
+                            onReplyAllToMessage = ::replyAllToMessage,
+                            canReplyAllToMessage = ::canReplyAllToMessage,
+                            onEditAsNew = { openMessageCompose(it, forward = false) },
+                            conversationFooter = if (active) effectiveConversationFooter() else conversationFooter,
+                            conversationReplyTarget = conversationActionTarget(pageThread, pageMessages),
+                            onOpenDraft = { message ->
+                                selectedCoreThread?.let { thread ->
+                                    openDraftCompose(message, thread, returnScreen = Screen.Thread)
+                                }
+                            },
+                            onToggleMessageRead = ::toggleMessageRead,
+                            onToggleMessageStarred = ::toggleMessageStarred,
+                            onDeleteMessage = { message -> deleteMessage(message, onThreadEmptied = popAppBack) },
+                            onOpenAttachment = ::openMessageAttachment,
+                            onSaveAttachment = ::saveMessageAttachment,
+                            onShareImageAttachment = ::shareImageAttachment,
+                            onCopyImageAttachment = ::copyImageAttachment,
+                            loadImageAttachment = { attachment ->
+                                val cacheKey = attachment.key.ifBlank { attachment.url }
+                                loadCachedImageBitmap(cacheKey) {
+                                    if (attachment.key.isNotBlank()) {
+                                        withContext(ioDispatcher) { decodeImageBitmap(readAttachmentBytes(attachment)) }
+                                    } else {
+                                        loadImageBitmapRef(attachment.url)
+                                    }
+                                }
+                            },
+                            remoteContentPolicy =
+                                RemoteContentPolicy(
+                                    // Feed accounts load remote content by definition —
+                                    // a feed item is little else — which is what the
+                                    // core defaults them to (see `load_remote_images`).
+                                    accountAllows = pageAccount?.loadRemoteImages ?: false,
+                                    allowedSenders = remoteImageSenders,
+                                ),
+                            onAllowRemoteSender = { addr -> setRemoteImageSender(addr, true) },
+                            onComposeTo = { email ->
+                                openComposeTo(email, selectedCoreThread?.accountId ?: selectedCoreAccountId)
+                            },
+                            onCopyMessageText = { label, value ->
+                                services.copyText(label, value)
+                                status = trs("common.copied")
+                            },
+                            onRetryLoadMessages = { retryOpenThreadLoad() },
+                            onRespondToInvite = { message, response -> scope.launch { respondToInvite(message, response) } },
+                            onRemoveInviteEvent = { message -> scope.launch { removeInviteFromCalendar(message) } },
+                            onAddInviteToCalendar = { message -> scope.launch { addInviteToCalendar(message) } },
+                            onMessagesRead = ::markMessagesReadOnScroll,
+                            onViewedToBottom = ::markThreadReadOnScroll,
+                            snackbarHost = if (active) snackbarHost else previewSnackbarHost,
+                            swipe = threadSwipe,
+                            pull = pull,
+                            onSwipeToPrevious = newerThread?.takeIf { swipeable }?.let { thread -> { browseToThread(thread) } },
+                            onSwipeToNext = olderThread?.takeIf { swipeable }?.let { thread -> { browseToThread(thread) } },
+                        )
+                    }
                 }
             }
         }

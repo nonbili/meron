@@ -94,6 +94,9 @@ internal fun MessageReaderScreen(
     onOpenUrl: (String) -> Unit,
 ) {
     var menuOpen by remember(message.id) { mutableStateOf(false) }
+    val translations = LocalMessageTranslations.current
+    val translation = translations?.state(message)
+    val translatedBody = translation?.translatedBody
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
     val pull = rememberPullToDismissState(message.id)
@@ -155,6 +158,7 @@ internal fun MessageReaderScreen(
                                 onOpenUrl = onOpenUrl,
                                 // Reply, reply all, forward and delete are in the bottom bar.
                                 mailActionsInBar = true,
+                                translations = translations,
                             )
                         }
                     },
@@ -183,7 +187,7 @@ internal fun MessageReaderScreen(
             },
         ) { innerPadding ->
             Box(Modifier.fillMaxSize()) {
-                val htmlBody = preferHtml && message.bodyHtml.isNotBlank()
+                val htmlBody = translatedBody == null && preferHtml && message.bodyHtml.isNotBlank()
                 // The web view paints mail on white, so a tinted card would frame it
                 // as a square white box; a light card goes white to hold it cleanly.
                 val surface = MaterialTheme.colorScheme.surface
@@ -249,7 +253,7 @@ internal fun MessageReaderScreen(
                                 RemoteContentButton(
                                     message = message,
                                     remoteContent = remoteContent,
-                                    preferHtml = preferHtml,
+                                    preferHtml = htmlBody,
                                     searchQuery = "",
                                 )
                             }
@@ -259,7 +263,31 @@ internal fun MessageReaderScreen(
                         val (imageAttachments, otherAttachments) =
                             standaloneAttachmentsForMessage.partition { it.mimeType.startsWith("image/") }
                         val visibleImages = visibleImageAttachments(imageAttachments, remoteContent.allowRemote)
-                        if (htmlBody) {
+                        if (translation != null) {
+                            MessageTranslationControls(message, translation, translations, MaterialTheme.colorScheme.onSurface)
+                        }
+                        if (translatedBody != null) {
+                            val style = messageBodyTextStyle(MaterialTheme.typography.bodyLarge)
+                            val quoted =
+                                remember(message.body, message.bodyQuoteStart, message.bodyLinks) {
+                                    splitQuotedBody(message.body, message.bodyQuoteStart, plainBodyLinks(message.body, message.bodyLinks))
+                                }
+                            SelectableMessageText(text = translatedBody, links = emptyList(), onOpenUrl = onOpenUrl, style = style)
+                            if (quoted.quote.isNotEmpty()) {
+                                var quoteOpen by remember(message.id) { mutableStateOf(QuoteFoldMemory.isOpen(message.id)) }
+                                QuoteToggle(
+                                    open = quoteOpen,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    onToggle = {
+                                        quoteOpen = !quoteOpen
+                                        QuoteFoldMemory.setOpen(message.id, quoteOpen)
+                                    },
+                                )
+                                if (quoteOpen) {
+                                    SelectableMessageText(text = quoted.quote, links = quoted.quoteLinks, onOpenUrl = onOpenUrl, style = style)
+                                }
+                            }
+                        } else if (htmlBody) {
                             // Only the reader shrinks over-wide mail to fit: it has the
                             // full screen to scale into, where a bubble would render the
                             // same mail as an unreadable thumbnail.

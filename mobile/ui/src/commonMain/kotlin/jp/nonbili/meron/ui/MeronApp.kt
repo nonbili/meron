@@ -134,7 +134,7 @@ fun MeronApp(
             saveAppLanguageTag(backedPrefs, systemLanguageTag.orEmpty())
         }
     }
-    val deviceLanguageTag = remember(locale) { resolveDeviceLanguageTag(locale.deviceLanguageTag()) }
+    val deviceLanguageTag = remember(locale) { locale.deviceLanguageTag() }
     val onThemeChoiceChange: (ThemeChoice) -> Unit = { choice ->
         themeChoice = choice
         saveThemeChoice(backedPrefs, choice)
@@ -184,7 +184,8 @@ fun MeronApp(
     androidx.compose.runtime.CompositionLocalProvider(
         // Blank means "follow the system", so fall back to the device's language
         // rather than to English.
-        LocalAppLocale provides appLanguageTag.ifBlank { deviceLanguageTag },
+        LocalAppLocale provides appLanguageTag.ifBlank { resolveDeviceLanguageTag(deviceLanguageTag) },
+        LocalMailTranslationLocale provides appLanguageTag.ifBlank { deviceLanguageTag },
         LocalPlatformServices provides services,
         LocalAvatarCore provides core,
         LocalShowThreadAvatars provides state.showThreadAvatars,

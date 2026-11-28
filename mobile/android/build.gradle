@@ -34,6 +34,13 @@ def playBundleRequested = gradle.startParameter.taskNames.any {
     def t = it.toLowerCase()
     t.contains("bundle") && !t.contains("debug")
 }
+// Keep reproducible release APKs compatible with F-Droid. Debug APKs and Play
+// bundles include ML Kit. Override with -PmeronAndroidTranslation=true or false.
+// F-Droid's build recipe must remove mobile/android/mlkit.gradle with scandelete.
+def mlkitGradle = file("mlkit.gradle")
+def androidTranslation = providers.gradleProperty("meronAndroidTranslation").map { it.toBoolean() }.orNull
+def debugTranslation = mlkitGradle.isFile() && (androidTranslation == null ? true : androidTranslation)
+def releaseTranslation = mlkitGradle.isFile() && (androidTranslation == null ? playBundleRequested : androidTranslation)
 def googleClientIdRelease
 if (playBundleRequested) {
     def playClientId = releaseProp("googleClientId", "MERON_GOOGLE_CLIENT_ID", "")
@@ -58,6 +65,14 @@ def releaseKeyAlias = releaseProp("meronReleaseKeyAlias", "MERON_ANDROID_RELEASE
 def releaseKeyPassword = releaseProp("meronReleaseKeyPassword", "MERON_ANDROID_RELEASE_KEY_PASSWORD", releaseProp("NB_UPLOAD_KEY_PASSWORD", "NB_UPLOAD_KEY_PASSWORD", releaseStorePassword))
 def hasReleaseSigning = releaseKeystore && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 def bundleRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains("bundle") }
+def rustTargets = (System.getenv("TARGETS") ?: System.getenv("TARGET") ?: "aarch64-linux-android armv7-linux-androideabi").tokenize()
+def rustTargetAbis = [
+    "aarch64-linux-android": "arm64-v8a",
+    "armv7-linux-androideabi": "armeabi-v7a",
+    "i686-linux-android": "x86",
+    "x86_64-linux-android": "x86_64",
+]
+def rustCoreLibrary = { String abi -> file("src/main/jniLibs/${abi}/libmeron_core.so") }
 def javaString = { String value -> "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"" }
 
 android {
@@ -133,6 +148,12 @@ android {
                 "lib/x86/libandroidx.graphics.path.so",
                 "lib/x86_64/libandroidx.graphics.path.so",
             ]
+            // ML Kit must not make Play or the installer select an ABI without a Meron core.
+            ["x86": "i686-linux-android", "x86_64": "x86_64-linux-android"].each { abi, target ->
+                if (!rustTargets.contains(target) && !rustCoreLibrary(abi).isFile()) {
+                    excludes += ["lib/${abi}/libtranslate_jni.so", "lib/${abi}/liblanguage_id_l2c_jni.so"]
+                }
+            }
         }
     }
 
@@ -157,6 +178,8 @@ android {
             jniLibs.srcDirs = ["src/main/jniLibs"]
             assets.srcDirs += ["${buildDir}/generated/composeResources/assets"]
         }
+        debug.kotlin.srcDir(debugTranslation ? "src/translation/kotlin" : "src/noTranslation/kotlin")
+        release.kotlin.srcDir(releaseTranslation ? "src/translation/kotlin" : "src/noTranslation/kotlin")
     }
 }
 
@@ -188,6 +211,12 @@ dependencies {
     testImplementation "junit:junit:4.13.2"
 }
 
+if (debugTranslation || releaseTranslation) {
+    ext.mlkitDebugEnabled = debugTranslation
+    ext.mlkitReleaseEnabled = releaseTranslation
+    apply from: mlkitGradle
+}
+
 tasks.register("generateI18n", Exec) {
     description = "Regenerates localization catalogs from locales/*.json."
     group = "build"
@@ -203,8 +232,8 @@ tasks.register("packageRustCoreAndroid", Exec) {
     inputs.dir("${rootProject.projectDir}/../meron-core/src")
     inputs.file("${rootProject.projectDir}/../meron-core/Cargo.toml")
     inputs.file("${rootProject.projectDir}/../meron-core/Cargo.lock")
-    outputs.file("${projectDir}/src/main/jniLibs/arm64-v8a/libmeron_core.so")
-    outputs.file("${projectDir}/src/main/jniLibs/armeabi-v7a/libmeron_core.so")
+    inputs.property("targets", rustTargets)
+    outputs.files(rustTargets.collect { rustCoreLibrary(rustTargetAbis[it]) })
 
     def releaseRequested = gradle.startParameter.taskNames.any { name ->
         def t = name.toLowerCase()

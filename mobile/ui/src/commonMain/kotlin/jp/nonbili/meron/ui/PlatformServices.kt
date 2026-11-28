@@ -38,6 +38,8 @@ interface PlatformServices {
 
     fun tryOpenUrl(url: String): Boolean = runCatching { openUrl(url) }.isSuccess
 
+    val mailTranslator: MailTranslator? get() = null
+
     fun openOAuthUrl(
         url: String,
         callbackScheme: String,
