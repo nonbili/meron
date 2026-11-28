@@ -94,16 +94,16 @@ internal fun MessageActionsMenu(
             if (translations != null && !message.bodyMissing && message.translatableText().isNotBlank()) {
                 val label =
                     when {
+                        translation?.failed == true -> "chat.actions.translate"
                         translation?.translatedBody != null -> "chat.actions.showOriginal"
-                        translation?.result != null -> "chat.translation.showTranslation"
-                        translations.attribution != null -> "chat.translation.withGoogle"
+                        translation?.result?.unchanged == false -> "chat.translation.showTranslation"
                         else -> "chat.actions.translate"
                     }
                 Item(
                     tr(label),
                     Icons.Filled.Translate,
-                    enabled = translation?.loading != true,
-                    supportingText = if (label == "chat.translation.withGoogle") tr("chat.translation.onDevicePrivacy") else null,
+                    enabled = translation?.loading != true && (translation?.failed == true || translation?.result?.unchanged != true),
+                    supportingText = if (translation == null) tr("chat.translation.onDevicePrivacy") else null,
                 ) {
                     translations.toggle(message)
                 }

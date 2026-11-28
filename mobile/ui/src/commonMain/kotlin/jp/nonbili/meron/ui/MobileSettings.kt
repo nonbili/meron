@@ -57,6 +57,7 @@ internal val mobileSettings =
         MobileSetting(PrefStore.App, DARK_THEME_PREF, PrefType.Str),
         MobileSetting(PrefStore.App, CUSTOM_THEMES_PREF, PrefType.Str),
         MobileSetting(PrefStore.App, APP_LANGUAGE_PREF, PrefType.Str),
+        MobileSetting(PrefStore.App, MAIL_TRANSLATION_TARGET_PREF, PrefType.Str),
         MobileSetting(PrefStore.App, MESSAGE_FONT_SCALE_PREF, PrefType.Int),
         MobileSetting(PrefStore.App, SHOW_SENDER_IMAGES_PREF, PrefType.Bool),
         MobileSetting(PrefStore.App, SHOW_THREAD_AVATARS_PREF, PrefType.Bool),

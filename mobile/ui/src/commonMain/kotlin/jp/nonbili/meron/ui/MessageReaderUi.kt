@@ -272,7 +272,7 @@ internal fun MessageReaderScreen(
                                 remember(message.body, message.bodyQuoteStart, message.bodyLinks) {
                                     splitQuotedBody(message.body, message.bodyQuoteStart, plainBodyLinks(message.body, message.bodyLinks))
                                 }
-                            SelectableMessageText(text = translatedBody, links = emptyList(), onOpenUrl = onOpenUrl, style = style)
+                            SelectableMessageText(text = translatedBody, links = plainBodyLinks(translatedBody, null), onOpenUrl = onOpenUrl, style = style)
                             if (quoted.quote.isNotEmpty()) {
                                 var quoteOpen by remember(message.id) { mutableStateOf(QuoteFoldMemory.isOpen(message.id)) }
                                 QuoteToggle(

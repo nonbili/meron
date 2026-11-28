@@ -210,6 +210,9 @@ internal const val SEND_SHORTCUT_PREF = "send_shortcut_v1"
 internal const val CONVERSATION_LAYOUT_PREF = "conversation_layout_v1"
 internal const val MESSAGE_FONT_SCALE_PREF = "message_font_scale_v1"
 internal const val APP_LANGUAGE_PREF = "app_language_v1"
+
+// The language mail is translated into, once the reader has picked one.
+internal const val MAIL_TRANSLATION_TARGET_PREF = "mail_translation_target_v1"
 internal const val HIDDEN_NAV_ACCOUNTS_PREF = "hidden_navigation_accounts_v1"
 internal const val KANBAN_COLUMN_WIDTH_PREF = "kanban_column_width_v1"
 internal const val LAST_TOP_SCREEN_PREF = "last_top_screen_v1"

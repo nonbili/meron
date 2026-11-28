@@ -674,7 +674,12 @@ internal fun ColumnScope.MessageBodyContent(
             Column {
                 SelectableMessageText(
                     text = translatedBody ?: quoted.reply.ifBlank { "(no content)" },
-                    links = if (translatedBody != null || quoted.reply.isBlank()) emptyList() else quoted.replyLinks,
+                    links =
+                        when {
+                            translatedBody != null -> plainBodyLinks(translatedBody, null)
+                            quoted.reply.isBlank() -> emptyList()
+                            else -> quoted.replyLinks
+                        },
                     onOpenUrl = onOpenUrl,
                     searchQuery = searchQuery,
                     activeSearchMatch = activeSearchMatch,

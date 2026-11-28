@@ -132,7 +132,7 @@ class AndroidPlatformServices(
             )
         }.isSuccess
 
-    override val mailTranslator = createAndroidMailTranslator()
+    override val mailTranslator = createAndroidMailTranslator(activity)
 
     override fun openOAuthUrl(
         url: String,

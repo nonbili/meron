@@ -186,6 +186,7 @@ fun MeronApp(
         // rather than to English.
         LocalAppLocale provides appLanguageTag.ifBlank { resolveDeviceLanguageTag(deviceLanguageTag) },
         LocalMailTranslationLocale provides appLanguageTag.ifBlank { deviceLanguageTag },
+        LocalMailTranslationPrefs provides backedPrefs,
         LocalPlatformServices provides services,
         LocalAvatarCore provides core,
         LocalShowThreadAvatars provides state.showThreadAvatars,
