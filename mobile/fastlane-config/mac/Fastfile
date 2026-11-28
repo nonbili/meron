@@ -77,6 +77,8 @@ platform :mac do
     build_number = ENV["MAC_BUILD_NUMBER"]
     release_notes_path = ENV["MAC_RELEASE_NOTES_PATH"] || File.expand_path("../../fastlane/metadata/mac/en-US/release_notes.txt", __dir__)
     release_notes = File.exist?(release_notes_path) ? File.read(release_notes_path).strip : nil
+    mac_metadata_path = File.expand_path("../../fastlane/metadata/mac", __dir__)
+    mac_locales = Dir.children(mac_metadata_path).select { |name| File.directory?(File.join(mac_metadata_path, name)) }
 
     UI.user_error!("PKG not found: #{pkg_path}") if !skip_binary_upload && !File.exist?(pkg_path)
 
@@ -90,7 +92,9 @@ platform :mac do
       app_version: app_version,
       metadata_path: File.expand_path("../../fastlane/metadata/mac", __dir__),
       screenshots_path: File.expand_path("../../fastlane/metadata/mac", __dir__),
-      release_notes: release_notes.to_s.empty? ? nil : { "en-US" => release_notes },
+      # Every localization needs What's New to submit; release notes are only
+      # written in English, so the translated listings reuse it.
+      release_notes: release_notes.to_s.empty? ? nil : mac_locales.to_h { |locale| [locale, release_notes] },
       skip_metadata: release_notes.to_s.empty?,
       skip_binary_upload: skip_binary_upload,
       skip_screenshots: true,

@@ -141,13 +141,14 @@ platform :ios do
     # App Store Connect does not accept What's New on the first iOS version.
     first_version = app.get_app_store_versions(filter: { platform: platform }, limit: 2).count == 1
     if !release_notes.to_s.empty? && !first_version
-      localization = version.get_app_store_version_localizations.find { |item| item.locale == "en-US" }
-      if localization
-        localization.update(attributes: { whats_new: release_notes })
-      else
+      # Every localization needs What's New to submit; release notes are only
+      # written in English, so the translated listings reuse it.
+      localizations = version.get_app_store_version_localizations
+      if localizations.none? { |item| item.locale == "en-US" }
         version.create_app_store_version_localization(attributes: { locale: "en-US", whatsNew: release_notes })
       end
-      UI.success("Updated iOS #{version.version_string} release notes (en-US)")
+      localizations.each { |item| item.update(attributes: { whats_new: release_notes }) }
+      UI.success("Updated iOS #{version.version_string} release notes (#{[*localizations.map(&:locale), "en-US"].uniq.join(", ")})")
     end
 
     upload_options = {
