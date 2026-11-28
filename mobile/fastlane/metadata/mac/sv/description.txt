@@ -1,0 +1,24 @@
+En unik e-postklient med öppen källkod för alla plattformar: samlad inkorg, kanban-tavlor och chattvy.
+
+Samla dina e-postkonton i Meron Mail, med inbyggd kalender, uppgifter och kontakter vid sidan av din e-post.
+
+EN INKORG FÖR ALLA DINA KONTON
+Läs e-post från flera konton på ett ställe eller byt till en enskild brevlåda. Anslut IMAP/SMTP-konton med OAuth-inloggning där det stöds eller automatisk konfiguration.
+
+ORGANISERA E-POST PÅ EN KANBAN-TAVLA
+Ordna e-post i kolumner efter mapp, tagg eller sparad sökning. Använd regler för att automatiskt tagga, arkivera, flytta eller vidarebefordra meddelanden.
+
+LÄS OCH SVARA SOM I EN KONVERSATION
+Välj chattvy eller traditionell konversationslayout. Håll svar samlade i trådade konversationer, skriv med formaterad text och bläddra bland bilagor i mediagallerier.
+
+FÖLJ RSS- OCH ATOM-FLÖDEN
+Läs uppdateringar från dina favoritbloggar och publikationer i samma app som din e-post.
+
+KRYPTERAD LAGRING OCH VALFRI OPENPGP
+Din lokala e-postdatabas är krypterad och nyckeln skyddas av Nyckelring. Aktivera OpenPGP per konto för att utbyta krypterad e-post med mottagare som har kompatibla nycklar. Vanlig e-post är inte totalsträckskrypterad som standard.
+
+GÖR DEN TILL DIN EGEN
+Välj ett tema och använd Meron på fler än 20 språk. Meron har öppen källkod och finns för Mac, iPhone och iPad.
+
+OM AVSÄNDARBILDER
+När du aktiverar avsändarbilder skickar Meron en SHA-256-hash av varje avsändares e-postadress till Gravatar och, som reserv, avsändarens domän (och vid behov dess överordnade domän) till DuckDuckGo.

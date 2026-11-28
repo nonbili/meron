@@ -1,0 +1,1 @@
+correio,imap,smtp,chat,leitor,atom,feeds,etiquetas,regras,openpgp,encriptado,kanban,anexos,agenda

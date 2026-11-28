@@ -1,0 +1,24 @@
+Fark yaratan e-posta istemcisi: birleşik gelen kutusu, kanban panoları ve sohbet görünümü, her platformda açık kaynaklı.
+
+Yerleşik takvim, görevler ve kişilerle birlikte tüm e-posta hesaplarınızı Meron Mail'de bir araya getirin.
+
+HESAPLARINIZ İÇİN TEK GELEN KUTUSU
+Birden fazla hesaptaki postaları tek bir yerde okuyun veya tek bir posta kutusuna geçin. Desteklenen yerlerde OAuth ile oturum açarak ya da otomatik posta kutusu keşfiyle IMAP/SMTP hesaplarını bağlayın.
+
+E-POSTALARI KANBAN PANOSUNDA DÜZENLEYİN
+Postaları klasör, etiket veya kayıtlı aramaya göre sütunlar halinde düzenleyin. İletileri otomatik olarak etiketlemek, arşivlemek, taşımak veya iletmek için kuralları kullanın.
+
+SOHBET GİBİ OKUYUN VE YANITLAYIN
+Sohbet veya geleneksel konuşma düzenlerini seçin. Yanıtları zincirleme konuşmalarda bir arada tutun, zengin metin biçimlendirmesiyle yazın ve ekleri medya galerilerinde inceleyin.
+
+RSS VE ATOM BESLEMELERİNİ TAKİP EDİN
+Favori bloglarınızdan ve yayınlarınızdan gelen güncellemeleri e-postalarınızla aynı uygulamada okuyun.
+
+ŞİFRELİ DEPOLAMA VE İSTEĞE BAĞLI OPENPGP
+Yerel posta veritabanınız şifrelenir ve anahtarı Anahtar Zinciri tarafından korunur. Uyumlu anahtarlara sahip alıcılarla şifreli e-posta alışverişi yapmak için hesap bazında OpenPGP'yi etkinleştirin. Sıradan e-postalar varsayılan olarak uçtan uca şifrelenmez.
+
+KENDİNİZE GÖRE ÖZELLEŞTİRİN
+Bir tema seçin ve Meron'u 20'den fazla dilde kullanın. Meron açık kaynaklıdır ve Mac, iPhone ve iPad'de kullanılabilir.
+
+GÖNDEREN RESİMLERİ HAKKINDA
+Gönderen resimlerini etkinleştirdiğinizde Meron, her gönderenin e-posta adresinin SHA-256 karmasını Gravatar'a, yedek olarak da gönderenin alan adını (ve gerekirse üst alan adını) DuckDuckGo'ya gönderir.

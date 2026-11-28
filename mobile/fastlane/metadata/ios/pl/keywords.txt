@@ -1,0 +1,1 @@
+poczta,imap,smtp,czat,czytnik,atom,kanały,tagi,reguły,openpgp,szyfrowanie,kanban,załączniki

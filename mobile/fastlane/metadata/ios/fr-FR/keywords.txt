@@ -1,0 +1,1 @@
+courriel,messagerie,imap,smtp,chat,kanban,flux,atom,etiquettes,regles,openpgp,chiffre,calendrier

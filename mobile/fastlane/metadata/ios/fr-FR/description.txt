@@ -1,0 +1,24 @@
+Un client e-mail unique en son genre : boîte de réception unifiée, tableaux Kanban et vue chat, open source sur toutes les plateformes.
+
+Rassemblez vos comptes e-mail dans Meron Mail, avec calendrier, tâches et contacts intégrés à côté de vos messages.
+
+UNE SEULE BOÎTE POUR VOS COMPTES
+Lisez les messages de plusieurs comptes au même endroit ou passez à une boîte individuelle. Connectez vos comptes IMAP/SMTP via OAuth lorsqu'il est pris en charge ou par détection automatique.
+
+ORGANISEZ VOS E-MAILS SUR UN TABLEAU KANBAN
+Classez vos messages en colonnes par dossier, étiquette ou recherche enregistrée. Utilisez des règles pour étiqueter, archiver, déplacer ou transférer vos e-mails automatiquement.
+
+LISEZ ET RÉPONDEZ COMME DANS UN CHAT
+Choisissez la vue chat ou la disposition traditionnelle. Gardez vos réponses regroupées en fils de discussion, rédigez en texte enrichi et parcourez les pièces jointes dans des galeries médias.
+
+SUIVEZ VOS FLUX RSS ET ATOM
+Lisez les actualités de vos blogs et publications préférés dans la même application que vos e-mails.
+
+STOCKAGE CHIFFRÉ ET OPENPGP EN OPTION
+Votre base de données locale est chiffrée et sa clé est protégée par le Trousseau. Activez OpenPGP par compte pour échanger des e-mails chiffrés avec des destinataires disposant de clés compatibles. Les e-mails ordinaires ne sont pas chiffrés de bout en bout par défaut.
+
+ADAPTEZ-LE À VOS GOÛTS
+Choisissez un thème et utilisez Meron dans plus de 20 langues. Meron est open source et disponible sur iPhone, iPad et Mac.
+
+À PROPOS DES PHOTOS DES EXPÉDITEURS
+Lorsque vous activez les photos des expéditeurs, Meron envoie à Gravatar un hachage SHA-256 de l'adresse e-mail de chaque expéditeur et, à défaut, le domaine de l'expéditeur (et, si nécessaire, son domaine parent) à DuckDuckGo.

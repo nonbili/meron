@@ -1,0 +1,1 @@
+eposta,imap,smtp,sohbet,okuyucu,atom,besleme,etiket,kural,openpgp,şifreli,ekler,takvim,görevler

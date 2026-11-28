@@ -1,0 +1,1 @@
+Poczta ze wspólną skrzynką, tablicami Kanban, widokiem czatu i czytnikiem RSS.

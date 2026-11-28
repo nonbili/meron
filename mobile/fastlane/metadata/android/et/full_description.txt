@@ -1,0 +1,24 @@
+Ainulaadne e-posti klient: ühendatud postkast, kanban-stendid ja vestlusvaade, avatud lähtekoodiga igal platvormil.
+
+Koo oma e-posti kontod Meron Maili kokku koos sisseehitatud kalendri, ülesannete ja kontaktidega.
+
+ÜKS POSTKAST KÕIKIDELE KONTODELE
+Loe mitme konto kirju ühes kohas või lülitu üksikule postkastile. Ühenda IMAP/SMTP kontod OAuth-sisselogimisega (kus toetatud) või automaatse postkasti tuvastamisega.
+
+KORRASTA KIRJAD KANBAN-STENDIL
+Paiguta kirjad veergudesse kausta, sildi või salvestatud otsingu järgi. Kasuta reegleid kirjade automaatseks sildistamiseks, arhiivimiseks, teisaldamiseks või edastamiseks.
+
+LOE JA VASTA NAGU VESTLUSES
+Vali vestlus- või traditsiooniline vaade. Hoia vastused koos lõimitud vestlustes, kirjuta vormindatud tekstiga ja sirvi manuseid meediagaleriides.
+
+JÄLGI RSS- JA ATOM-VOOGUSID
+Loe oma lemmikblogide ja -väljaannete uuendusi samas rakenduses oma e-postiga.
+
+KRÜPTEERITUD SALVESTUSRUUM JA VALIKULINE OPENPGP
+Sinu kohalik meiliandmebaas on krüpteeritud ja selle võtit kaitseb Android Keystore. Luba OpenPGP konto kaupa, et vahetada krüpteeritud e-posti saajatega, kellel on ühilduvad võtmed. Tavaline e-post ei ole vaikimisi otsast lõpuni krüpteeritud.
+
+KOHANDA ENDALE SOBIVAKS
+Vali kujundus ja kasuta Meroni enam kui 20 keeles. Meron on avatud lähtekoodiga ning saadaval ka iPhone'is, iPadis ja arvutis.
+
+SAATJA PILTIDEST
+Kui lubad saatja pildid, saadab Meron iga saatja e-posti aadressi SHA-256 räsi Gravatarile ja varulahendusena saatja domeeni (ning vajaduse korral selle ülemise taseme domeeni) DuckDuckGo'le.

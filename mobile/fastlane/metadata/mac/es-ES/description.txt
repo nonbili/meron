@@ -1,0 +1,24 @@
+Un cliente de correo distinto a todo: bandeja de entrada unificada, tableros Kanban y vista de chat, de código abierto en todas las plataformas.
+
+Reúne tus cuentas de correo en Meron Mail, con calendario, tareas y contactos integrados junto a tus mensajes.
+
+UNA SOLA BANDEJA PARA TUS CUENTAS
+Lee el correo de varias cuentas en un mismo lugar o cambia a un buzón individual. Conecta cuentas IMAP/SMTP con inicio de sesión OAuth cuando esté disponible o mediante detección automática del buzón.
+
+ORGANIZA TU CORREO EN UN TABLERO KANBAN
+Ordena los mensajes en columnas por carpeta, etiqueta o búsqueda guardada. Usa reglas para etiquetar, archivar, mover o reenviar mensajes automáticamente.
+
+LEE Y RESPONDE COMO EN UNA CONVERSACIÓN
+Elige entre el diseño de chat o el tradicional. Mantén las respuestas agrupadas en hilos de conversación, redacta con texto enriquecido y explora los archivos adjuntos en galerías multimedia.
+
+SIGUE FEEDS RSS Y ATOM
+Lee las novedades de tus blogs y publicaciones favoritas en la misma aplicación que tu correo.
+
+ALMACENAMIENTO CIFRADO Y OPENPGP OPCIONAL
+Tu base de datos local de correo está cifrada y su clave queda protegida mediante el Llavero. Activa OpenPGP en cada cuenta para intercambiar correo cifrado con destinatarios que tengan claves compatibles. El correo ordinario no está cifrado de extremo a extremo de forma predeterminada.
+
+HAZLO TUYO
+Elige un tema y usa Meron en más de 20 idiomas. Meron es de código abierto y está disponible en Mac, iPhone y iPad.
+
+ACERCA DE LAS IMÁGENES DEL REMITENTE
+Cuando activas las imágenes del remitente, Meron envía a Gravatar un hash SHA-256 de la dirección de correo de cada remitente y, como alternativa, el dominio del remitente (y, si es necesario, su dominio principal) a DuckDuckGo.

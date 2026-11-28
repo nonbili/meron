@@ -1,0 +1,24 @@
+Klien email istimewa: kotak masuk terpadu, papan kanban, dan tampilan obrolan, open source di semua platform.
+
+Satukan akun email Anda di Meron Mail, lengkap dengan kalender, tugas, dan kontak bawaan di samping email Anda.
+
+SATU KOTAK MASUK UNTUK SEMUA AKUN
+Baca email dari berbagai akun di satu tempat atau beralih ke kotak surat tertentu. Hubungkan akun IMAP/SMTP dengan masuk OAuth jika didukung atau deteksi kotak surat otomatis.
+
+ATUR EMAIL DI PAPAN KANBAN
+Susun email dalam kolom berdasarkan folder, tag, atau pencarian tersimpan. Gunakan aturan untuk menandai, mengarsipkan, memindahkan, atau meneruskan pesan secara otomatis.
+
+BACA DAN BALAS SEPERTI OBROLAN
+Pilih tata letak obrolan atau tradisional. Jaga balasan tetap rapi dalam percakapan berutas, tulis dengan teks kaya, dan jelajahi lampiran di galeri media.
+
+IKUTI FEED RSS DAN ATOM
+Baca pembaruan dari blog dan publikasi favorit Anda di aplikasi yang sama dengan email Anda.
+
+PENYIMPANAN TERENKRIPSI DAN OPENPGP OPSIONAL
+Database email lokal Anda terenkripsi dengan kunci yang dilindungi Android Keystore. Aktifkan OpenPGP per akun untuk bertukar email terenkripsi dengan penerima yang memiliki kunci kompatibel. Email biasa tidak terenkripsi ujung-ke-ujung secara default.
+
+SESUAIKAN DENGAN GAYA ANDA
+Pilih tema dan gunakan Meron dalam lebih dari 20 bahasa. Meron bersifat open source dan juga tersedia di iPhone, iPad, dan desktop.
+
+TENTANG GAMBAR PENGIRIM
+Saat Anda mengaktifkan gambar pengirim, Meron mengirim hash SHA-256 dari setiap alamat email pengirim ke Gravatar dan, sebagai alternatif cadangan, domain pengirim (dan jika diperlukan, domain induknya) ke DuckDuckGo.

@@ -1,0 +1,24 @@
+Der vielseitige E-Mail-Client: gemeinsamer Posteingang, Kanban-Boards und Chat-Ansicht – Open Source auf jeder Plattform.
+
+Bringe deine E-Mail-Konten in Meron Mail zusammen, mit integriertem Kalender, Aufgaben und Kontakten direkt neben deiner Post.
+
+EIN POSTEINGANG FÜR ALLE KONTEN
+Lies E-Mails aus mehreren Konten an einem Ort oder wechsle zu einem einzelnen Postfach. Verbinde IMAP/SMTP-Konten per OAuth-Anmeldung, wo unterstützt, oder über automatische Postfacherkennung.
+
+E-MAILS AUF EINEM KANBAN-BOARD ORGANISIEREN
+Ordne Nachrichten in Spalten nach Ordner, Tag oder gespeicherter Suche. Nutze Regeln, um E-Mails automatisch mit Tags zu versehen, zu archivieren, zu verschieben oder weiterzuleiten.
+
+LESEN UND ANTWORTEN WIE IM CHAT
+Wähle zwischen Chat- und traditionellem Konversationslayout. Halte Antworten in Themensträngen zusammen, schreibe mit Rich-Text-Formatierung und durchstöbere Anhänge in Mediengalerien.
+
+RSS- UND ATOM-FEEDS FOLGEN
+Lies Neuigkeiten deiner Lieblingsblogs und Publikationen in derselben App wie deine E-Mails.
+
+VERSCHLÜSSELTES SPEICHERN UND OPTIONALES OPENPGP
+Deine lokale E-Mail-Datenbank ist verschlüsselt und ihr Schlüssel durch den Schlüsselbund geschützt. Aktiviere OpenPGP pro Konto, um verschlüsselte E-Mails mit Empfängern auszutauschen, die kompatible Schlüssel besitzen. Gewöhnliche E-Mails sind standardmäßig nicht Ende-zu-Ende-verschlüsselt.
+
+GANZ NACH DEINEM GESCHMACK
+Wähle ein Thema und nutze Meron in mehr als 20 Sprachen. Meron ist Open Source und für iPhone, iPad und Mac verfügbar.
+
+ÜBER ABSENDERBILDER
+Wenn du Absenderbilder aktivierst, sendet Meron einen SHA-256-Hash der E-Mail-Adresse jedes Absenders an Gravatar und ersatzweise die Domain des Absenders (und bei Bedarf deren übergeordnete Domain) an DuckDuckGo.

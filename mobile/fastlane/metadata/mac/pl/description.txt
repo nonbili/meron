@@ -1,0 +1,24 @@
+Wyjątkowy klient poczty open source na każdą platformę: wspólna skrzynka odbiorcza, tablice Kanban i widok czatu.
+
+Połącz swoje konta e-mail w Meron Mail — z wbudowanym kalendarzem, zadaniami i kontaktami obok poczty.
+
+JEDNA SKRZYNKA DLA WSZYSTKICH KONT
+Czytaj pocztę z wielu kont w jednym miejscu lub przełączaj się na wybraną skrzynkę. Łącz konta IMAP/SMTP przez logowanie OAuth (tam, gdzie jest obsługiwane) lub automatyczne wykrywanie ustawień skrzynki.
+
+ORGANIZUJ POCZTĘ NA TABLICY KANBAN
+Układaj wiadomości w kolumnach według folderu, tagu lub zapisanego wyszukiwania. Używaj reguł, aby automatycznie dodawać tagi, archiwizować, przenosić lub przekazywać wiadomości dalej.
+
+CZYTAJ I ODPOWIADAJ JAK W ROZMOWIE
+Wybierz widok czatu lub tradycyjny układ konwersacji. Zbieraj odpowiedzi w wątkach, pisz ze sformatowanym tekstem i przeglądaj załączniki w galeriach multimediów.
+
+ŚLEDŹ KANAŁY RSS I ATOM
+Czytaj nowe wpisy z ulubionych blogów i serwisów w tej samej aplikacji co pocztę.
+
+SZYFROWANA PAMIĘĆ I OPCJONALNY OPENPGP
+Lokalna baza poczty jest zaszyfrowana, a jej klucz chroni Pęk kluczy. Włącz OpenPGP dla wybranych kont, aby wymieniać zaszyfrowane e-maile z odbiorcami posiadającymi zgodne klucze. Zwykła poczta nie jest domyślnie szyfrowana end-to-end.
+
+DOPASUJ DO SIEBIE
+Wybierz motyw i korzystaj z Meron w ponad 20 językach. Meron to oprogramowanie open source, dostępne na Mac, iPhone i iPad.
+
+O ZDJĘCIACH NADAWCÓW
+Gdy włączysz zdjęcia nadawców, Meron wysyła skrót SHA-256 adresu e-mail każdego nadawcy do serwisu Gravatar, a w ramach opcji zapasowej domenę nadawcy (i w razie potrzeby jej domenę nadrzędną) do DuckDuckGo.

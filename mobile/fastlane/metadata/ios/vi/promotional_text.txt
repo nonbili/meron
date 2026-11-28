@@ -1,0 +1,1 @@
+Gom các tài khoản email vào một nơi. Sắp xếp thư trên bảng kanban, trả lời ở chế độ trò chuyện và đọc nguồn tin RSS ngay cạnh hộp thư đến.

@@ -1,0 +1,1 @@
+thư,imap,smtp,trò chuyện,đọc tin,atom,thẻ,quy tắc,openpgp,mã hóa,đính kèm,lịch

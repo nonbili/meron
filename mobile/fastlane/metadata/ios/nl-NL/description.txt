@@ -1,0 +1,24 @@
+Een unieke open-source e-mailclient voor elk platform: gezamenlijk Postvak IN, kanban-borden en chatweergave.
+
+Breng je e-mailaccounts samen in Meron Mail, met een ingebouwde agenda, taken en contacten naast je e-mail.
+
+ÉÉN POSTVAK IN VOOR AL JE ACCOUNTS
+Lees e-mail van meerdere accounts op één plek of schakel over naar een afzonderlijk postvak. Koppel IMAP/SMTP-accounts via OAuth-aanmelding (indien ondersteund) of automatische postvakdetectie.
+
+ORGANISEER E-MAIL OP EEN KANBAN-BORD
+Orden e-mail in kolommen op map, label of opgeslagen zoekopdracht. Gebruik regels om berichten automatisch te labelen, archiveren, verplaatsen of door te sturen.
+
+LEES EN REAGEER ALS IN EEN GESPREK
+Kies tussen chatweergave en een traditionele gespreksindeling. Houd antwoorden bij elkaar in gespreksdraden, schrijf met opgemaakte tekst en bekijk bijlagen in mediagalerijen.
+
+VOLG RSS- EN ATOM-FEEDS
+Lees updates van je favoriete blogs en publicaties in dezelfde app als je e-mail.
+
+VERSLEUTELDE OPSLAG EN OPTIONEEL OPENPGP
+Je lokale e-maildatabase is versleuteld en de sleutel wordt beschermd door Sleutelhanger. Schakel OpenPGP per account in om versleutelde e-mail uit te wisselen met ontvangers die compatibele sleutels hebben. Gewone e-mail is standaard niet end-to-end versleuteld.
+
+MAAK HET VAN JOU
+Kies een thema en gebruik Meron in meer dan 20 talen. Meron is open source en beschikbaar op iPhone, iPad en Mac.
+
+OVER AFZENDERAFBEELDINGEN
+Wanneer je afbeeldingen van afzenders inschakelt, verzendt Meron een SHA-256-hash van het e-mailadres van elke afzender naar Gravatar en, als terugvaloptie, het domein van de afzender (en indien nodig het hoofddomein) naar DuckDuckGo.

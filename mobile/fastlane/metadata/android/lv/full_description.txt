@@ -1,0 +1,24 @@
+Īpašs e-pasta klients: apvienotā iesūtne, Kanban tāfeles un tērzēšanas skats, atvērtā pirmkoda risinājums katrā platformā.
+
+Apvienojiet savus e-pasta kontus lietotnē Meron Mail kopā ar iebūvētu kalendāru, uzdevumiem un kontaktiem.
+
+VIENA IESŪTNE VISIEM KONTIEM
+Lasiet vairāku kontu e-pastus vienuviet vai pārslēdzieties uz atsevišķu pastkasti. Pievienojiet IMAP/SMTP kontus ar OAuth pierakstīšanos (kur tā tiek atbalstīta) vai automātisku pastkastes noteikšanu.
+
+KĀRTOJIET E-PASTU KANBAN TĀFELĒ
+Sakārtojiet vēstules kolonnās pēc mapes, birkas vai saglabātās meklēšanas. Izmantojiet pasta kārtulas, lai automātiski pievienotu birkas, arhivētu, pārvietotu vai pārsūtītu ziņojumus.
+
+LASIET UN ATBILDIET KĀ SARUNĀ
+Izvēlieties tērzēšanas vai tradicionālo sarunu izkārtojumu. Saglabājiet atbildes kopā sarakstu pavedienos, rakstiet bagātinātā tekstā un pārlūkojiet pielikumus mediju galerijās.
+
+SEKOJIET RSS UN ATOM PLŪSMĀM
+Lasiet jaunumus no iecienītākajiem emuāriem un izdevumiem tajā pašā lietotnē, kur lasāt e-pastu.
+
+ŠIFRĒTA KRĀTUVE UN IZVĒLES OPENPGP
+Jūsu vietējā pasta datubāze ir šifrēta, un tās atslēgu aizsargā Android Keystore. Ieslēdziet OpenPGP katram kontam atsevišķi, lai apmainītos ar šifrētiem e-pastiem ar adresātiem, kuriem ir saderīgas atslēgas. Parastais e-pasts pēc noklusējuma nav pilnīgi šifrēts.
+
+PIELĀGOJIET SEV
+Izvēlieties motīvu un lietojiet Meron vairāk nekā 20 valodās. Meron ir atvērtā pirmkoda lietotne, kas pieejama arī iPhone, iPad un datoros.
+
+PAR SŪTĪTĀJA ATTĒLIEM
+Kad ieslēdzat sūtītāja attēlus, Meron nosūta katra sūtītāja e-pasta adreses SHA-256 jaucējvērtību pakalpojumam Gravatar un kā rezerves variantu sūtītāja domēnu (un, ja nepieciešams, tā augstāka līmeņa domēnu) pakalpojumam DuckDuckGo.

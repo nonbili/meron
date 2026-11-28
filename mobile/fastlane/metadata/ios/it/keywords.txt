@@ -1,0 +1,1 @@
+posta,imap,smtp,chat,lettore,atom,feed,tag,regole,openpgp,cifrata,kanban,allegati,calendario

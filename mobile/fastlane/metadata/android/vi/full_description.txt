@@ -1,0 +1,24 @@
+Ứng dụng email khác biệt: hộp thư đến chung, bảng kanban và chế độ trò chuyện, mã nguồn mở trên mọi nền tảng.
+
+Gom các tài khoản email của bạn vào Meron Mail, tích hợp sẵn lịch, công việc và danh bạ ngay cạnh hộp thư.
+
+MỘT HỘP THƯ ĐẾN CHO MỌI TÀI KHOẢN
+Đọc thư từ nhiều tài khoản tại một nơi hoặc chuyển sang từng hộp thư riêng lẻ. Kết nối tài khoản IMAP/SMTP bằng đăng nhập OAuth ở nơi hỗ trợ hoặc tự động phát hiện hộp thư.
+
+SẮP XẾP EMAIL TRÊN BẢNG KANBAN
+Sắp xếp thư theo cột dựa trên thư mục, thẻ hoặc tìm kiếm đã lưu. Dùng quy tắc để tự động gắn thẻ, lưu trữ, di chuyển hoặc chuyển tiếp thư.
+
+ĐỌC VÀ TRẢ LỜI NHƯ CUỘC TRÒ CHUYỆN
+Chọn bố cục trò chuyện hoặc truyền thống. Giữ các thư trả lời gọn gàng theo chuỗi hội thoại, soạn thư với văn bản định dạng và duyệt tệp đính kèm trong thư viện phương tiện.
+
+THEO DÕI NGUỒN TIN RSS VÀ ATOM
+Đọc cập nhật từ các blog và ấn phẩm yêu thích ngay trong cùng ứng dụng với email của bạn.
+
+LƯU TRỮ MÃ HÓA VÀ OPENPGP TÙY CHỌN
+Cơ sở dữ liệu thư cục bộ của bạn được mã hóa, với khóa được bảo vệ bởi Android Keystore. Bật OpenPGP cho từng tài khoản để trao đổi email mã hóa với người nhận có khóa tương thích. Email thông thường mặc định không được mã hóa đầu cuối.
+
+TÙY CHỈNH THEO Ý BẠN
+Chọn giao diện và sử dụng Meron với hơn 20 ngôn ngữ. Meron là phần mềm mã nguồn mở và cũng có mặt trên iPhone, iPad và máy tính.
+
+VỀ ẢNH NGƯỜI GỬI
+Khi bạn bật ảnh người gửi, Meron sẽ gửi mã băm SHA-256 của địa chỉ email từng người gửi đến Gravatar và, như phương án dự phòng, gửi tên miền của người gửi (cùng tên miền cha nếu cần) đến DuckDuckGo.

@@ -1,0 +1,24 @@
+Il client email fuori dal comune: posta in arrivo unificata, bacheche kanban e vista chat, open source su ogni piattaforma.
+
+Riunisci i tuoi account email in Meron Mail, con calendario, attività e contatti integrati accanto alla tua posta.
+
+UN'UNICA POSTA IN ARRIVO PER I TUOI ACCOUNT
+Leggi la posta di più account in un unico posto o passa a una singola casella. Collega account IMAP/SMTP con accesso OAuth, dove supportato, o con rilevamento automatico della casella.
+
+ORGANIZZA LE EMAIL SU UNA BACHECA KANBAN
+Disponi i messaggi in colonne per cartella, tag o ricerca salvata. Usa le regole per aggiungere tag, archiviare, spostare o inoltrare i messaggi automaticamente.
+
+LEGGI E RISPONDI COME IN UNA CHAT
+Scegli il layout chat o quello tradizionale. Mantieni le risposte raggruppate in conversazioni per thread, scrivi con testo formattato e sfoglia gli allegati nelle gallerie multimediali.
+
+SEGUI I FEED RSS E ATOM
+Leggi gli aggiornamenti dei tuoi blog e siti preferiti nella stessa app della tua posta.
+
+ARCHIVIAZIONE CIFRATA E OPENPGP OPZIONALE
+Il database locale della posta è cifrato e la sua chiave è protetta dal Portachiavi. Attiva OpenPGP per singolo account per scambiare email cifrate con destinatari dotati di chiavi compatibili. Le email ordinarie non sono cifrate end-to-end per impostazione predefinita.
+
+RENDILO TUO
+Scegli un tema e usa Meron in oltre 20 lingue. Meron è open source ed è disponibile su iPhone, iPad e Mac.
+
+INFORMAZIONI SULLE IMMAGINI DEI MITTENTI
+Quando attivi le immagini dei mittenti, Meron invia a Gravatar un hash SHA-256 dell'indirizzo email di ogni mittente e, come alternativa, il dominio del mittente (e, se necessario, il relativo dominio principale) a DuckDuckGo.

@@ -1,0 +1,24 @@
+Um cliente de e-mail de código aberto único em qualquer plataforma: caixa de entrada unificada, quadros kanban e modo chat.
+
+Reúna suas contas de e-mail no Meron Mail, com calendário, tarefas e contatos integrados ao seu correio.
+
+UMA CAIXA DE ENTRADA PARA SUAS CONTAS
+Leia e-mails de várias contas em um só lugar ou alterne para uma caixa individual. Conecte contas IMAP/SMTP com login OAuth (quando compatível) ou detecção automática da caixa de correio.
+
+ORGANIZE E-MAILS EM UM QUADRO KANBAN
+Organize mensagens em colunas por pasta, tag ou pesquisa salva. Use regras para aplicar tags, arquivar, mover ou encaminhar mensagens automaticamente.
+
+LEIA E RESPONDA COMO EM UMA CONVERSA
+Escolha o modo chat ou o layout tradicional de conversas. Mantenha respostas reunidas em conversas encadeadas, escreva com texto formatado e veja anexos em galerias de mídia.
+
+ACOMPANHE FEEDS RSS E ATOM
+Leia atualizações dos seus blogs e publicações favoritos no mesmo aplicativo do seu e-mail.
+
+ARMAZENAMENTO CRIPTOGRAFADO E OPENPGP OPCIONAL
+Seu banco de dados local de e-mail é criptografado, com a chave protegida pelo Android Keystore. Ative o OpenPGP por conta para trocar e-mails criptografados com destinatários que tenham chaves compatíveis. E-mails comuns não são criptografados de ponta a ponta por padrão.
+
+DEIXE COM A SUA CARA
+Escolha um tema e use o Meron em mais de 20 idiomas. O Meron é de código aberto e também está disponível para iPhone, iPad e desktop.
+
+SOBRE IMAGENS DOS REMETENTES
+Quando você ativa a exibição de imagens dos remetentes, o Meron envia ao Gravatar um hash SHA-256 do endereço de e-mail de cada remetente e, como alternativa, o domínio do remetente (e, se necessário, seu domínio principal) ao DuckDuckGo.
