@@ -94,20 +94,26 @@ jobs:
           cargo clean --manifest-path meron-core/Cargo.toml --target armv7-linux-androideabi --release
           mobile/scripts/package-rust-core-android.sh
 
-      - name: build release apk
+      - name: build signed release APKs
         env:
           MERON_ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.APK_KEY_STORE_PASSWORD }}
           MERON_ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
           MERON_ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
-        run: ./mobile/gradlew -p mobile :android:assembleRelease
-
-      - name: rename apks
         run: |
           set -euo pipefail
-          cd mobile/android/build/outputs/apk/release
-          mv android-universal-release.apk "meron-${MERON_VERSION_NAME}.apk"
-          mv android-arm64-v8a-release.apk "meron-${MERON_VERSION_NAME}-arm64-v8a.apk"
-          mv android-armeabi-v7a-release.apk "meron-${MERON_VERSION_NAME}-armeabi-v7a.apk"
+          apk_dir=mobile/android/build/outputs/apk/release
+          release_dir="$RUNNER_TEMP/meron-apks"
+          mkdir -p "$release_dir"
+
+          # Reuse the stripped Rust core from the previous step for both builds.
+          ./mobile/gradlew -p mobile :android:assembleRelease -x :android:packageRustCoreAndroid -PmeronAndroidTranslation=true
+          mv "$apk_dir/android-universal-release.apk" "$release_dir/meron-${MERON_VERSION_NAME}.apk"
+          mv "$apk_dir/android-arm64-v8a-release.apk" "$release_dir/meron-${MERON_VERSION_NAME}-arm64-v8a.apk"
+          mv "$apk_dir/android-armeabi-v7a-release.apk" "$release_dir/meron-${MERON_VERSION_NAME}-armeabi-v7a.apk"
+
+          # F-Droid verifies its rebuild against this separate universal APK.
+          ./mobile/gradlew -p mobile :android:assembleRelease -x :android:packageRustCoreAndroid -PmeronAndroidTranslation=false
+          mv "$apk_dir/android-universal-release.apk" "$release_dir/meron-${MERON_VERSION_NAME}-fdroid.apk"
 
       # Never claim the repo-wide "latest release" pointer: the desktop updater
       # reads its manifest from releases/latest/download/latest.json, which an
@@ -119,4 +125,5 @@ jobs:
           make_latest: false
           body_path: mobile/fastlane/metadata/android/en-US/changelogs/${{ env.MERON_VERSION_CODE }}.txt
           generate_release_notes: true
-          files: mobile/android/build/outputs/apk/release/meron-*.apk
+          files: ${{ runner.temp }}/meron-apks/meron-*.apk
+          fail_on_unmatched_files: true
