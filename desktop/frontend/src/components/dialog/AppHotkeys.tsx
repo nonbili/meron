@@ -177,8 +177,11 @@ function bodyFocused(): boolean {
   return !el || el === document.body || el === document.documentElement
 }
 
-function clearThreadListDeleteScope(event: Event) {
-  if (!inThreadList(event.target as Element | null)) threadListDeleteScope = false
+// A click into the list opens the scope as well as focus does: WebKit (the
+// macOS webview) doesn't focus a <button> when it's clicked, so after clicking
+// a thread row focus stays on <body> and the row itself never gets it.
+function trackThreadListDeleteScope(event: Event) {
+  threadListDeleteScope = inThreadList(event.target as Element | null)
 }
 
 // Whether the reader last clicked or focused into the message, where the plain
@@ -208,9 +211,9 @@ function handleMessageArrowStep(key: string): boolean {
 }
 
 // Delete is destructive, so unlike the other bare shortcuts it requires focus
-// to be inside the thread list. After deleting the focused row, browsers can
-// drop focus to body; keep allowing repeated Delete only until the user focuses
-// or clicks outside the thread list.
+// to be inside the thread list, or the last click to have landed there. After
+// deleting the focused row, browsers can drop focus to body; keep allowing
+// repeated Delete only until the user focuses or clicks outside the thread list.
 function deleteKeyFocusAllowed(): boolean {
   const el = document.activeElement
   if (inThreadList(el)) {
@@ -610,15 +613,15 @@ export function AppHotkeys() {
     }
 
     window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('focusin', clearThreadListDeleteScope)
-    window.addEventListener('pointerdown', clearThreadListDeleteScope)
+    window.addEventListener('focusin', trackThreadListDeleteScope)
+    window.addEventListener('pointerdown', trackThreadListDeleteScope)
     window.addEventListener('focusin', trackKeyboardRegion)
     window.addEventListener('pointerdown', trackKeyboardRegion)
     window.addEventListener('meron.frameKeyDown', onFrameKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('focusin', clearThreadListDeleteScope)
-      window.removeEventListener('pointerdown', clearThreadListDeleteScope)
+      window.removeEventListener('focusin', trackThreadListDeleteScope)
+      window.removeEventListener('pointerdown', trackThreadListDeleteScope)
       window.removeEventListener('focusin', trackKeyboardRegion)
       window.removeEventListener('pointerdown', trackKeyboardRegion)
       window.removeEventListener('meron.frameKeyDown', onFrameKeyDown)

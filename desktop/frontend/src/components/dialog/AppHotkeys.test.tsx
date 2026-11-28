@@ -266,6 +266,38 @@ describe('AppHotkeys', () => {
     expect(deletes()).toBe(2)
   })
 
+  // WebKit (the macOS webview) doesn't focus a <button> on click, so a clicked
+  // row leaves focus on <body>; the click alone must open the delete scope.
+  it('deletes with Backspace after clicking a row that WebKit left unfocused', async () => {
+    ;(window as any).go.main.App.Invoke = async (command: string) => {
+      calls.push(command)
+      return {}
+    }
+    const view = render(
+      <>
+        <AppHotkeys />
+        <div data-thread-list>
+          <button>row</button>
+        </div>
+        <div aria-label="message">message</div>
+      </>,
+    )
+    const deletes = () => calls.filter((command) => command === 'mail.delete').length
+
+    // A click outside the list closes the scope again.
+    fireEvent.pointerDown(view.getByText('row'))
+    fireEvent.pointerDown(view.getByLabelText('message'))
+    fireEvent.keyDown(document.body, { key: 'Backspace' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(deletes()).toBe(0)
+
+    fireEvent.pointerDown(view.getByText('row'))
+    expect(document.activeElement).toBe(document.body)
+    fireEvent.keyDown(document.body, { key: 'Backspace' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(deletes()).toBe(1)
+  })
+
   it('leaves Backspace in the thread list alone while a modal is open', async () => {
     ui$.settingsOpen.set(true)
     try {
