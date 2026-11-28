@@ -6,6 +6,7 @@ use std::sync::Arc;
 use super::*;
 use crate::smtp;
 use crate::store::{RuleAction, RuleCopy};
+use anyhow::Context as _;
 
 /// Small enough to finish well inside a sync's budget even on a server without
 /// MOVE, which needs a few round trips per message.
@@ -703,8 +704,11 @@ async fn forward_rule_mail(
     action: &RuleAction,
     run: i64,
 ) -> anyhow::Result<bool> {
-    let done =
-        || store::finish_rule_forward(&engine.db.lock().unwrap(), account, folder, action.uid, run);
+    let slot = RuleForwardSlot::acquire(engine, account, folder, action.uid, run).await;
+    // A send that was in flight when the slot was taken may have finished it.
+    if !store::rule_forward_pending(&engine.db.lock().unwrap(), account, folder, action.uid, run)? {
+        return Ok(true);
+    }
     let mut messages = engine
         .with_transfer_session(account, RULE_COPY_BUDGET, |session| {
             let folder = folder.to_string();
@@ -724,27 +728,87 @@ async fn forward_rule_mail(
             "account={account}: not forwarding uid {}, a rule's forward itself",
             action.uid
         );
-        done()?;
+        store::finish_rule_forward(&engine.db.lock().unwrap(), account, folder, action.uid, run)?;
         return Ok(true);
     }
     let creds = engine.ensure_valid_creds(account).await?;
     let (from, sender_name) =
         store::resolve_send_from(&engine.db.lock().unwrap(), account, &creds.user, "")?;
     let to = action.forwards.join(", ");
-    let raw = smtp::send_rule_forward(&creds, &from, &sender_name, &to, &message.raw).await?;
-    // Before anything else is awaited: a sync that runs out of time drops this
-    // mid-way, and a forward still queued would go out again.
-    done()?;
-    // Out already: filing it can't be what fails the forward, or a retry would
-    // send it again.
-    if let Err(err) = append_to_sent(engine, account, &raw).await {
-        crate::mlog!(
-            crate::log::Level::Warn,
-            "mail.rules",
-            "account={account}: couldn't file a rule's forward in Sent: {err:#}"
-        );
-    }
+    // Detached, so the send and striking it off the queue can't come apart: a
+    // sync that runs out of time drops this future, and a slow server (GMX
+    // takes its time over the end of DATA) may have the message by then. A
+    // forward still queued would go out again. The slot goes with the send,
+    // so a retry meanwhile waits for it and then finds the forward done.
+    let engine = engine.clone();
+    let (account, folder, uid) = (account.to_string(), folder.to_string(), action.uid);
+    tokio::spawn(async move {
+        let _slot = slot;
+        let raw = smtp::send_rule_forward(&creds, &from, &sender_name, &to, &message.raw).await?;
+        store::finish_rule_forward(&engine.db.lock().unwrap(), &account, &folder, uid, run)?;
+        // Out already: filing it can't be what fails the forward, or a retry
+        // would send it again.
+        if let Err(err) = append_to_sent(&engine, &account, &raw).await {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.rules",
+                "account={account}: couldn't file a rule's forward in Sent: {err:#}"
+            );
+        }
+        anyhow::Ok(())
+    })
+    .await
+    .context("rule forward")??;
     Ok(true)
+}
+
+/// Holds [`Engine::rule_forwards`]' lock for one forward, and forgets the
+/// entry once nobody holds or waits on it.
+struct RuleForwardSlot {
+    engine: Arc<Engine>,
+    key: String,
+    guard: Option<tokio::sync::OwnedMutexGuard<()>>,
+}
+
+impl RuleForwardSlot {
+    async fn acquire(
+        engine: &Arc<Engine>,
+        account: &str,
+        folder: &str,
+        uid: u32,
+        run: i64,
+    ) -> Self {
+        let key = format!("{account}\n{folder}\n{uid}\n{run}");
+        let lock = {
+            let mut slots = engine.rule_forwards.lock().unwrap();
+            let (lock, users) = slots.entry(key.clone()).or_default();
+            *users += 1;
+            lock.clone()
+        };
+        // Counted from here, so a wait cut short still gives up its place.
+        let mut slot = RuleForwardSlot {
+            engine: engine.clone(),
+            key,
+            guard: None,
+        };
+        slot.guard = Some(lock.lock_owned().await);
+        slot
+    }
+}
+
+impl Drop for RuleForwardSlot {
+    fn drop(&mut self) {
+        let mut slots = self.engine.rule_forwards.lock().unwrap();
+        drop(self.guard.take());
+        // Anyone else still counted needs the entry, or a newcomer would get a
+        // lock of its own and send alongside them.
+        if let Some((_, users)) = slots.get_mut(&self.key) {
+            *users -= 1;
+            if *users == 0 {
+                slots.remove(&self.key);
+            }
+        }
+    }
 }
 
 /// The moves of `actions`, all of `run`.
@@ -927,6 +991,94 @@ async fn move_rule_chunk(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn memory_engine() -> Arc<Engine> {
+        struct Host;
+        impl EngineHost for Host {
+            fn open_db(&self) -> anyhow::Result<rusqlite::Connection> {
+                crate::store::open_at(":memory:")
+            }
+            fn apply_secret(&self, _: &rusqlite::Connection, _: &str, _: &mut imap::Creds) {}
+            fn store_secret(
+                &self,
+                _: &rusqlite::Connection,
+                _: &str,
+                _: &crate::secrets::Secrets,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+        }
+        Arc::new(Engine::new(Box::new(Host)).unwrap())
+    }
+
+    #[tokio::test]
+    async fn a_forward_is_pending_until_struck_off() {
+        let engine = memory_engine();
+        let db = engine.db.lock().unwrap();
+        db.execute(
+            "INSERT INTO rule_actions
+               (account, folder, uid, uidvalidity, mark_read, star, trash, target, copies,
+                rule_ids, run, attempts, forwards)
+             VALUES ('acc', 'INBOX', 7, 1, 0, 0, 0, '', '[]', '[]', 3, 0, '[\"to@example.com\"]')",
+            [],
+        )
+        .unwrap();
+        assert!(store::rule_forward_pending(&db, "acc", "INBOX", 7, 3).unwrap());
+        assert!(!store::rule_forward_pending(&db, "acc", "INBOX", 7, 4).unwrap());
+        assert!(!store::rule_forward_pending(&db, "acc", "INBOX", 8, 3).unwrap());
+        store::finish_rule_forward(&db, "acc", "INBOX", 7, 3).unwrap();
+        assert!(!store::rule_forward_pending(&db, "acc", "INBOX", 7, 3).unwrap());
+    }
+
+    // A forward's send outlives the sync that started it; a retry meanwhile
+    // must wait for it, not send alongside.
+    #[tokio::test]
+    async fn a_forward_sends_one_at_a_time_and_its_slot_is_forgotten() {
+        let engine = memory_engine();
+        let first = RuleForwardSlot::acquire(&engine, "acc", "INBOX", 7, 3).await;
+        let other = RuleForwardSlot::acquire(&engine, "acc", "INBOX", 8, 3).await;
+        let waiting = tokio::spawn({
+            let engine = engine.clone();
+            async move { RuleForwardSlot::acquire(&engine, "acc", "INBOX", 7, 3).await }
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !waiting.is_finished(),
+            "a second send of the forward went ahead"
+        );
+        drop(first);
+        // Still wanted by the waiter, so a newcomer would queue behind it.
+        let second = tokio::time::timeout(Duration::from_secs(5), waiting)
+            .await
+            .expect("the waiting send never got its turn")
+            .unwrap();
+        assert!(
+            engine
+                .rule_forwards
+                .lock()
+                .unwrap()
+                .contains_key("acc\nINBOX\n7\n3")
+        );
+        drop(second);
+        drop(other);
+        assert!(engine.rule_forwards.lock().unwrap().is_empty());
+    }
+
+    // A retry whose sync runs out while it waits for the slot leaves nothing
+    // behind.
+    #[tokio::test]
+    async fn a_wait_for_a_forward_cut_short_forgets_its_slot() {
+        let engine = memory_engine();
+        let held = RuleForwardSlot::acquire(&engine, "acc", "INBOX", 7, 3).await;
+        let cut = tokio::time::timeout(
+            Duration::from_millis(20),
+            RuleForwardSlot::acquire(&engine, "acc", "INBOX", 7, 3),
+        )
+        .await;
+        assert!(cut.is_err(), "the slot was taken twice");
+        drop(held);
+        assert!(engine.rule_forwards.lock().unwrap().is_empty());
+    }
 
     #[test]
     fn mail_bound_for_different_places_fails_separately() {

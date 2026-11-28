@@ -203,22 +203,45 @@ func (s *mcpService) resolveOperation(id string, approve bool) (any, error) {
 	s.executeOperation(op)
 	return op.response(), nil
 }
+
+// mcpOperationWait is how long a call waits for its operation before
+// answering "running" and leaving the client to poll operation_status: well
+// inside the HTTP server's WriteTimeout, which a slow SMTP send can outlast.
+var mcpOperationWait = 20 * time.Second
+
+// Caller holds s.mu. It is released while the operation runs, so a send that
+// takes minutes doesn't hold up every other MCP request and the settings
+// panel. The operation stays in s.operations as "running" meanwhile, so a
+// retry with the same request_id finds it instead of running it again.
 func (s *mcpService) executeOperation(op *mcpOperation) {
 	op.Status = "running"
-	result, err := op.execute()
-	op.result = result
+	execute := op.execute
 	op.execute = nil
-	op.Preview = nil
-	if err != nil {
-		op.Status = "failed"
-		op.failure = err.Error()
-	} else {
-		op.Status = "completed"
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		result, err := execute()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		op.result = result
+		op.Preview = nil
+		if err != nil {
+			op.Status = "failed"
+			op.failure = err.Error()
+		} else {
+			op.Status = "completed"
+		}
+		s.record(op.client, op.Tool, op.Account, err)
+		s.notifyApprovals()
+		// A failed transport can still mean the mutation landed; refresh either way.
+		s.notifyMailChanged(op.Account)
+	}()
+	s.mu.Unlock()
+	defer s.mu.Lock()
+	select {
+	case <-done:
+	case <-time.After(mcpOperationWait):
 	}
-	s.record(op.client, op.Tool, op.Account, err)
-	s.notifyApprovals()
-	// A failed transport can still mean the mutation landed; refresh either way.
-	s.notifyMailChanged(op.Account)
 }
 
 // The approval prompt and the settings panel listen for these instead of

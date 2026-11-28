@@ -147,6 +147,12 @@ pub struct Engine {
     pub tag_pushes: std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     /// Accounts with a worker going through queued rule actions.
     pub rule_workers: std::sync::Mutex<std::collections::HashSet<String>>,
+    /// One send at a time of each queued rule forward, keyed by account,
+    /// folder, UID and run. The send itself runs detached (see
+    /// `forward_rule_mail`), so a retry waits here for one still in flight
+    /// instead of sending the message a second time.
+    /// Each entry counts the slots holding or waiting on its lock.
+    pub rule_forwards: std::sync::Mutex<HashMap<String, (Arc<Mutex<()>>, usize)>>,
     /// Hears the account and folder when rules changed mail with no sync around
     /// to say so. Set once by the host, which knows how to tell its clients.
     pub rule_progress: std::sync::OnceLock<Arc<dyn Fn(&str, &str) + Send + Sync>>,
@@ -480,6 +486,7 @@ impl Engine {
             refused_tags: std::sync::Mutex::new(HashSet::new()),
             tag_pushes: std::sync::Mutex::new(HashMap::new()),
             rule_workers: std::sync::Mutex::new(Default::default()),
+            rule_forwards: std::sync::Mutex::new(HashMap::new()),
             rule_progress: std::sync::OnceLock::new(),
             archive_transfers: ArchiveTransfers::default(),
             pause_signal: Notify::new(),

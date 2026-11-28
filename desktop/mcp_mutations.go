@@ -91,7 +91,7 @@ func (s *mcpService) coreCall(method string, args any) (any, error) {
 func (s *mcpService) registerMutationTools(server *mcp.Server, c mcpClient) {
 	// Kept available after a permission is removed so the client can learn the
 	// outcome of its own earlier request without reissuing the mutation.
-	mcpRegister(s, server, c, "operation_status", "Check an operation returned by send_message, delete_permanently or empty_trash. pending_approval is not success. Approval can only happen inside Meron. Do not retry a failed send with a new request_id without checking Sent: a network failure can leave its outcome uncertain.", mcpRead, func(mcpOperationArgs) string { return "" }, func(a mcpOperationArgs, grant mcpClient) (any, error) {
+	mcpRegister(s, server, c, "operation_status", "Check an operation returned by send_message, delete_permanently or empty_trash. pending_approval and running are not success; poll again. Approval can only happen inside Meron. Do not retry a failed send with a new request_id without checking Sent: a network failure can leave its outcome uncertain.", mcpRead, func(mcpOperationArgs) string { return "" }, func(a mcpOperationArgs, grant mcpClient) (any, error) {
 		s.expireOperations()
 		op := s.operations[a.OperationID]
 		if op == nil || op.client.ID != grant.ID || op.client.TokenHash != grant.TokenHash || !mcpAllows(grant, op.Account) {

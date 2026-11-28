@@ -260,13 +260,17 @@ func (s *Sidecar) Call(method string, params any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	var expired <-chan time.Time
+	if !sidecarAwaitsAnswer(method) {
+		expired = time.After(timeout)
+	}
 	select {
 	case res := <-ch:
 		if res.Error != nil {
 			return nil, fmt.Errorf("sidecar %s error: %s", method, sidecarErrorMessage(res.Error))
 		}
 		return res.Result, nil
-	case <-time.After(timeout):
+	case <-expired:
 		s.mu.Lock()
 		delete(s.pending, id)
 		s.mu.Unlock()
@@ -528,4 +532,22 @@ func sidecarCallTimeout(method string) time.Duration {
 	default:
 		return 30 * time.Second
 	}
+}
+
+// sidecarAwaitsAnswer reports whether the bridge waits for the core's answer
+// however long it takes, rather than giving up after sidecarCallTimeout (which
+// then only bounds the wait for the core to come up). That is for sending:
+// SMTP can't take a message back, so a timeout would only mean "unknown", and
+// the composer would keep a message the core goes on to deliver (and file in
+// Sent) as an unsent draft, inviting a duplicate resend. Some providers (GMX,
+// Web.de) take tens of seconds to answer the end of DATA while they scan the
+// message, and an encrypted send makes one delivery per Bcc. The core bounds
+// each SMTP step itself (60s per command, 300s for DATA), and a core that
+// exits fails the call, so the wait still ends.
+func sidecarAwaitsAnswer(method string) bool {
+	switch method {
+	case "send", "invite.respond":
+		return true
+	}
+	return false
 }

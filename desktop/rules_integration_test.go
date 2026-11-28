@@ -440,3 +440,65 @@ func TestIntegrationRuleForward(t *testing.T) {
 		}
 	}
 }
+
+// A forward to a server slow to accept it (GMX takes its time over the end of
+// DATA) outlasts the sync that ran the rule, which then gives up on it. The
+// server already has the message, so it must still be struck off the queue
+// and filed in Sent once the send finishes, not sent again by the worker
+// that picks up what the sync left. The move waits for the forward.
+func TestIntegrationSlowRuleForwardGoesOutOnce(t *testing.T) {
+	server := startMailServer(t)
+	// The sync's rule budget, cut from a minute so the test doesn't wait one,
+	// and a send that outlasts it (well inside the core's 300s DATA timeout).
+	t.Setenv("MERON_RULE_ACTIONS_BUDGET", "3")
+	proxy := startSlowSMTPProxy(t, server.smtpPort, 6*time.Second)
+	sidecar, _ := startSidecar(t)
+	const alice, bob = "alice@mail.test", "bob@mail.test"
+	slow := *server
+	slow.smtpPort = proxy.port
+	connectAccount(t, sidecar, &slow, "alice", alice)
+	deliver := func(subject string) {
+		t.Helper()
+		imapAppend(t, server.imapPort, alice, testPassword, "INBOX", rawMessage([]string{
+			"From: Carol <carol@mail.test>", "To: " + alice, "Subject: " + subject,
+			fmt.Sprintf("Message-ID: <%s@mail.test>", strings.ReplaceAll(subject, " ", "-")),
+			"Date: " + time.Now().Format(time.RFC1123Z),
+		}, "Please pay by Friday.\r\n"))
+	}
+	deliver("forward seed")
+	pollInbox(t, sidecar, "alice", func(message map[string]any) bool { return str(message, "subject") == "forward seed" })
+	callMap(t, sidecar, "rules.set", map[string]any{"rules": []map[string]any{
+		{"query": "subject:invoice", "accounts": []string{"alice"}, "forward_to": bob, "move_to": "trash"},
+	}})
+
+	const subject = "invoice 43"
+	deliver(subject)
+	// Errors don't matter here, only what lands on the server.
+	sync := func() {
+		_, _ = sidecar.Call("messages.recent", map[string]any{"account": "alice", "folder": "INBOX", "refresh": true})
+	}
+	deadline := time.Now().Add(time.Minute)
+	for len(imapSearchSubject(t, server.imapPort, alice, testPassword, "Trash", subject)) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("rule never forwarded and binned: submitted %d, bob inbox %v, alice inbox %v",
+				proxy.submitted.Load(),
+				imapSearchSubject(t, server.imapPort, bob, testPassword, "INBOX", subject),
+				imapSearchSubject(t, server.imapPort, alice, testPassword, "INBOX", subject))
+		}
+		sync()
+		time.Sleep(time.Second)
+	}
+	// A second send would be on its way by now; give it every chance.
+	until := time.Now().Add(8 * time.Second)
+	for time.Now().Before(until) {
+		sync()
+		time.Sleep(time.Second)
+	}
+	if got := proxy.submitted.Load(); got != 1 {
+		t.Fatalf("forward submitted %d times, want 1", got)
+	}
+	mcpAssertServerCopies(t, server, bob, "INBOX", "Fwd: "+subject, 1)
+	mcpAssertServerCopies(t, server, alice, "Sent", "Fwd: "+subject, 1)
+	mcpAssertServerCopies(t, server, alice, "INBOX", subject, 0)
+	mcpAssertServerCopies(t, server, alice, "Trash", subject, 1)
+}

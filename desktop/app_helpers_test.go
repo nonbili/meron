@@ -100,10 +100,25 @@ func TestSidecarCallTimeouts(t *testing.T) {
 		"messages.emptyFolder": time.Minute,
 		"messages.move":        2 * time.Minute,
 		"eml.read":             2 * time.Minute,
+		"send":                 30 * time.Second,
 	}
 	for method, want := range tests {
 		if got := sidecarCallTimeout(method); got != want {
 			t.Fatalf("sidecarCallTimeout(%q) = %s, want %s", method, got, want)
+		}
+	}
+}
+
+func TestSidecarAwaitsAnswerOnlyForSends(t *testing.T) {
+	for method, want := range map[string]bool{
+		"send":           true,
+		"invite.respond": true,
+		"save_draft":     false,
+		"messages.move":  false,
+		"account.list":   false,
+	} {
+		if got := sidecarAwaitsAnswer(method); got != want {
+			t.Fatalf("sidecarAwaitsAnswer(%q) = %v, want %v", method, got, want)
 		}
 	}
 }

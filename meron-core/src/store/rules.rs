@@ -1782,6 +1782,25 @@ pub fn finish_rule_forward(
     Ok(())
 }
 
+/// Whether `run` still has a forward queued for `uid`.
+pub fn rule_forward_pending(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uid: u32,
+    run: i64,
+) -> Result<bool> {
+    let pending: Option<bool> = conn
+        .query_row(
+            "SELECT forwards <> '[]' FROM rule_actions
+             WHERE account = ?1 AND folder = ?2 AND uid = ?3 AND run = ?4",
+            params![account, folder, uid, run],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(pending.unwrap_or(false))
+}
+
 /// Clear what `run` queued for `uids`.
 pub fn finish_rule_actions(
     conn: &Connection,

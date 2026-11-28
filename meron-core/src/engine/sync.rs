@@ -1108,7 +1108,7 @@ async fn sync_messages_with_policy(
     // to still does. Whatever doesn't finish stays queued for the next sync.
     let mut silenced = std::collections::BTreeSet::new();
     let rules_ran = tokio::time::timeout(
-        RULE_ACTIONS_BUDGET,
+        rule_actions_budget(),
         run_rule_actions(&tag_engine, &tag_account, &rule_folder, &mut silenced),
     )
     .await;
@@ -1131,8 +1131,22 @@ async fn sync_messages_with_policy(
     Ok(result)
 }
 
-/// How long a sync waits on the server work its rules queued.
-const RULE_ACTIONS_BUDGET: Duration = Duration::from_secs(60);
+/// How long a sync waits on the server work its rules queued: 60s, or
+/// `MERON_RULE_ACTIONS_BUDGET` seconds, which lets the integration tests run
+/// out of it without a minute's wait.
+fn rule_actions_budget() -> Duration {
+    static BUDGET: std::sync::OnceLock<Duration> = std::sync::OnceLock::new();
+    *BUDGET.get_or_init(|| {
+        parse_rule_actions_budget(std::env::var("MERON_RULE_ACTIONS_BUDGET").ok().as_deref())
+    })
+}
+
+pub(super) fn parse_rule_actions_budget(value: Option<&str>) -> Duration {
+    value
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|&secs| secs > 0)
+        .map_or(Duration::from_secs(60), Duration::from_secs)
+}
 
 pub(super) const DEFAULT_BACKGROUND_SYNC_TIMEOUT_SECS: u64 = 30;
 pub(super) const MAX_BACKGROUND_SYNC_TIMEOUT_SECS: u64 = 24 * 60 * 60;

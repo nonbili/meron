@@ -229,3 +229,74 @@ func TestMCPOperationStatusIsClientScoped(t *testing.T) {
 		t.Fatal("other client's operation disclosed")
 	}
 }
+
+// heldSidecarWriter takes each request and leaves it unanswered until the test
+// answers it, like a core waiting on a slow SMTP server.
+type heldSidecarWriter struct{ ids chan uint64 }
+
+func (w heldSidecarWriter) Write(data []byte) (int, error) {
+	var req struct {
+		ID uint64 `json:"id"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return 0, err
+	}
+	w.ids <- req.ID
+	return len(data), nil
+}
+
+func (heldSidecarWriter) Close() error { return nil }
+
+func TestMCPSlowSendAnswersRunningWithoutHoldingTheService(t *testing.T) {
+	sidecar := &Sidecar{started: true, pending: map[uint64]chan sidecarResponse{}}
+	ids := make(chan uint64, 1)
+	sidecar.stdin = heldSidecarWriter{ids}
+	app := &App{sidecar: sidecar}
+	s := testMCPService(t, app, false)
+	s.config.Clients[0].Send = true
+	s.config.Clients[0].SendWithoutConfirmation = true
+	previousWait := mcpOperationWait
+	mcpOperationWait = 50 * time.Millisecond
+	t.Cleanup(func() { mcpOperationWait = previousWait })
+	session := connectTestMCP(t, s)
+
+	queued := operationResult(t, callMCP(t, session, "send_message", sendArgs()))
+	id := queued["operation_id"].(string)
+	if queued["status"] != "running" {
+		t.Fatalf("slow send answered %v, want running", queued)
+	}
+	// The service stays usable while the send is out: status, settings, and a
+	// retry, which finds the running send rather than sending again.
+	if status := operationResult(t, callMCP(t, session, "operation_status", map[string]any{"operation_id": id})); status["status"] != "running" {
+		t.Fatal(status)
+	}
+	if _, err := app.mcpSettings("mcp.status", nil); err != nil {
+		t.Fatal(err)
+	}
+	if retry := operationResult(t, callMCP(t, session, "send_message", sendArgs())); retry["operation_id"] != id || retry["status"] != "running" {
+		t.Fatal(retry)
+	}
+
+	request := <-ids
+	sidecar.mu.Lock()
+	ch := sidecar.pending[request]
+	delete(sidecar.pending, request)
+	sidecar.mu.Unlock()
+	ch <- sidecarResponse{Result: map[string]any{"ok": true}}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		status := operationResult(t, callMCP(t, session, "operation_status", map[string]any{"operation_id": id}))
+		if status["status"] == "completed" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("send never completed: %v", status)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	select {
+	case extra := <-ids:
+		t.Fatalf("sent twice (request %d)", extra)
+	default:
+	}
+}

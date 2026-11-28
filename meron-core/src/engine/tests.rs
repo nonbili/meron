@@ -2,7 +2,7 @@ use super::{
     Pooled, SENT_COPY_MATCH_WINDOW_SECS, SearchContinuation, TransferTimedOut, batch_placement,
     cached_archive_folder_from_folders, cached_search_mail_page, companion_folders,
     continue_search_page, find_role_folder, limit_prefetch_uids, parse_background_sync_timeout,
-    pool_return, pool_take, prefetch::prefetch_failure_is_the_messages,
+    parse_rule_actions_budget, pool_return, pool_take, prefetch::prefetch_failure_is_the_messages,
     record_search_folder_result, sent_copy_landed, should_append_sent_copy, store_folder_tail,
     thread_gap_search_folders,
 };
@@ -207,6 +207,14 @@ pub fn companion_folders_skips_drafts_matching_sent_case_insensitively() {
 #[test]
 pub fn companion_folders_empty_when_neither_resolves() {
     assert_eq!(companion_folders(None, None), Vec::new());
+}
+
+#[test]
+pub fn rule_actions_budget_defaults_to_a_minute() {
+    assert_eq!(parse_rule_actions_budget(Some("3")), Duration::from_secs(3));
+    for value in [None, Some("0"), Some("invalid"), Some("-1")] {
+        assert_eq!(parse_rule_actions_budget(value), Duration::from_secs(60));
+    }
 }
 
 #[test]
