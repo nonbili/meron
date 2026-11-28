@@ -61,6 +61,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -1606,46 +1607,62 @@ internal fun ThreadScreen(
             // The thread's own copy while it has one: a body fetched after the
             // reader opened (Forward waits for it) shows up here.
             val reader = messages.firstOrNull { it.id == opened.id } ?: opened
-            MessageReaderScreen(
-                message = reader,
-                preferHtml = preferHtml,
-                isRss = isRss,
-                actionsEnabled = !isRss,
-                remoteContent = remoteContentFor(reader),
-                onBack = { readerMessage = null },
-                onCopy = { label, value -> services.copyText(label, value) },
-                onComposeTo = { email ->
-                    readerMessage = null
-                    onComposeTo(email)
-                },
-                onReplyToMessage = { message ->
-                    readerMessage = null
-                    onReplyToMessage(message)
-                },
-                canReplyAllToMessage = canReplyAllToMessage,
-                onReplyAllToMessage = { message ->
-                    readerMessage = null
-                    onReplyAllToMessage(message)
-                },
-                onForward = { message ->
-                    readerMessage = null
-                    onForward(message)
-                },
-                onEditAsNew = { message ->
-                    readerMessage = null
-                    onEditAsNew(message)
-                },
-                onDelete = { message ->
-                    readerMessage = null
-                    onDeleteMessage(message)
-                },
-                onOpenAttachment = onOpenAttachment,
-                onSaveAttachment = onSaveAttachment,
-                loadImageAttachment = loadImageAttachment,
-                onOpenImageAttachment = ::openGalleryForAttachment,
-                onOpenHtmlImage = { openGalleryForHtmlSrc(it, reader) },
-                onOpenUrl = services::openUrl,
-            )
+            // The reader answers its message in the full composer, not the reply bar
+            // behind it, and closes on the way there as its other replies do.
+            val quoter = LocalSelectionQuoter.current
+            CompositionLocalProvider(
+                LocalInMessageReader provides true,
+                LocalSelectionQuoter provides
+                    quoter?.let {
+                        SelectionQuoter { message, selection, fromReader ->
+                            readerMessage = null
+                            it.quote(message, selection, fromReader)
+                        }
+                    },
+            ) {
+                ProvideQuoteSelection(reader, isRss) {
+                    MessageReaderScreen(
+                        message = reader,
+                        preferHtml = preferHtml,
+                        isRss = isRss,
+                        actionsEnabled = !isRss,
+                        remoteContent = remoteContentFor(reader),
+                        onBack = { readerMessage = null },
+                        onCopy = { label, value -> services.copyText(label, value) },
+                        onComposeTo = { email ->
+                            readerMessage = null
+                            onComposeTo(email)
+                        },
+                        onReplyToMessage = { message ->
+                            readerMessage = null
+                            onReplyToMessage(message)
+                        },
+                        canReplyAllToMessage = canReplyAllToMessage,
+                        onReplyAllToMessage = { message ->
+                            readerMessage = null
+                            onReplyAllToMessage(message)
+                        },
+                        onForward = { message ->
+                            readerMessage = null
+                            onForward(message)
+                        },
+                        onEditAsNew = { message ->
+                            readerMessage = null
+                            onEditAsNew(message)
+                        },
+                        onDelete = { message ->
+                            readerMessage = null
+                            onDeleteMessage(message)
+                        },
+                        onOpenAttachment = onOpenAttachment,
+                        onSaveAttachment = onSaveAttachment,
+                        loadImageAttachment = loadImageAttachment,
+                        onOpenImageAttachment = ::openGalleryForAttachment,
+                        onOpenHtmlImage = { openGalleryForHtmlSrc(it, reader) },
+                        onOpenUrl = services::openUrl,
+                    )
+                }
+            }
         }
         galleryIndex?.let { index ->
             if (displayedGalleryImages.getOrNull(index) != null) {

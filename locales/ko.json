@@ -323,6 +323,7 @@
   "chat.actions.printThread": "대화 인쇄",
   "chat.actions.translate": "번역",
   "chat.actions.reply": "답장",
+  "chat.actions.quoteInReply": "답장에 인용",
   "chat.actions.replyAll": "전체 답장",
   "chat.actions.saveAsEml": ".eml로 저장",
   "chat.actions.showOriginal": "원본 보기",

@@ -15,7 +15,7 @@ import { MessageBubble } from './MessageBubble'
 import { MessageRow } from './MessageRow'
 import { FrostedBand } from './FrostedBand'
 import { LIST_TOP_PADDING_PX, PINNED_HEADER_GAP_PX, TOOLBAR_CLEARANCE_PX } from './conversationScroll'
-import { formatDateDivider, mediaFilename, imageSource } from './messageHelpers'
+import { formatDateDivider, mediaFilename, imageSource, messageSelection } from './messageHelpers'
 import { MESSAGE_PAGE_EVENT } from './messagePaging'
 import { ConversationScrollContext } from './useConversationScroll'
 
@@ -345,6 +345,12 @@ export function ConversationMessageList({
                   data-unread={message.unread ? 'true' : undefined}
                   data-search-match-id={isSearchMatch ? message.id : undefined}
                   onContextMenu={(event) => {
+                    const selection = messageSelection(event, event.currentTarget)
+                    if (selection) {
+                      event.preventDefault()
+                      thread$.messageContextMenu.set({ x: event.clientX, y: event.clientY, message, selection })
+                      return
+                    }
                     if (hasSelectedText()) return
                     event.preventDefault()
                     let linkUrl = (event.nativeEvent as any)?.meronLinkUrl || (event as any)?.meronLinkUrl

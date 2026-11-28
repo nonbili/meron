@@ -714,6 +714,8 @@ internal fun MeronMobileState.replyAllToMessage(message: MessageBody) = replyToM
 internal fun MeronMobileState.replyToMessage(
     message: MessageBody,
     replyAll: Boolean,
+    // A passage of the message, already quoted ("Quote in reply"), to write under.
+    quotedSelection: String = "",
 ) {
     val thread = selectedCoreThread
     val accountId = thread?.accountId?.ifBlank { defaultSendAccountId() }.orEmpty()
@@ -746,13 +748,15 @@ internal fun MeronMobileState.replyToMessage(
         cc = params.cc
         bcc = params.bcc
         subject = params.subject
-        body = seedBodyWithSignature(params.body, accountId)
+        body = seedBodyWithSignature(if (quotedSelection.isEmpty()) params.body else "$quotedSelection\n\n", accountId)
         composeFoldedQuote = quote
         composeFromAccountId = accountId
         composeFromEmail = replyFrom
         composeInReplyTo = params.inReplyTo
         composeEncrypt = if (message.crypto?.encrypted == true) true else null
         composeReplyEncrypted = message.crypto?.encrypted == true
+        // Decrypted text in the body itself: this reply can only go encrypted.
+        composeCryptoLocked = message.crypto?.encrypted == true && quotedSelection.isNotEmpty()
         composeReferences = params.references
         composeReturnScreen = Screen.Thread
         rememberComposeSeed()

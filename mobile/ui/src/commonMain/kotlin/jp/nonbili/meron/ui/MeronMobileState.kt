@@ -324,6 +324,9 @@ internal class MeronMobileState(
     var subject by mutableStateOf("")
     var body by mutableStateOf("")
     var quickReplyBody by mutableStateOf("")
+
+    // Moves focus into the reply bar, with the caret where it says ("Quote in reply").
+    var quickReplyFocusRequest by mutableStateOf(QuickReplyFocusRequest(0, 0))
     var quickReplyAttachments by mutableStateOf(emptyList<DraftAttachment>())
     var quickReplyFailure by mutableStateOf("")
     var quickReplyDraftId by mutableStateOf("")

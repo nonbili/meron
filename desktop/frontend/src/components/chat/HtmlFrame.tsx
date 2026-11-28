@@ -260,7 +260,26 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
       doc.documentElement.dataset.meronFrameContextWired = '1'
       doc.addEventListener('contextmenu', (event) => {
         if (!forwardContextMenuRef.current) return
-        if (hasFrameSelection(doc)) return
+        const frame = iframeRef.current
+        const forward = (details: Record<string, unknown>) => {
+          if (!frame) return false
+          const rect = frame.getBoundingClientRect()
+          const customEvent = new MouseEvent('contextmenu', {
+            bubbles: true,
+            cancelable: true,
+            clientX: rect.left + event.clientX,
+            clientY: rect.top + event.clientY,
+          })
+          Object.assign(customEvent, details)
+          // False once a parent's handler took it (preventDefault).
+          return !frame.dispatchEvent(customEvent)
+        }
+        // Over selected text the native menu stays, unless a parent menu takes
+        // the selection (the message menu's Copy / Quote in Reply).
+        if (hasFrameSelection(doc)) {
+          if (forward({ meronSelection: doc.getSelection()?.toString() ?? '' })) event.preventDefault()
+          return
+        }
 
         const target = event.target as Element | null
         const img = target?.closest?.('img') as HTMLImageElement | null
@@ -274,23 +293,10 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
         // Block WebKit's native frame menu and re-fire on the iframe element so
         // a parent-registered onContextMenu (e.g. the message menu) handles it.
         event.preventDefault()
-        const frame = iframeRef.current
-        if (!frame) return
-        const rect = frame.getBoundingClientRect()
-        const customEvent = new MouseEvent('contextmenu', {
-          bubbles: true,
-          cancelable: true,
-          clientX: rect.left + event.clientX,
-          clientY: rect.top + event.clientY,
+        forward({
+          ...(linkUrl ? { meronLinkUrl: linkUrl } : {}),
+          ...(image ? { meronImageKey: image.key, meronImage: image } : {}),
         })
-        if (linkUrl) {
-          ;(customEvent as any).meronLinkUrl = linkUrl
-        }
-        if (image) {
-          ;(customEvent as any).meronImageKey = image.key
-          ;(customEvent as any).meronImage = image
-        }
-        frame.dispatchEvent(customEvent)
       })
     }
 

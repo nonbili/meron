@@ -323,6 +323,7 @@
   "chat.actions.printThread": "Yazışmayı yazdır",
   "chat.actions.translate": "Çevir",
   "chat.actions.reply": "Yanıtla",
+  "chat.actions.quoteInReply": "Yanıtta alıntıla",
   "chat.actions.replyAll": "Tümünü yanıtla",
   "chat.actions.saveAsEml": ".eml olarak kaydet",
   "chat.actions.showOriginal": "Orijinali göster",

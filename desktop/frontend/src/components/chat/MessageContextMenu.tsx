@@ -13,6 +13,7 @@ import {
   Reply,
   ReplyAll,
   Printer,
+  Quote,
   SquarePen,
   Star,
   Trash2,
@@ -24,8 +25,10 @@ import {
   editAsNewMessage,
   forwardMessage,
   openDraftCompose,
+  quoteSelectionInReply,
   replyAllToMessage,
 } from '../../states/compose'
+import { mayQuoteSelection } from '../../states/composeQuote'
 import { messageCanReplyAll } from '../../states/composeReply'
 import { printMail } from '../../lib/printMail'
 import { copyAttachmentImage, downloadAttachment, saveMessageAsEml, showMessageSource } from '../../states/mail'
@@ -84,7 +87,31 @@ export function MessageContextMenu({
       // Scrolls rather than running off a short window.
       className="fixed z-[61] max-h-[calc(100vh-1rem)] min-w-[180px] overflow-y-auto bg-header shadow-xl"
     >
-      {state.linkUrl || state.image ? (
+      {state.selection ? (
+        <MenuSections>
+          <MenuSection>
+            <MenuItem
+              icon={<Copy size={13} className="text-accent" />}
+              label={t('common.copy')}
+              onClick={() => {
+                copyText(state.selection!).catch(() => undefined)
+                onClose()
+              }}
+            />
+            {!isDraft && !isRSS && mayQuoteSelection(state.message) && (
+              <MenuItem
+                icon={<Quote size={13} className="text-accent" />}
+                label={t('chat.actions.quoteInReply')}
+                onClick={() => {
+                  const { message, selection } = state
+                  onClose()
+                  quoteSelectionInReply(message, selection!)
+                }}
+              />
+            )}
+          </MenuSection>
+        </MenuSections>
+      ) : state.linkUrl || state.image ? (
         <MenuSections>
           <MenuSection>
             {state.linkUrl && (

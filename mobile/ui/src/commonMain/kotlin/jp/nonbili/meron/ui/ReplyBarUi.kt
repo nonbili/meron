@@ -37,6 +37,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -51,7 +55,9 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeInput
@@ -259,15 +265,50 @@ internal fun ReplyBar(
             // card half as tall again as it needs to be. The padding is inside
             // the field, so a tap anywhere on the row focuses it.
             val replyTextStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
+            // The field's own value, kept as BasicTextField's String overload keeps
+            // it, so a focus request can also place the caret. Text replaced from
+            // outside (a send, a quote) drops the IME's composition over the old.
+            var fieldState by remember { mutableStateOf(TextFieldValue(value)) }
+            val fieldValue = if (fieldState.text == value) fieldState else TextFieldValue(value, fieldState.selection)
+            SideEffect {
+                if (fieldValue.selection != fieldState.selection || fieldValue.composition != fieldState.composition) {
+                    fieldState = fieldValue
+                }
+            }
+            var lastText by remember(value) { mutableStateOf(value) }
+            val focusRequester = remember { FocusRequester() }
+            // Null on a conversation page that isn't the open one: the pages
+            // beside it are composed too, and must not take the focus.
+            val focusRequest = LocalQuickReplyFocusRequest.current
+            // Only requests made while this bar is the open one's: one made before
+            // (in another conversation, or before it was swiped to) isn't for it.
+            var handledFocusRequest by remember { mutableStateOf(focusRequest?.sequence) }
+            LaunchedEffect(focusRequest) {
+                if (focusRequest == null) {
+                    handledFocusRequest = null
+                    return@LaunchedEffect
+                }
+                val handled = handledFocusRequest
+                handledFocusRequest = focusRequest.sequence
+                if (handled == null || handled == focusRequest.sequence) return@LaunchedEffect
+                fieldState = TextFieldValue(value, TextRange(focusRequest.caret.coerceIn(0, value.length)))
+                focusRequester.requestFocus()
+            }
             BasicTextField(
-                value = value,
-                onValueChange = onChange,
+                value = fieldValue,
+                onValueChange = {
+                    fieldState = it
+                    val changed = it.text != lastText
+                    lastText = it.text
+                    if (changed) onChange(it.text)
+                },
                 textStyle = replyTextStyle,
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 maxLines = 5,
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .focusRequester(focusRequester)
                         .onFocusChanged { onFocusChange(it.isFocused) }
                         .onPreviewKeyEvent { event ->
                             if (shouldSendFromEditor(event, sendShortcutMode) && canSend) {

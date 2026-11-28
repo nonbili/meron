@@ -323,6 +323,7 @@
   "chat.actions.printThread": "In cuộc hội thoại",
   "chat.actions.translate": "Dịch",
   "chat.actions.reply": "Trả lời",
+  "chat.actions.quoteInReply": "Trích dẫn khi trả lời",
   "chat.actions.replyAll": "Trả lời tất cả",
   "chat.actions.saveAsEml": "Lưu dưới dạng .eml",
   "chat.actions.showOriginal": "Hiển thị bản gốc",

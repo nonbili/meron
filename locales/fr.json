@@ -323,6 +323,7 @@
   "chat.actions.printThread": "Imprimer la conversation",
   "chat.actions.translate": "Traduire",
   "chat.actions.reply": "Répondre",
+  "chat.actions.quoteInReply": "Citer dans la réponse",
   "chat.actions.replyAll": "Répondre à tous",
   "chat.actions.saveAsEml": "Enregistrer en .eml",
   "chat.actions.showOriginal": "Afficher l'original",

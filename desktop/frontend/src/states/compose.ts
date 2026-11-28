@@ -1,9 +1,10 @@
 import { t } from '../lib/i18n'
 import { isNarrowWindow } from '../lib/useNarrowWindow'
+import { threadWindowSession } from '../lib/windowSession'
 import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message } from '../types'
 import { invoke } from '../lib/bridge'
 import { focusQuickReply, ui$, showToast } from './ui'
-import { accounts$, isSendableAccount } from './accounts'
+import { accounts$, isLocalAccountId, isSendableAccount } from './accounts'
 import { getActiveThread } from './mail'
 import { parseMailto } from '../lib/mailto'
 import {
@@ -42,6 +43,7 @@ import {
   quickReplyAbandonedSaves,
   quickReplyBoxShown,
   nextQuickReplyOwnershipTick,
+  scheduleQuickReplyDraftSave,
   quickReplyDraftSaveInFlight,
   quickReplyScope,
   waitForQuickReplyRead,
@@ -55,7 +57,9 @@ import {
   forwardedPlainBody,
   forwardedSubject,
   replyQuote,
+  mayQuoteSelection,
   replyQuoteWithheld,
+  selectionQuote,
   textToHtml,
 } from './composeQuote'
 export * from './composeQuote'
@@ -400,7 +404,7 @@ export function replyAllToMessage(message: Message) {
 
 /** Reply (or reply-all) to one message in a compose tab, rather than to the
  *  conversation's reply target in the quick reply bar. */
-export function replyToMessage(message: Message, replyAll = false) {
+export function replyToMessage(message: Message, replyAll = false, body?: ComposeBody) {
   const accounts = accounts$.get()
   if (accounts.filter(isSendableAccount).length === 0) {
     showToast(t('compose.toast.addMailAccountBeforeComposing'))
@@ -422,12 +426,48 @@ export function replyToMessage(message: Message, replyAll = false) {
     inReplyTo: in_reply_to,
     references,
     quote: replyQuote(message),
+    // A quoted selection to write under: plain, unless the folded quote takes
+    // the reply rich, when the HTML form stands in.
+    ...(body ? { text: `${body.text}\n\n`, html: `${body.html}<p><br></p>` } : {}),
     // An encrypted conversation stays encrypted (the user can turn it off,
-    // which drops the quote).
+    // which drops the quote). A selection quoted out of it is in the body
+    // itself, so that reply can only go encrypted.
     encrypt: !!message.crypto?.encrypted || undefined,
+    decryptedInBody: (!!body && !!message.crypto?.encrypted) || undefined,
     sensitiveSource: message.crypto?.encrypted ? 'reply' : undefined,
     quoteWithheld: replyQuoteWithheld(message),
   })
+}
+
+/**
+ * "Quote in Reply" on text selected in `message`: the passage, quoted, goes
+ * where the user writes their answer to it. That is the quick-reply box under
+ * the conversation, after whatever it already holds, so several passages can be
+ * answered in turn; or, where there is no box (a reader tab, Local Folders,
+ * a thread window, the conversation-footer setting) or the message is encrypted (the box could send
+ * its decrypted text in the clear), a reply to the message in a compose tab.
+ * Decrypted mail its sender isn't shown to have written is not quoted, as its
+ * whole quote isn't (`mayQuoteSelection`).
+ */
+export function quoteSelectionInReply(message: Message, selection: string) {
+  const quoted = selectionQuote(selection)
+  if (!quoted.text || !mayQuoteSelection(message)) return
+  const tab = compose$.tabs.peek().find((item) => item.id === compose$.activeTab.peek())
+  // The conversation view or a thread tab, which both show the box; Local
+  // Folders and a popped-out thread window never do.
+  const inConversation =
+    !threadWindowSession &&
+    (!tab || tab.kind === 'thread') &&
+    getActiveThread()?.thread_id === message.thread_id &&
+    !isLocalAccountId(message.account_id)
+  if (inConversation && quickReplyBoxShown() && !message.crypto?.encrypted) {
+    const current = compose$.composer.peek().replace(/\s+$/, '')
+    compose$.composer.set(`${current ? `${current}\n\n` : ''}${quoted.text}\n\n`)
+    scheduleQuickReplyDraftSave()
+    focusQuickReply()
+    return
+  }
+  replyToMessage(message, false, quoted)
 }
 
 export async function forwardMessage(message: Message) {

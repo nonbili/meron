@@ -98,6 +98,36 @@ export function replyQuote(message: Message): ComposeBody | undefined {
   }
 }
 
+/**
+ * A passage the user selected in a message, quoted for the reply written under
+ * it ("Quote in Reply"): `> `-prefixed in plain text, a `<blockquote
+ * type="cite">` in HTML, as the whole original is quoted. Blank lines around
+ * the passage are dropped; empty when nothing but whitespace was selected.
+ */
+export function selectionQuote(selection: string): ComposeBody {
+  const lines = selection
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .split('\n')
+    .map((line) => line.replace(/\s+$/, ''))
+  while (lines.length && !lines[0]) lines.shift()
+  while (lines.length && !lines[lines.length - 1]) lines.pop()
+  if (!lines.length) return { rich: false, html: '', text: '' }
+  const passage = lines.join('\n')
+  return {
+    rich: false,
+    html: `<blockquote type="cite">${textToHtml(passage)}</blockquote>`,
+    text: lines.map((line) => (line ? `> ${line}` : '>')).join('\n'),
+  }
+}
+
+/** Whether "Quote in Reply" is offered on text selected in `message`: never
+ * for decrypted mail its sender isn't shown to have written, which a reply
+ * could hand straight back to whoever replayed it (see `replyQuote`). */
+export function mayQuoteSelection(message: Message): boolean {
+  return mayQuoteOriginal(message.crypto)
+}
+
 /** Whether a body already quotes the message `quote` answers — a saved quoted
  * reply carried back into a reply — by the attribution line it opens with. */
 export function bodyHasReplyQuote(body: string, quote: ComposeBody): boolean {

@@ -323,6 +323,7 @@
   "chat.actions.printThread": "列印對話",
   "chat.actions.translate": "翻譯",
   "chat.actions.reply": "回覆",
+  "chat.actions.quoteInReply": "在回覆中引用",
   "chat.actions.replyAll": "全部回覆",
   "chat.actions.saveAsEml": "另存為 .eml",
   "chat.actions.showOriginal": "顯示原始郵件",

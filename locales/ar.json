@@ -323,6 +323,7 @@
   "chat.actions.printThread": "طباعة المحادثة",
   "chat.actions.translate": "ترجمة",
   "chat.actions.reply": "رد",
+  "chat.actions.quoteInReply": "اقتباس في الرد",
   "chat.actions.replyAll": "الرد على الكل",
   "chat.actions.saveAsEml": "حفظ كملف ‎.eml",
   "chat.actions.showOriginal": "عرض الأصل",

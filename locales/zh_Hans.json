@@ -323,6 +323,7 @@
   "chat.actions.printThread": "打印会话",
   "chat.actions.translate": "翻译",
   "chat.actions.reply": "回复",
+  "chat.actions.quoteInReply": "在回复中引用",
   "chat.actions.replyAll": "全部回复",
   "chat.actions.saveAsEml": "另存为 .eml",
   "chat.actions.showOriginal": "显示原始邮件",

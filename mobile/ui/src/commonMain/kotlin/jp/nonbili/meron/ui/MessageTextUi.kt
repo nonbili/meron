@@ -142,7 +142,7 @@ internal fun SelectableMessageText(
     var menuTarget by remember { mutableStateOf<MessageLinkMenuTarget?>(null) }
     val density = LocalDensity.current
     Box {
-        SelectionContainer {
+        QuotableSelectionContainer(LocalQuoteSelection.current) {
             Text(
                 text = annotated,
                 style = style,

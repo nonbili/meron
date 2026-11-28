@@ -675,3 +675,17 @@ export function parseAddressList(raw: string | undefined | null): AddressItem[] 
   }
   return results.length > 0 ? results : entries.map((entry) => ({ name: entry, email: entry, original: entry }))
 }
+
+/** The text selected inside `within` that a right-click there is over: the
+ * selection of an email's frame (forwarded by HtmlFrame), or the page's own
+ * when it lies wholly in this message — one dragged on into the next would
+ * quote that message's text as this one's, past its own checks. */
+export function messageSelection(event: { nativeEvent: Event }, within: Element): string {
+  const framed = (event.nativeEvent as { meronSelection?: string }).meronSelection
+  if (framed !== undefined) return framed.trim() ? framed : ''
+  const selection = window.getSelection()
+  const text = selection?.toString() ?? ''
+  if (!text.trim() || !selection?.anchorNode || !selection.focusNode) return ''
+  if (!within.contains(selection.anchorNode) || !within.contains(selection.focusNode)) return ''
+  return text
+}

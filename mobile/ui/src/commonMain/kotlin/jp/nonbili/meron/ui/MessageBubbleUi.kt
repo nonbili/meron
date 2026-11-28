@@ -439,39 +439,41 @@ internal fun MessageBubble(
                     modifier = Modifier.padding(bottom = 2.dp, start = chromeInset, end = chromeInset),
                 )
             }
-            MessageBodyContent(
-                message = message,
-                isRss = isRss,
-                textColor = textColor,
-                preferHtml = preferHtml,
-                searchQuery = searchQuery,
-                activeSearchMatch = activeSearchMatch,
-                showSubject = showSubject,
-                bodyMaxHeight = bodyMaxHeight,
-                chromeInset = chromeInset,
-                surface = bubbleColor,
-                remoteContent = remoteContent,
-                onOpenAttachment = onOpenAttachment,
-                onSaveAttachment = onSaveAttachment,
-                loadImageAttachment = loadImageAttachment,
-                onOpenImageAttachment = onOpenImageAttachment,
-                onOpenHtmlImage = onOpenHtmlImage,
-                onOpenUrl = onOpenUrl,
-                onRetryLoad = onRetryLoad,
-                onRespondToInvite = { response -> onRespondToInvite(message, response) },
-                onRemoveInviteEvent = { onRemoveInviteEvent(message) },
-                onAddInviteToCalendar = { onAddInviteToCalendar(message) },
-                imageColumns = if (htmlBody) 3 else visibleImageCount.coerceIn(1, 3),
-                onHtmlNaturalWidth =
-                    if (hugsText) {
-                        { width ->
-                            naturalWidth = width.coerceAtLeast(0.dp)
-                            htmlNaturalWidths[naturalWidthKey] = naturalWidth
-                        }
-                    } else {
-                        null
-                    },
-            )
+            ProvideQuoteSelection(message, isRss) {
+                MessageBodyContent(
+                    message = message,
+                    isRss = isRss,
+                    textColor = textColor,
+                    preferHtml = preferHtml,
+                    searchQuery = searchQuery,
+                    activeSearchMatch = activeSearchMatch,
+                    showSubject = showSubject,
+                    bodyMaxHeight = bodyMaxHeight,
+                    chromeInset = chromeInset,
+                    surface = bubbleColor,
+                    remoteContent = remoteContent,
+                    onOpenAttachment = onOpenAttachment,
+                    onSaveAttachment = onSaveAttachment,
+                    loadImageAttachment = loadImageAttachment,
+                    onOpenImageAttachment = onOpenImageAttachment,
+                    onOpenHtmlImage = onOpenHtmlImage,
+                    onOpenUrl = onOpenUrl,
+                    onRetryLoad = onRetryLoad,
+                    onRespondToInvite = { response -> onRespondToInvite(message, response) },
+                    onRemoveInviteEvent = { onRemoveInviteEvent(message) },
+                    onAddInviteToCalendar = { onAddInviteToCalendar(message) },
+                    imageColumns = if (htmlBody) 3 else visibleImageCount.coerceIn(1, 3),
+                    onHtmlNaturalWidth =
+                        if (hugsText) {
+                            { width ->
+                                naturalWidth = width.coerceAtLeast(0.dp)
+                                htmlNaturalWidths[naturalWidthKey] = naturalWidth
+                            }
+                        } else {
+                            null
+                        },
+                )
+            }
         }
     }
 }

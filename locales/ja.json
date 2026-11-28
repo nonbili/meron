@@ -323,6 +323,7 @@
   "chat.actions.printThread": "スレッドを印刷",
   "chat.actions.translate": "翻訳",
   "chat.actions.reply": "返信",
+  "chat.actions.quoteInReply": "返信に引用",
   "chat.actions.replyAll": "全員に返信",
   "chat.actions.saveAsEml": ".eml として保存",
   "chat.actions.showOriginal": "元のメッセージを表示",

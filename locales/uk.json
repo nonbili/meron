@@ -323,6 +323,7 @@
   "chat.actions.printThread": "Друкувати розмову",
   "chat.actions.translate": "Перекласти",
   "chat.actions.reply": "Відповісти",
+  "chat.actions.quoteInReply": "Цитувати у відповіді",
   "chat.actions.replyAll": "Відповісти всім",
   "chat.actions.saveAsEml": "Зберегти як .eml",
   "chat.actions.showOriginal": "Показати оригінал",

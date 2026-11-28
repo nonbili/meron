@@ -323,6 +323,7 @@
   "chat.actions.printThread": "Prindi vestlus",
   "chat.actions.translate": "Tõlgi",
   "chat.actions.reply": "Vasta",
+  "chat.actions.quoteInReply": "Tsiteeri vastuses",
   "chat.actions.replyAll": "Vasta kõigile",
   "chat.actions.saveAsEml": "Salvesta .eml-failina",
   "chat.actions.showOriginal": "Näita originaali",

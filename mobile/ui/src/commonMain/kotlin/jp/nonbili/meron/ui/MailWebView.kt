@@ -54,6 +54,10 @@ expect fun MailWebView(
      *  than being sized to the whole document and moved by a Compose scroller
      *  (see [MailWebViewScrollsItself]). */
     scrollsItself: Boolean = false,
+    /** Offers "Quote in reply" in the text selection menu, handed the selected
+     *  text; null for no such item. iOS ignores it: its menu takes no items of
+     *  the app's own. */
+    onQuoteSelection: ((String) -> Unit)? = null,
 )
 
 /**

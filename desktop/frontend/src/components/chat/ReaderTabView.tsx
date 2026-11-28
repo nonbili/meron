@@ -21,7 +21,15 @@ import { CryptoStrip } from '../crypto/CryptoStrip'
 import { ActionBar } from './ActionBar'
 import { FrostedBand } from './FrostedBand'
 import { MessageContextMenu } from './MessageContextMenu'
-import { htmlHasRemoteMedia, isImage, isInlineMedia, isVideo, mediaFilename, imageSource } from './messageHelpers'
+import {
+  htmlHasRemoteMedia,
+  isImage,
+  isInlineMedia,
+  isVideo,
+  mediaFilename,
+  imageSource,
+  messageSelection,
+} from './messageHelpers'
 
 // Renders the active reader/compose tab: a compose tab shows the Composer, a
 // reader tab shows the message's subject, addresses and HTML/plain body in one
@@ -75,7 +83,15 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
         // React bubbles events up from portals too: the image viewer and the
         // menu itself are not the message.
         if (!event.currentTarget.contains(event.target as Node)) return
-        if (!tab.message || window.getSelection()?.toString().trim()) return
+        if (!tab.message) return
+        const selection = messageSelection(event, event.currentTarget)
+        if (selection) {
+          event.preventDefault()
+          setMenu({ x: event.clientX, y: event.clientY, tabId: tab.id, selection })
+          return
+        }
+        if ((event.nativeEvent as { meronSelection?: string }).meronSelection !== undefined) return
+        if (window.getSelection()?.toString().trim()) return
         // A cached picture: one in the email's frame (forwarded by HtmlFrame)
         // or an attachment's in the grid.
         const imageEl = (event.target as Element | null)?.closest?.('[data-media-key]') as HTMLElement | null
@@ -214,6 +230,7 @@ type ReaderMenuAt = {
   y: number
   linkUrl?: string
   image?: MessageContextMenuState['image']
+  selection?: string
   tabId: string
 }
 

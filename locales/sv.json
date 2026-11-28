@@ -323,6 +323,7 @@
   "chat.actions.printThread": "Skriv ut konversation",
   "chat.actions.translate": "Översätt",
   "chat.actions.reply": "Svara",
+  "chat.actions.quoteInReply": "Citera i svar",
   "chat.actions.replyAll": "Svara alla",
   "chat.actions.saveAsEml": "Spara som .eml",
   "chat.actions.showOriginal": "Visa original",

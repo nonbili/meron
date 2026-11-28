@@ -23,6 +23,7 @@ import jp.nonbili.meron.shared.buildReplyRecipients
 import jp.nonbili.meron.shared.detectReplyFromIdentity
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.folderIsInbox
+import jp.nonbili.meron.shared.mayQuoteOriginal
 import jp.nonbili.meron.shared.newDraftMessageId
 import jp.nonbili.meron.shared.threadIdIsRss
 import jp.nonbili.meron.shared.toReplyMailParams
@@ -458,6 +459,40 @@ internal fun MeronMobileState.discardQuickReplyDraftIfEmpty() {
             selectedCoreThread = selectedCoreThread?.copy(hasDraft = anotherDraftRemains)
         }
     }
+}
+
+/**
+ * "Quote in reply" on text selected in [message]: the passage, quoted, goes where
+ * the user writes their answer to it. That is the reply bar, after whatever it
+ * already holds (and above the signature), so several passages can be answered
+ * in turn; or, from the reader, without the bar (the conversation-footer
+ * setting), or for encrypted mail (the bar could send its decrypted text in the
+ * clear), a reply to the message in the full composer. Decrypted mail its
+ * sender isn't shown to have written is never quoted, as its whole quote isn't.
+ */
+internal fun MeronMobileState.quoteSelectionInReply(
+    message: MessageBody,
+    selection: String,
+    fromReader: Boolean,
+) {
+    val quoted = quotedSelectionText(selection)
+    if (quoted.isEmpty() || !message.mayQuoteOriginal()) return
+    val inBar =
+        !fromReader &&
+            message.crypto?.encrypted != true &&
+            quickReplyThreadId.isNotBlank() &&
+            effectiveConversationFooter() == ConversationFooter.Reply
+    if (!inBar) {
+        replyToMessage(message, replyAll = false, quotedSelection = quoted)
+        return
+    }
+    val (written, signatureStripped) = quickReplyWithoutSignature()
+    // The caret goes on the blank line under the quote, where the answer to it
+    // is written; a seeded signature stays a blank line further down.
+    val text = written.trimEnd().let { if (it.isEmpty()) quoted else "$it\n\n$quoted" } + "\n\n"
+    val signature = quickReplySignature?.text.orEmpty()
+    onQuickReplyBodyChange(if (signatureStripped && signature.isNotBlank()) "$text\n\n$signature" else text)
+    quickReplyFocusRequest = QuickReplyFocusRequest(quickReplyFocusRequest.sequence + 1, caret = text.length)
 }
 
 internal fun MeronMobileState.onQuickReplyBodyChange(value: String) {

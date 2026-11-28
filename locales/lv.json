@@ -323,6 +323,7 @@
   "chat.actions.printThread": "Drukāt saraksti",
   "chat.actions.translate": "Tulkot",
   "chat.actions.reply": "Atbildēt",
+  "chat.actions.quoteInReply": "Citēt atbildē",
   "chat.actions.replyAll": "Atbildēt visiem",
   "chat.actions.saveAsEml": "Saglabāt kā .eml",
   "chat.actions.showOriginal": "Rādīt oriģinālu",

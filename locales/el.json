@@ -323,6 +323,7 @@
   "chat.actions.printThread": "Εκτύπωση συνομιλίας",
   "chat.actions.translate": "Μετάφραση",
   "chat.actions.reply": "Απάντηση",
+  "chat.actions.quoteInReply": "Παράθεση στην απάντηση",
   "chat.actions.replyAll": "Απάντηση σε όλους",
   "chat.actions.saveAsEml": "Αποθήκευση ως .eml",
   "chat.actions.showOriginal": "Εμφάνιση πρωτοτύπου",

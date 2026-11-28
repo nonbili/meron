@@ -3,8 +3,12 @@ package jp.nonbili.meron.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
+import android.view.ActionMode
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -46,6 +50,7 @@ import jp.nonbili.meron.shared.isMeronOAuthCallbackScheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import org.json.JSONTokener
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
@@ -54,6 +59,9 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 internal const val MAIL_WEB_VIEW_ORIGIN = "https://appassets.androidplatform.net/"
+
+// The id of the "Quote in reply" item added to WebView's text selection menu.
+private const val QUOTE_SELECTION_ITEM_ID = 0x6d657201
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -71,7 +79,10 @@ actual fun MailWebView(
     onOverflowExtent: (Int, Int) -> Unit,
     mediaMissing: Int,
     scrollsItself: Boolean,
+    onQuoteSelection: ((String) -> Unit)?,
 ) {
+    val latestOnQuoteSelection = rememberUpdatedState(onQuoteSelection)
+    val quoteSelectionLabel = tr("chat.actions.quoteInReply")
     val nestedScrollDispatcher = remember { NestedScrollDispatcher() }
     val nestedScrollConnection = remember { object : NestedScrollConnection {} }
     val gestureScope = rememberCoroutineScope()
@@ -143,6 +154,7 @@ actual fun MailWebView(
         factory = { context ->
             LongPressWebView(context, nestedScrollDispatcher, gestureScope).apply {
                 touchView = this
+                this.onQuoteSelection = { text -> latestOnQuoteSelection.value?.invoke(text) }
                 webViewClient =
                     object : WebViewClient() {
                         override fun onPageFinished(
@@ -353,6 +365,7 @@ actual fun MailWebView(
             // Shorter than its document, the view scrolls it itself and shows
             // where it is; sized to the document, there is nothing to scroll.
             webView.scrollsItself = scrollsItself
+            webView.quoteSelectionLabel = quoteSelectionLabel.takeIf { onQuoteSelection != null }
             webView.isVerticalScrollBarEnabled = scrollsItself
             webView.setBackgroundColor(if (transparentBackground) Color.TRANSPARENT else Color.WHITE)
             val documentChanged = webView.tag != html
@@ -481,6 +494,69 @@ private class LongPressWebView(
     private var holdsVerticalTouch = false
     private var initialVerticalDrag: Float? = null
     private var previousRawY = 0f
+
+    /** The selection menu's "Quote in reply" item; null for none. */
+    var quoteSelectionLabel: String? = null
+    var onQuoteSelection: (String) -> Unit = {}
+
+    override fun startActionMode(
+        callback: ActionMode.Callback?,
+        type: Int,
+    ): ActionMode? = super.startActionMode(callback?.let(::withQuoteSelection), type)
+
+    override fun startActionMode(callback: ActionMode.Callback?): ActionMode? = super.startActionMode(callback?.let(::withQuoteSelection))
+
+    /** WebView's own selection menu, plus "Quote in reply", which reads the
+     *  selection out of the page before the menu (and with it the selection)
+     *  goes away. */
+    private fun withQuoteSelection(callback: ActionMode.Callback): ActionMode.Callback {
+        val label = quoteSelectionLabel ?: return callback
+
+        fun addItem(menu: Menu): Boolean {
+            if (menu.findItem(QUOTE_SELECTION_ITEM_ID) != null) return false
+            menu.add(Menu.NONE, QUOTE_SELECTION_ITEM_ID, Menu.CATEGORY_SECONDARY, label)
+            return true
+        }
+        return object : ActionMode.Callback2() {
+            override fun onCreateActionMode(
+                mode: ActionMode,
+                menu: Menu,
+            ): Boolean = callback.onCreateActionMode(mode, menu).also { if (it) addItem(menu) }
+
+            // WebView rebuilds its items here as the selection changes.
+            override fun onPrepareActionMode(
+                mode: ActionMode,
+                menu: Menu,
+            ): Boolean = callback.onPrepareActionMode(mode, menu) or addItem(menu)
+
+            override fun onActionItemClicked(
+                mode: ActionMode,
+                item: MenuItem,
+            ): Boolean {
+                if (item.itemId != QUOTE_SELECTION_ITEM_ID) return callback.onActionItemClicked(mode, item)
+                evaluateJavascript("String(window.getSelection())") { result ->
+                    val text = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull()
+                    mode.finish()
+                    if (!text.isNullOrBlank()) onQuoteSelection(text)
+                }
+                return true
+            }
+
+            override fun onDestroyActionMode(mode: ActionMode) = callback.onDestroyActionMode(mode)
+
+            override fun onGetContentRect(
+                mode: ActionMode,
+                view: View,
+                outRect: Rect,
+            ) {
+                if (callback is ActionMode.Callback2) {
+                    callback.onGetContentRect(mode, view, outRect)
+                } else {
+                    super.onGetContentRect(mode, view, outRect)
+                }
+            }
+        }
+    }
 
     fun claimVerticalDrag(overSlop: Float) {
         if (scrollsItself && (canScrollVertically(1) || canScrollVertically(-1))) {

@@ -969,6 +969,7 @@ internal fun MailWebViewWithLinkMenu(
             onQuoteToggle = onQuoteToggle,
             onNaturalWidth = onNaturalWidth,
             scrollsItself = scrollsItself,
+            onQuoteSelection = LocalQuoteSelection.current,
             modifier = Modifier.fillMaxSize(),
         )
         MessageLinkContextMenu(

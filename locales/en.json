@@ -315,6 +315,7 @@
   "chat.actions.printThread": "Print thread",
   "chat.actions.translate": "Translate",
   "chat.actions.reply": "Reply",
+  "chat.actions.quoteInReply": "Quote in Reply",
   "chat.actions.replyAll": "Reply all",
   "chat.actions.saveAsEml": "Save as .eml",
   "chat.actions.showOriginal": "Show original",

@@ -11,6 +11,9 @@ export type MessageContextMenuState = {
   // A right-clicked image attachment; the menu then offers save/copy for it.
   image?: { key: string | null; url?: string; filename: string; mime?: string }
   hideOpenInNewTab?: boolean
+  // Text selected in the message, right-clicked: the menu then offers to copy
+  // it or quote it in a reply.
+  selection?: string
 }
 
 // UI state scoped to the active conversation view (MessagePane and its children).

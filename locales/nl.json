@@ -323,6 +323,7 @@
   "chat.actions.printThread": "Berichtreeks afdrukken",
   "chat.actions.translate": "Vertalen",
   "chat.actions.reply": "Beantwoorden",
+  "chat.actions.quoteInReply": "Citeren in antwoord",
   "chat.actions.replyAll": "Allen beantwoorden",
   "chat.actions.saveAsEml": "Opslaan als .eml",
   "chat.actions.showOriginal": "Origineel tonen",

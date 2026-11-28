@@ -323,6 +323,7 @@
   "chat.actions.printThread": "Cetak utas",
   "chat.actions.translate": "Terjemahkan",
   "chat.actions.reply": "Balas",
+  "chat.actions.quoteInReply": "Kutip dalam balasan",
   "chat.actions.replyAll": "Balas semua",
   "chat.actions.saveAsEml": "Simpan sebagai .eml",
   "chat.actions.showOriginal": "Tampilkan asli",

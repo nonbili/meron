@@ -148,30 +148,32 @@ internal fun MessageRow(
                     onOpenUrl = onOpenUrl,
                     onComposeTo = onComposeTo,
                 )
-                MessageBodyContent(
-                    message = message,
-                    isRss = isRss,
-                    textColor = textColor,
-                    preferHtml = preferHtml,
-                    searchQuery = searchQuery,
-                    activeSearchMatch = activeSearchMatch,
-                    showSubject = showSubject,
-                    // Uncapped: a full-width reading view shows the whole
-                    // message and the conversation list does the scrolling.
-                    bodyMaxHeight = Dp.Unspecified,
-                    surface = MaterialTheme.colorScheme.surface,
-                    remoteContent = remoteContent,
-                    onOpenAttachment = onOpenAttachment,
-                    onSaveAttachment = onSaveAttachment,
-                    loadImageAttachment = loadImageAttachment,
-                    onOpenImageAttachment = onOpenImageAttachment,
-                    onOpenHtmlImage = onOpenHtmlImage,
-                    onOpenUrl = onOpenUrl,
-                    onRetryLoad = onRetryLoad,
-                    onRespondToInvite = { response -> onRespondToInvite(message, response) },
-                    onRemoveInviteEvent = { onRemoveInviteEvent(message) },
-                    onAddInviteToCalendar = { onAddInviteToCalendar(message) },
-                )
+                ProvideQuoteSelection(message, isRss) {
+                    MessageBodyContent(
+                        message = message,
+                        isRss = isRss,
+                        textColor = textColor,
+                        preferHtml = preferHtml,
+                        searchQuery = searchQuery,
+                        activeSearchMatch = activeSearchMatch,
+                        showSubject = showSubject,
+                        // Uncapped: a full-width reading view shows the whole
+                        // message and the conversation list does the scrolling.
+                        bodyMaxHeight = Dp.Unspecified,
+                        surface = MaterialTheme.colorScheme.surface,
+                        remoteContent = remoteContent,
+                        onOpenAttachment = onOpenAttachment,
+                        onSaveAttachment = onSaveAttachment,
+                        loadImageAttachment = loadImageAttachment,
+                        onOpenImageAttachment = onOpenImageAttachment,
+                        onOpenHtmlImage = onOpenHtmlImage,
+                        onOpenUrl = onOpenUrl,
+                        onRetryLoad = onRetryLoad,
+                        onRespondToInvite = { response -> onRespondToInvite(message, response) },
+                        onRemoveInviteEvent = { onRemoveInviteEvent(message) },
+                        onAddInviteToCalendar = { onAddInviteToCalendar(message) },
+                    )
+                }
             }
         }
     }
